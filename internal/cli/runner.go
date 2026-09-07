@@ -36,6 +36,7 @@ import (
 
 const (
 	defaultSnapshotInterval      = time.Second
+	defaultTelemetryReadTimeout  = 500 * time.Millisecond
 	defaultBoardSnapshotInterval = 30 * time.Second
 	defaultTokenTrendWindowSize  = 60
 	defaultTokenThroughputWindow = time.Minute
@@ -634,13 +635,8 @@ func publishSnapshotOnce(
 		if orch == nil {
 			continue
 		}
-		state, err := orch.State(ctx)
+		state, err := readTelemetrySource(ctx, "project_state", string(trackedProject.ID()), orch.State)
 		if err != nil {
-			slog.Default().Warn(
-				"project telemetry snapshot skipped",
-				slog.String("project_id", string(trackedProject.ID())),
-				slog.String("error", err.Error()),
-			)
 			lastErrorAt := now
 			merged = mergeSnapshot(merged, telemetry.Snapshot{
 				Project:      projectMetadata,
@@ -931,7 +927,7 @@ func lifetimeTotals(ctx context.Context, source lifetimeTotalsSource) telemetry.
 	if source == nil {
 		return telemetry.LifetimeTotals{DegradedReason: "runtime store unavailable"}
 	}
-	totals, err := source.LifetimeTotals(ctx)
+	totals, err := readTelemetrySource(ctx, "lifetime_totals", "", source.LifetimeTotals)
 	if err != nil {
 		return telemetry.LifetimeTotals{DegradedReason: "read runtime store lifetime totals: " + err.Error()}
 	}
@@ -950,6 +946,26 @@ func lifetimeTotals(ctx context.Context, source lifetimeTotalsSource) telemetry.
 		ResumedInputTokens:    totals.ResumedInputTokens,
 		ResumedCachedTokens:   totals.ResumedCachedTokens,
 	}
+}
+
+func readTelemetrySource[T any](ctx context.Context, source, projectID string, read func(context.Context) (T, error)) (T, error) {
+	readCtx, cancel := context.WithTimeout(ctx, defaultTelemetryReadTimeout)
+	defer cancel()
+	started := time.Now()
+	value, err := read(readCtx)
+	if err != nil {
+		err = fmt.Errorf("telemetry source %s: %w", source, err)
+		if ctx.Err() == nil {
+			slog.Default().Warn("telemetry source read failed",
+				"source", source,
+				"project_id", projectID,
+				"elapsed", time.Since(started),
+				"timeout", defaultTelemetryReadTimeout,
+				"error", err,
+			)
+		}
+	}
+	return value, err
 }
 
 func mergeSnapshot(current, next telemetry.Snapshot) telemetry.Snapshot {

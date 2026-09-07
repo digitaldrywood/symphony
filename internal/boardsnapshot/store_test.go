@@ -43,6 +43,7 @@ func TestFileStoreLoad(t *testing.T) {
 				if err := writer.Save(context.Background(), telemetry.Snapshot{
 					GeneratedAt: tt.savedAt.Add(-time.Second),
 					Counts:      telemetry.Counts{Running: 2},
+					Shutdown:    telemetry.Shutdown{Status: "draining", Draining: true},
 				}); err != nil {
 					t.Fatalf("Save() error = %v", err)
 				}
@@ -63,6 +64,9 @@ func TestFileStoreLoad(t *testing.T) {
 			}
 			if found && got.Refresh.ReadinessStatus() != telemetry.RefreshStatusInitializing {
 				t.Fatalf("Load() refresh = %#v, want initializing", got.Refresh)
+			}
+			if found && got.Shutdown != (telemetry.Shutdown{Status: "running"}) {
+				t.Fatalf("Load() shutdown = %#v, want the new process running", got.Shutdown)
 			}
 		})
 	}

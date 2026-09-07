@@ -259,6 +259,9 @@ templ hostedRoleOptions(current string, ownership bool) {
 }
 
 templ hostedProject(data HostedPageData) {
+ if data.Setup != nil {
+ @hostedProjectSetup(data)
+ }
 	<section class="space-y-4 rounded-card border border-line bg-surface p-6">
 		<h2 class="text-lg font-semibold">Project work</h2>
 		if len(data.Issues) == 0 {

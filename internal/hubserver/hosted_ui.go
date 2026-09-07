@@ -172,6 +172,30 @@ func (s *Service) hostedProject(c echo.Context) error {
 	if err := s.hostedPageData(c, credential, &data); err != nil {
 		return s.hostedError(c, http.StatusServiceUnavailable, "Project information is temporarily unavailable")
 	}
+	setup, err := s.projectOnboarding(c.Request().Context(), scope)
+	if err != nil {
+		return s.hostedError(c, http.StatusServiceUnavailable, "Project readiness is temporarily unavailable. Retry without recreating the project.")
+	}
+	data.Setup = &setup
+	data.SetupAPI = "/api/v2/organizations/" + string(scope.organization) + "/projects/" + string(scope.project)
+	data.CanWriteProject = s.requireHostedProject(c.Request().Context(), s.database.db, scope, true) == nil
+	data.CanManage = credential.HostedRole == "owner" || credential.HostedRole == "admin"
+	data.CanManageRunners = credential.HostedRole != "viewer" && s.hostedAllRunnerGrants(c.Request().Context(), credential)
+	project, err := readNativeProject(c.Request().Context(), s.database.db, scope)
+	if err != nil {
+		return s.nativeAPIError(c, err)
+	}
+	data.Title = project.Name
+	data.ProjectStates = project.States
+	integration, err := readProjectIntegration(c.Request().Context(), s.database.db, scope)
+	if err != nil {
+		return s.nativeAPIError(c, err)
+	}
+	data.IntegrationRevision = fmt.Sprint(integration.Revision)
+	data.GitHubRepository, data.GitHubIntake, data.GitHubProjection = integration.Repository, integration.Intake, integration.Projection
+	data.GitHubPR = integration.RepositoryEnabled
+	data.GitHubAvailable = s.config.ReconcileBackend != nil
+	data.IntegrationSummary = fmt.Sprintf("Profile: %s · GitHub intake: %s · projection: %s · repository/PR integration: %t", integration.Profile, integration.Intake, integration.Projection, integration.RepositoryEnabled)
 	rows, err := s.database.db.QueryContext(c.Request().Context(), `SELECT i.native_id,i.number,i.title,COALESCE(w.source_name,'') FROM issues i LEFT JOIN workflow_states w ON w.id = i.workflow_state_id WHERE i.organization_id = ? AND i.project_id = ? ORDER BY i.number DESC LIMIT 100`, scope.organization, scope.project)
 	if err != nil {
 		return s.hostedError(c, http.StatusServiceUnavailable, "Project information is temporarily unavailable")

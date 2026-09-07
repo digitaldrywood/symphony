@@ -248,6 +248,13 @@ func (s *Service) createHostedProjectRecord(ctx context.Context, credential apiC
 	if err := s.recheckHostedMutation(ctx, tx, nativeScope{organization: tracker.OrganizationID(s.config.Hosted.OrganizationID), credential: credential}); err != nil {
 		return "", err
 	}
+	err = tx.QueryRowContext(ctx, `SELECT p.id FROM projects p JOIN hosted_project_grants g ON g.project_id=p.id WHERE p.organization_id=? AND p.name=? AND g.user_id=? AND g.can_write=1`, s.config.Hosted.OrganizationID, name, credential.Hosted.Subject).Scan(&project)
+	if err == nil {
+		return project, tx.Commit()
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return "", err
+	}
 	project = newNativeID("prj")
 	states := []tracker.NativeState{{Name: "Todo", Dispatchable: true, Transitions: []string{"In Progress", "Done"}}, {Name: "In Progress", Dispatchable: true, Transitions: []string{"Todo", "Done"}}, {Name: "Done", Terminal: true, Transitions: []string{"Todo"}}}
 	now := formatHubTime(s.config.now())

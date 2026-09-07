@@ -331,9 +331,13 @@ func stopStallTimer(timer *time.Timer) {
 }
 
 func waitAndCleanup(cmd *exec.Cmd, processGroupID int) error {
+	return waitAndCleanupWith(cmd, processGroupID, procgroup.Cleanup)
+}
+
+func waitAndCleanupWith(cmd *exec.Cmd, processGroupID int, cleanup func(int) error) error {
 	err := cmd.Wait()
-	if cleanupErr := procgroup.Cleanup(processGroupID); cleanupErr != nil {
-		err = errors.Join(err, cleanupErr)
+	if cleanupErr := cleanup(processGroupID); cleanupErr != nil {
+		err = errors.Join(err, fmt.Errorf("clean up claude process group %d after %s: %w", processGroupID, cmd.ProcessState, cleanupErr))
 	}
 	return err
 }

@@ -80,13 +80,8 @@ func terminateTree(
 		if err == nil || errors.Is(err, syscall.ESRCH) {
 			return nil
 		}
-		if errors.Is(err, syscall.EPERM) {
-			members, inspectErr := inspect(processGroupID)
-			if inspectErr == nil && processGroupExited(members) {
-				if len(members) > 0 || errors.Is(signal(-processGroupID, 0), syscall.ESRCH) {
-					return nil
-				}
-			}
+		if errors.Is(err, syscall.EPERM) && confirmSignaledGroupExit(processGroupID, signal, inspect) {
+			return nil
 		}
 		return err
 	}
@@ -96,21 +91,44 @@ func terminateTree(
 	return cmd.Process.Kill()
 }
 
+func confirmSignaledGroupExit(
+	processGroupID int,
+	signal func(int, syscall.Signal) error,
+	inspect func(int) ([]processGroupMember, error),
+) bool {
+	members, err := inspect(processGroupID)
+	if err != nil || !processGroupExited(members) {
+		return false
+	}
+	return len(members) > 0 || errors.Is(signal(-processGroupID, 0), syscall.ESRCH)
+}
+
 func Cleanup(processGroupID int) error {
+	return cleanup(processGroupID, syscall.Kill, inspectProcessGroup)
+}
+
+func cleanup(
+	processGroupID int,
+	signal func(int, syscall.Signal) error,
+	inspect func(int) ([]processGroupMember, error),
+) error {
 	if processGroupID <= 0 {
 		return nil
 	}
-	err := syscall.Kill(-processGroupID, syscall.SIGKILL)
+	err := signal(-processGroupID, syscall.SIGKILL)
 	if errors.Is(err, syscall.ESRCH) {
 		return nil
 	}
+	if errors.Is(err, syscall.EPERM) && confirmSignaledGroupExit(processGroupID, signal, inspect) {
+		return nil
+	}
 	if err != nil {
-		return err
+		return fmt.Errorf("signal process group %d with SIGKILL: %w", processGroupID, err)
 	}
 	if waitForProcessGroupExit(processGroupID, DefaultTerminationGrace) {
 		return nil
 	}
-	members, inspectErr := inspectProcessGroup(processGroupID)
+	members, inspectErr := inspect(processGroupID)
 	if inspectErr == nil && processGroupExited(members) {
 		return nil
 	}
@@ -118,7 +136,7 @@ func Cleanup(processGroupID int) error {
 		return nil
 	}
 	if inspectErr == nil {
-		members, inspectErr = inspectProcessGroup(processGroupID)
+		members, inspectErr = inspect(processGroupID)
 		if inspectErr == nil && processGroupExited(members) {
 			return nil
 		}

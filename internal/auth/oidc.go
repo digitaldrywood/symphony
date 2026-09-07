@@ -34,6 +34,7 @@ type Identity struct {
 	Subject       string
 	Email         string
 	EmailVerified bool
+	Hosted        *HostedIdentity
 }
 
 type IdentityProvider interface {

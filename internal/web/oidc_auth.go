@@ -132,7 +132,7 @@ func (s *Server) completeOIDC(c echo.Context) error {
 		s.logger.Warn("oidc callback rejected", "reason", oidcFailureReason(err))
 		return s.renderAuthPage(c, http.StatusUnauthorized, templates.AuthPageInvalidIdentity, transaction.Next)
 	}
-	if !s.identityAllowlist.Allows(identity.Email, identity.EmailVerified) {
+	if identity.Hosted != nil || !s.identityAllowlist.Allows(identity.Email, identity.EmailVerified) {
 		return s.renderAuthPage(c, http.StatusForbidden, templates.AuthPageDenied, transaction.Next)
 	}
 	token, session, err := s.sessions.CreateSession(c.Request().Context(), identity.Email)

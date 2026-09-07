@@ -55,11 +55,13 @@ type SessionRecord struct {
 	Email     string
 	ExpiresAt time.Time
 	CreatedAt time.Time
+	Identity  *HostedIdentity
 }
 
 type Session struct {
 	Email     string
 	ExpiresAt time.Time
+	Identity  *HostedIdentity
 }
 
 type Message struct {
@@ -217,12 +219,27 @@ func (s *Service) ConsumeLink(ctx context.Context, token string) (string, Sessio
 }
 
 func (s *Service) CreateSession(ctx context.Context, email string) (string, Session, error) {
+	return s.createSession(ctx, email, nil)
+}
+
+func (s *Service) CreateIdentitySession(ctx context.Context, identity Identity) (string, Session, error) {
+	if !identity.EmailVerified || identity.Hosted == nil || identity.Subject != identity.Hosted.Subject || !identity.Hosted.ExpiresAt.After(s.now()) {
+		return "", Session{}, ErrInvalidSession
+	}
+	return s.createSession(ctx, identity.Email, identity.Hosted)
+}
+
+func (s *Service) createSession(ctx context.Context, email string, identity *HostedIdentity) (string, Session, error) {
 	token, err := s.newToken()
 	if err != nil {
 		return "", Session{}, err
 	}
 	now := s.now().UTC()
 	session := Session{Email: normalizeEmail(email), ExpiresAt: now.Add(s.sessionTTL)}
+	session.Identity = identity
+	if identity != nil && identity.ExpiresAt.Before(session.ExpiresAt) {
+		session.ExpiresAt = identity.ExpiresAt
+	}
 	if session.Email == "" {
 		return "", Session{}, errors.New("session email is required")
 	}
@@ -231,6 +248,7 @@ func (s *Service) CreateSession(ctx context.Context, email string) (string, Sess
 		Email:     session.Email,
 		ExpiresAt: session.ExpiresAt,
 		CreatedAt: now,
+		Identity:  identity,
 	}); err != nil {
 		return "", Session{}, fmt.Errorf("create web session: %w", err)
 	}

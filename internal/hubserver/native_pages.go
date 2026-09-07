@@ -36,6 +36,9 @@ func (s *Service) nativePage(c echo.Context) (int, nativeCursor, []byte, error) 
 	params.Del("limit")
 	scope := nativeRequestScope(c)
 	fingerprint := scope.credential.ID + " " + c.Request().URL.EscapedPath() + "?" + params.Encode()
+	if scope.credential.Hosted != nil {
+		fingerprint += " " + scope.credential.Hosted.SessionID
+	}
 	cursor := nativeCursor{Version: 2, Scope: fingerprint, Expires: s.config.now().Add(time.Hour).Unix()}
 	var key []byte
 	if err := s.database.db.QueryRowContext(c.Request().Context(), "SELECT cursor_key FROM hub_identity").Scan(&key); err != nil {

@@ -13,19 +13,21 @@ import (
 	"time"
 
 	"github.com/digitaldrywood/detent/internal/instancelock"
+	"github.com/digitaldrywood/detent/internal/tracker"
 )
 
 const hubApplicationID = 0x44544842
 
 type database struct {
-	db            *sql.DB
-	lock          *instancelock.Lock
-	path          string
-	schemaVersion int64
-	now           func() time.Time
-	newLeaseID    func() string
-	closeOnce     sync.Once
-	closeErr      error
+	db                 *sql.DB
+	lock               *instancelock.Lock
+	path               string
+	schemaVersion      int64
+	hostedOrganization tracker.OrganizationID
+	now                func() time.Time
+	newLeaseID         func() string
+	closeOnce          sync.Once
+	closeErr           error
 }
 
 func openDatabase(ctx context.Context, cfg Config) (*database, error) {
@@ -67,6 +69,9 @@ func openDatabase(ctx context.Context, cfg Config) (*database, error) {
 		return nil, errors.Join(err, store.Close())
 	}
 	store.schemaVersion = version
+	if err := store.bindHostedDatabase(ctx, cfg.Hosted); err != nil {
+		return nil, errors.Join(err, store.Close())
+	}
 	if err := store.health(ctx); err != nil {
 		return nil, errors.Join(err, store.Close())
 	}

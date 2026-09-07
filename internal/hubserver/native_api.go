@@ -15,6 +15,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 
+	"github.com/digitaldrywood/detent/internal/auth"
 	"github.com/digitaldrywood/detent/internal/tracker"
 )
 
@@ -48,8 +49,14 @@ func nativeConflict(revision tracker.Revision) error {
 }
 
 func (s *Service) nativeAPIError(c echo.Context, err error) error {
+	if errors.Is(err, auth.ErrHostedIdentity) || errors.Is(err, auth.ErrInvalidSession) {
+		return c.JSON(http.StatusForbidden, apiErrorResponse{Code: "access_denied", Message: "Access is no longer available"})
+	}
 	var failure *nativeError
 	if errors.As(err, &failure) {
+		if s.config.Hosted != nil {
+			return c.JSON(failure.status, apiErrorResponse{Code: failure.Code, Message: "The requested operation is unavailable"})
+		}
 		return c.JSON(failure.status, failure)
 	}
 	if errors.Is(err, sql.ErrNoRows) {
@@ -104,6 +111,9 @@ func (s *Service) registerNativeRoutes(e *echo.Echo) {
 
 func (s *Service) requireInstanceAdmin() echo.MiddlewareFunc {
 	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		if s.config.Hosted != nil {
+			return s.requireHostedAdministration(next)
+		}
 		return s.requireAPIScope(apiScopeAdmin)(func(c echo.Context) error {
 			credential, ok := c.Get("hub_api_credential").(apiCredential)
 			if !ok || credential.NativeOnly {
@@ -122,11 +132,19 @@ func (s *Service) requireNativeScope(roles ...apiScope) echo.MiddlewareFunc {
 				return s.nativeAPIError(c, nativeNotFound())
 			}
 			scope := nativeScope{organization: tracker.OrganizationID(c.Param("organization")), project: tracker.ProjectID(c.Param("project")), credential: credential}
+			if err := s.requireHostedProject(c.Request().Context(), s.database.db, scope, !hostedReadRequest(c)); err != nil {
+				return s.nativeAPIError(c, err)
+			}
 			if err := s.database.authorizeNativeProject(c.Request().Context(), scope); err != nil {
 				return s.nativeAPIError(c, err)
 			}
 			c.Set("native_scope", scope)
 			c.Response().Header().Set("Cache-Control", "no-store")
+			if credential.Hosted != nil {
+				if err := s.hostedAudit(c.Request().Context(), credential.Hosted, "action", c.Request().Method+" "+c.Path(), string(scope.project), 0); err != nil {
+					return s.nativeAPIError(c, err)
+				}
+			}
 			return next(c)
 		})
 	}
@@ -190,6 +208,9 @@ func (s *Service) nativeMutation(c echo.Context, command tracker.Mutation, input
 	hash := sha256.Sum256(encoded)
 	requestHash := hex.EncodeToString(hash[:])
 	operationID := c.Request().Method + " " + c.Request().URL.EscapedPath()
+	if scope.credential.Hosted != nil {
+		operationID += " " + scope.credential.Hosted.SessionID
+	}
 	tx, err := s.database.db.BeginTx(ctx, nil)
 	if err != nil {
 		return s.nativeAPIError(c, err)
@@ -199,6 +220,9 @@ func (s *Service) nativeMutation(c echo.Context, command tracker.Mutation, input
 			resultErr = errors.Join(resultErr, err)
 		}
 	}()
+	if err := s.recheckHostedMutation(ctx, tx, scope); err != nil {
+		return s.nativeAPIError(c, err)
+	}
 	var storedHash, response string
 	err = tx.QueryRowContext(ctx, `SELECT request_hash, response_json FROM native_commands WHERE organization_id = ? AND actor_id = ? AND operation = ? AND command_key = ?`, scope.organization, scope.credential.ID, operationID, command.IdempotencyKey).Scan(&storedHash, &response)
 	if err == nil {

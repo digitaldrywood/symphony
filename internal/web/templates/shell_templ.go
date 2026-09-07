@@ -40,6 +40,78 @@ func AppShell(data DashboardShellData, scope templ.Component) templ.Component {
 			templ_7745c5c3_Var1 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
+		if data.Hosted != nil {
+			templ_7745c5c3_Var2 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+				templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+				templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+				if !templ_7745c5c3_IsBuffer {
+					defer func() {
+						templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+						if templ_7745c5c3_Err == nil {
+							templ_7745c5c3_Err = templ_7745c5c3_BufErr
+						}
+					}()
+				}
+				ctx = templ.InitializeContext(ctx)
+				templ_7745c5c3_Err = templ_7745c5c3_Var1.Render(ctx, templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				return nil
+			})
+			templ_7745c5c3_Err = hostedAppShell(*data.Hosted).Render(templ.WithChildren(ctx, templ_7745c5c3_Var2), templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		} else {
+			templ_7745c5c3_Var3 := templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+				templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+				templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+				if !templ_7745c5c3_IsBuffer {
+					defer func() {
+						templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+						if templ_7745c5c3_Err == nil {
+							templ_7745c5c3_Err = templ_7745c5c3_BufErr
+						}
+					}()
+				}
+				ctx = templ.InitializeContext(ctx)
+				templ_7745c5c3_Err = templ_7745c5c3_Var1.Render(ctx, templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				return nil
+			})
+			templ_7745c5c3_Err = instanceAppShell(data, scope).Render(templ.WithChildren(ctx, templ_7745c5c3_Var3), templ_7745c5c3_Buffer)
+			if templ_7745c5c3_Err != nil {
+				return templ_7745c5c3_Err
+			}
+		}
+		return nil
+	})
+}
+
+func instanceAppShell(data DashboardShellData, scope templ.Component) templ.Component {
+	return templruntime.GeneratedTemplate(func(templ_7745c5c3_Input templruntime.GeneratedComponentInput) (templ_7745c5c3_Err error) {
+		templ_7745c5c3_W, ctx := templ_7745c5c3_Input.Writer, templ_7745c5c3_Input.Context
+		if templ_7745c5c3_CtxErr := ctx.Err(); templ_7745c5c3_CtxErr != nil {
+			return templ_7745c5c3_CtxErr
+		}
+		templ_7745c5c3_Buffer, templ_7745c5c3_IsBuffer := templruntime.GetBuffer(templ_7745c5c3_W)
+		if !templ_7745c5c3_IsBuffer {
+			defer func() {
+				templ_7745c5c3_BufErr := templruntime.ReleaseBuffer(templ_7745c5c3_Buffer)
+				if templ_7745c5c3_Err == nil {
+					templ_7745c5c3_Err = templ_7745c5c3_BufErr
+				}
+			}()
+		}
+		ctx = templ.InitializeContext(ctx)
+		templ_7745c5c3_Var4 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var4 == nil {
+			templ_7745c5c3_Var4 = templ.NopComponent
+		}
+		ctx = templ.ClearChildren(ctx)
 		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 1, "<!doctype html><html")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
@@ -52,12 +124,12 @@ func AppShell(data DashboardShellData, scope templ.Component) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var2 string
-		templ_7745c5c3_Var2, templ_7745c5c3_Err = templ.JoinStringErrs(appShellVersionLabel(data))
+		var templ_7745c5c3_Var5 string
+		templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinStringErrs(appShellVersionLabel(data))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 16, Col: 98}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 28, Col: 98}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var2))
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -65,12 +137,12 @@ func AppShell(data DashboardShellData, scope templ.Component) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var3 string
-		templ_7745c5c3_Var3, templ_7745c5c3_Err = templ.JoinStringErrs(applicationName(data.ApplicationName))
+		var templ_7745c5c3_Var6 string
+		templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinStringErrs(applicationName(data.ApplicationName))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 20, Col: 80}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 32, Col: 80}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var3))
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -78,12 +150,12 @@ func AppShell(data DashboardShellData, scope templ.Component) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var4 string
-		templ_7745c5c3_Var4, templ_7745c5c3_Err = templ.JoinStringErrs(pageTitle(data))
+		var templ_7745c5c3_Var7 string
+		templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(pageTitle(data))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 21, Col: 27}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 33, Col: 27}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var4))
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -99,12 +171,12 @@ func AppShell(data DashboardShellData, scope templ.Component) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var5 templ.SafeURL
-		templ_7745c5c3_Var5, templ_7745c5c3_Err = templ.JoinURLErrs(faviconPath(data.Assets))
+		var templ_7745c5c3_Var8 templ.SafeURL
+		templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinURLErrs(faviconPath(data.Assets))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 23, Col: 72}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 35, Col: 72}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var5))
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -112,12 +184,12 @@ func AppShell(data DashboardShellData, scope templ.Component) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var6 templ.SafeURL
-		templ_7745c5c3_Var6, templ_7745c5c3_Err = templ.JoinURLErrs(stylesheetPath(data.Assets))
+		var templ_7745c5c3_Var9 templ.SafeURL
+		templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinURLErrs(stylesheetPath(data.Assets))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 26, Col: 60}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 38, Col: 60}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var6))
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -138,12 +210,12 @@ func AppShell(data DashboardShellData, scope templ.Component) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			var templ_7745c5c3_Var7 string
-			templ_7745c5c3_Var7, templ_7745c5c3_Err = templ.JoinStringErrs(chartJSPath(data.Assets))
+			var templ_7745c5c3_Var10 string
+			templ_7745c5c3_Var10, templ_7745c5c3_Err = templ.JoinStringErrs(chartJSPath(data.Assets))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 33, Col: 42}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 45, Col: 42}
 			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var7))
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var10))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -151,12 +223,12 @@ func AppShell(data DashboardShellData, scope templ.Component) templ.Component {
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			var templ_7745c5c3_Var8 string
-			templ_7745c5c3_Var8, templ_7745c5c3_Err = templ.JoinStringErrs(dashboardChartsScriptPath(data.Assets))
+			var templ_7745c5c3_Var11 string
+			templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(dashboardChartsScriptPath(data.Assets))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 34, Col: 56}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 46, Col: 56}
 			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var8))
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
@@ -213,12 +285,12 @@ func AppShell(data DashboardShellData, scope templ.Component) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var9 string
-		templ_7745c5c3_Var9, templ_7745c5c3_Err = templ.JoinStringErrs(eventsPath(data))
+		var templ_7745c5c3_Var12 string
+		templ_7745c5c3_Var12, templ_7745c5c3_Err = templ.JoinStringErrs(eventsPath(data))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 63, Col: 34}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 75, Col: 34}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var9))
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var12))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -238,7 +310,7 @@ func AppShell(data DashboardShellData, scope templ.Component) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templ_7745c5c3_Var1.Render(ctx, templ_7745c5c3_Buffer)
+		templ_7745c5c3_Err = templ_7745c5c3_Var4.Render(ctx, templ_7745c5c3_Buffer)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -266,21 +338,21 @@ func appSidebar(data DashboardShellData) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var10 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var10 == nil {
-			templ_7745c5c3_Var10 = templ.NopComponent
+		templ_7745c5c3_Var13 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var13 == nil {
+			templ_7745c5c3_Var13 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
 		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "<aside id=\"app-sidebar\" class=\"group/rail invisible fixed inset-y-0 left-0 z-50 flex h-full w-52 -translate-x-full flex-none flex-col gap-0.5 overflow-y-auto border-r border-line bg-page px-2.5 py-3.5 shadow-lg transition-[transform,visibility] duration-200 data-[mobile-open=true]:visible data-[mobile-open=true]:translate-x-0 data-[rail=true]:w-13 data-[rail=true]:items-center data-[rail=true]:px-1.5 md:visible md:static md:z-auto md:translate-x-0 md:shadow-none md:transition-none\" data-rail=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var11 string
-		templ_7745c5c3_Var11, templ_7745c5c3_Err = templ.JoinStringErrs(appShellRailValue(data))
+		var templ_7745c5c3_Var14 string
+		templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(appShellRailValue(data))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 86, Col: 37}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 98, Col: 37}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var11))
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -332,21 +404,21 @@ func LiveBuildVersion(version string) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var12 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var12 == nil {
-			templ_7745c5c3_Var12 = templ.NopComponent
+		templ_7745c5c3_Var15 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var15 == nil {
+			templ_7745c5c3_Var15 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
 		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "<span id=\"detent-build-version\" class=\"min-w-0 truncate text-2xs text-dim group-data-[rail=true]/rail:hidden\" title=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var13 string
-		templ_7745c5c3_Var13, templ_7745c5c3_Err = templ.JoinStringErrs(appShellVersionLabel(DashboardShellData{Version: version}))
+		var templ_7745c5c3_Var16 string
+		templ_7745c5c3_Var16, templ_7745c5c3_Err = templ.JoinStringErrs(appShellVersionLabel(DashboardShellData{Version: version}))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 117, Col: 68}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 129, Col: 68}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var13))
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var16))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -354,12 +426,12 @@ func LiveBuildVersion(version string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var14 string
-		templ_7745c5c3_Var14, templ_7745c5c3_Err = templ.JoinStringErrs(appShellVersionLabel(DashboardShellData{Version: version}))
+		var templ_7745c5c3_Var17 string
+		templ_7745c5c3_Var17, templ_7745c5c3_Err = templ.JoinStringErrs(appShellVersionLabel(DashboardShellData{Version: version}))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 120, Col: 88}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 132, Col: 88}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var14))
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var17))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -367,12 +439,12 @@ func LiveBuildVersion(version string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var15 string
-		templ_7745c5c3_Var15, templ_7745c5c3_Err = templ.JoinStringErrs(appShellVersionLabel(DashboardShellData{Version: version}))
+		var templ_7745c5c3_Var18 string
+		templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinStringErrs(appShellVersionLabel(DashboardShellData{Version: version}))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 121, Col: 62}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 133, Col: 62}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var15))
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var18))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -402,9 +474,9 @@ func AppSidebarContent(data DashboardShellData) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var16 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var16 == nil {
-			templ_7745c5c3_Var16 = templ.NopComponent
+		templ_7745c5c3_Var19 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var19 == nil {
+			templ_7745c5c3_Var19 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
 		projects := appShellProjects(data)
@@ -431,8 +503,8 @@ func AppSidebarContent(data DashboardShellData) templ.Component {
 					return templ_7745c5c3_Err
 				}
 				for _, project := range projects {
-					var templ_7745c5c3_Var17 = []any{appProjectLinkClass(project)}
-					templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var17...)
+					var templ_7745c5c3_Var20 = []any{appProjectLinkClass(project)}
+					templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var20...)
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -440,12 +512,12 @@ func AppSidebarContent(data DashboardShellData) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					var templ_7745c5c3_Var18 templ.SafeURL
-					templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(project.Href))
+					var templ_7745c5c3_Var21 templ.SafeURL
+					templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(project.Href))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 139, Col: 39}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 151, Col: 39}
 					}
-					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var18))
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var21))
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -453,12 +525,12 @@ func AppSidebarContent(data DashboardShellData) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					var templ_7745c5c3_Var19 string
-					templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.JoinStringErrs(templ.CSSClasses(templ_7745c5c3_Var17).String())
+					var templ_7745c5c3_Var22 string
+					templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.JoinStringErrs(templ.CSSClasses(templ_7745c5c3_Var20).String())
 					if templ_7745c5c3_Err != nil {
 						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 1, Col: 0}
 					}
-					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var19))
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var22))
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -466,12 +538,12 @@ func AppSidebarContent(data DashboardShellData) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					var templ_7745c5c3_Var20 string
-					templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.JoinStringErrs(project.ID)
+					var templ_7745c5c3_Var23 string
+					templ_7745c5c3_Var23, templ_7745c5c3_Err = templ.JoinStringErrs(project.ID)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 141, Col: 38}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 153, Col: 38}
 					}
-					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var20))
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var23))
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -479,12 +551,12 @@ func AppSidebarContent(data DashboardShellData) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					var templ_7745c5c3_Var21 string
-					templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.JoinStringErrs(appProjectHelpScope(project))
+					var templ_7745c5c3_Var24 string
+					templ_7745c5c3_Var24, templ_7745c5c3_Err = templ.JoinStringErrs(appProjectHelpScope(project))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 143, Col: 51}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 155, Col: 51}
 					}
-					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var21))
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var24))
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -492,12 +564,12 @@ func AppSidebarContent(data DashboardShellData) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					var templ_7745c5c3_Var22 string
-					templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.JoinStringErrs(appProjectHelpTerm(project))
+					var templ_7745c5c3_Var25 string
+					templ_7745c5c3_Var25, templ_7745c5c3_Err = templ.JoinStringErrs(appProjectHelpTerm(project))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 144, Col: 49}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 156, Col: 49}
 					}
-					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var22))
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var25))
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -505,12 +577,12 @@ func AppSidebarContent(data DashboardShellData) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					var templ_7745c5c3_Var23 string
-					templ_7745c5c3_Var23, templ_7745c5c3_Err = templ.JoinStringErrs(appProjectHelpTitle(project))
+					var templ_7745c5c3_Var26 string
+					templ_7745c5c3_Var26, templ_7745c5c3_Err = templ.JoinStringErrs(appProjectHelpTitle(project))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 145, Col: 51}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 157, Col: 51}
 					}
-					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var23))
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var26))
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -518,12 +590,12 @@ func AppSidebarContent(data DashboardShellData) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					var templ_7745c5c3_Var24 string
-					templ_7745c5c3_Var24, templ_7745c5c3_Err = templ.JoinStringErrs(appProjectHelpDescription(project))
+					var templ_7745c5c3_Var27 string
+					templ_7745c5c3_Var27, templ_7745c5c3_Err = templ.JoinStringErrs(appProjectHelpDescription(project))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 146, Col: 63}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 158, Col: 63}
 					}
-					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var24))
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var27))
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -531,12 +603,12 @@ func AppSidebarContent(data DashboardShellData) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					var templ_7745c5c3_Var25 string
-					templ_7745c5c3_Var25, templ_7745c5c3_Err = templ.JoinStringErrs(appProjectStatus(project))
+					var templ_7745c5c3_Var28 string
+					templ_7745c5c3_Var28, templ_7745c5c3_Err = templ.JoinStringErrs(appProjectStatus(project))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 147, Col: 60}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 159, Col: 60}
 					}
-					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var25))
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var28))
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -544,12 +616,12 @@ func AppSidebarContent(data DashboardShellData) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					var templ_7745c5c3_Var26 string
-					templ_7745c5c3_Var26, templ_7745c5c3_Err = templ.JoinStringErrs(appProjectAriaLabel(project))
+					var templ_7745c5c3_Var29 string
+					templ_7745c5c3_Var29, templ_7745c5c3_Err = templ.JoinStringErrs(appProjectAriaLabel(project))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 148, Col: 46}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 160, Col: 46}
 					}
-					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var26))
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var29))
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -565,12 +637,12 @@ func AppSidebarContent(data DashboardShellData) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					var templ_7745c5c3_Var27 string
-					templ_7745c5c3_Var27, templ_7745c5c3_Err = templ.JoinStringErrs(boardBoolAttr(project.Live))
+					var templ_7745c5c3_Var30 string
+					templ_7745c5c3_Var30, templ_7745c5c3_Err = templ.JoinStringErrs(boardBoolAttr(project.Live))
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 151, Col: 412}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 163, Col: 412}
 					}
-					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var27))
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var30))
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -586,12 +658,12 @@ func AppSidebarContent(data DashboardShellData) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					var templ_7745c5c3_Var28 string
-					templ_7745c5c3_Var28, templ_7745c5c3_Err = templ.JoinStringErrs(project.Initials)
+					var templ_7745c5c3_Var31 string
+					templ_7745c5c3_Var31, templ_7745c5c3_Err = templ.JoinStringErrs(project.Initials)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 154, Col: 235}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 166, Col: 235}
 					}
-					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var28))
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var31))
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -599,12 +671,12 @@ func AppSidebarContent(data DashboardShellData) templ.Component {
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
-					var templ_7745c5c3_Var29 string
-					templ_7745c5c3_Var29, templ_7745c5c3_Err = templ.JoinStringErrs(project.Name)
+					var templ_7745c5c3_Var32 string
+					templ_7745c5c3_Var32, templ_7745c5c3_Err = templ.JoinStringErrs(project.Name)
 					if templ_7745c5c3_Err != nil {
-						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 155, Col: 119}
+						return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 167, Col: 119}
 					}
-					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var29))
+					_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var32))
 					if templ_7745c5c3_Err != nil {
 						return templ_7745c5c3_Err
 					}
@@ -617,12 +689,12 @@ func AppSidebarContent(data DashboardShellData) templ.Component {
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
-						var templ_7745c5c3_Var30 string
-						templ_7745c5c3_Var30, templ_7745c5c3_Err = templ.JoinStringErrs(project.ActiveHoursCozyLabel)
+						var templ_7745c5c3_Var33 string
+						templ_7745c5c3_Var33, templ_7745c5c3_Err = templ.JoinStringErrs(project.ActiveHoursCozyLabel)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 157, Col: 255}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 169, Col: 255}
 						}
-						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var30))
+						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var33))
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
@@ -638,12 +710,12 @@ func AppSidebarContent(data DashboardShellData) templ.Component {
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
-						var templ_7745c5c3_Var31 string
-						templ_7745c5c3_Var31, templ_7745c5c3_Err = templ.JoinStringErrs(project.ActiveHoursCozyLabel)
+						var templ_7745c5c3_Var34 string
+						templ_7745c5c3_Var34, templ_7745c5c3_Err = templ.JoinStringErrs(project.ActiveHoursCozyLabel)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 159, Col: 91}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 171, Col: 91}
 						}
-						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var31))
+						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var34))
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
@@ -651,12 +723,12 @@ func AppSidebarContent(data DashboardShellData) templ.Component {
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
-						var templ_7745c5c3_Var32 string
-						templ_7745c5c3_Var32, templ_7745c5c3_Err = templ.JoinStringErrs(project.ActiveHoursCompactLabel)
+						var templ_7745c5c3_Var35 string
+						templ_7745c5c3_Var35, templ_7745c5c3_Err = templ.JoinStringErrs(project.ActiveHoursCompactLabel)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 160, Col: 80}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 172, Col: 80}
 						}
-						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var32))
+						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var35))
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
@@ -665,8 +737,8 @@ func AppSidebarContent(data DashboardShellData) templ.Component {
 							return templ_7745c5c3_Err
 						}
 					} else if project.Count != "" {
-						var templ_7745c5c3_Var33 = []any{appProjectCountClass(project)}
-						templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var33...)
+						var templ_7745c5c3_Var36 = []any{appProjectCountClass(project)}
+						templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var36...)
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
@@ -674,12 +746,12 @@ func AppSidebarContent(data DashboardShellData) templ.Component {
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
-						var templ_7745c5c3_Var34 string
-						templ_7745c5c3_Var34, templ_7745c5c3_Err = templ.JoinStringErrs(templ.CSSClasses(templ_7745c5c3_Var33).String())
+						var templ_7745c5c3_Var37 string
+						templ_7745c5c3_Var37, templ_7745c5c3_Err = templ.JoinStringErrs(templ.CSSClasses(templ_7745c5c3_Var36).String())
 						if templ_7745c5c3_Err != nil {
 							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 1, Col: 0}
 						}
-						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var34))
+						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var37))
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
@@ -687,12 +759,12 @@ func AppSidebarContent(data DashboardShellData) templ.Component {
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
-						var templ_7745c5c3_Var35 string
-						templ_7745c5c3_Var35, templ_7745c5c3_Err = templ.JoinStringErrs(boardBoolAttr(project.Blocked > 0))
+						var templ_7745c5c3_Var38 string
+						templ_7745c5c3_Var38, templ_7745c5c3_Err = templ.JoinStringErrs(boardBoolAttr(project.Blocked > 0))
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 163, Col: 144}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 175, Col: 144}
 						}
-						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var35))
+						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var38))
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
@@ -700,12 +772,12 @@ func AppSidebarContent(data DashboardShellData) templ.Component {
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
-						var templ_7745c5c3_Var36 string
-						templ_7745c5c3_Var36, templ_7745c5c3_Err = templ.JoinStringErrs(appProjectBadgeLabel(project))
+						var templ_7745c5c3_Var39 string
+						templ_7745c5c3_Var39, templ_7745c5c3_Err = templ.JoinStringErrs(appProjectBadgeLabel(project))
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 163, Col: 189}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 175, Col: 189}
 						}
-						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var36))
+						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var39))
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
@@ -713,12 +785,12 @@ func AppSidebarContent(data DashboardShellData) templ.Component {
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
-						var templ_7745c5c3_Var37 string
-						templ_7745c5c3_Var37, templ_7745c5c3_Err = templ.JoinStringErrs(project.Count)
+						var templ_7745c5c3_Var40 string
+						templ_7745c5c3_Var40, templ_7745c5c3_Err = templ.JoinStringErrs(project.Count)
 						if templ_7745c5c3_Err != nil {
-							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 163, Col: 207}
+							return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 175, Col: 207}
 						}
-						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var37))
+						_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var40))
 						if templ_7745c5c3_Err != nil {
 							return templ_7745c5c3_Err
 						}
@@ -754,21 +826,21 @@ func appSidebarSectionLabel(id string, label string) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var38 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var38 == nil {
-			templ_7745c5c3_Var38 = templ.NopComponent
+		templ_7745c5c3_Var41 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var41 == nil {
+			templ_7745c5c3_Var41 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
 		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 54, "<p class=\"px-2.5 pb-1.5 pt-4.5 text-2xs font-semibold uppercase tracking-[0.06em] text-dim group-data-[rail=true]/rail:hidden\" data-sidebar-section=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var39 string
-		templ_7745c5c3_Var39, templ_7745c5c3_Err = templ.JoinStringErrs(id)
+		var templ_7745c5c3_Var42 string
+		templ_7745c5c3_Var42, templ_7745c5c3_Err = templ.JoinStringErrs(id)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 172, Col: 153}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 184, Col: 153}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var39))
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var42))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -776,12 +848,12 @@ func appSidebarSectionLabel(id string, label string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var40 string
-		templ_7745c5c3_Var40, templ_7745c5c3_Err = templ.JoinStringErrs(label)
+		var templ_7745c5c3_Var43 string
+		templ_7745c5c3_Var43, templ_7745c5c3_Err = templ.JoinStringErrs(label)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 172, Col: 163}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 184, Col: 163}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var40))
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var43))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -789,12 +861,12 @@ func appSidebarSectionLabel(id string, label string) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var41 string
-		templ_7745c5c3_Var41, templ_7745c5c3_Err = templ.JoinStringErrs(id)
+		var templ_7745c5c3_Var44 string
+		templ_7745c5c3_Var44, templ_7745c5c3_Err = templ.JoinStringErrs(id)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 173, Col: 92}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 185, Col: 92}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var41))
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var44))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -822,13 +894,13 @@ func appSidebarNavItem(data DashboardShellData, item appNavItem) templ.Component
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var42 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var42 == nil {
-			templ_7745c5c3_Var42 = templ.NopComponent
+		templ_7745c5c3_Var45 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var45 == nil {
+			templ_7745c5c3_Var45 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		var templ_7745c5c3_Var43 = []any{appNavLinkClass(item)}
-		templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var43...)
+		var templ_7745c5c3_Var46 = []any{appNavLinkClass(item)}
+		templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var46...)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -836,12 +908,12 @@ func appSidebarNavItem(data DashboardShellData, item appNavItem) templ.Component
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var44 templ.SafeURL
-		templ_7745c5c3_Var44, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(item.Href))
+		var templ_7745c5c3_Var47 templ.SafeURL
+		templ_7745c5c3_Var47, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(item.Href))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 180, Col: 33}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 192, Col: 33}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var44))
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var47))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -849,12 +921,12 @@ func appSidebarNavItem(data DashboardShellData, item appNavItem) templ.Component
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var45 string
-		templ_7745c5c3_Var45, templ_7745c5c3_Err = templ.JoinStringErrs(templ.CSSClasses(templ_7745c5c3_Var43).String())
+		var templ_7745c5c3_Var48 string
+		templ_7745c5c3_Var48, templ_7745c5c3_Err = templ.JoinStringErrs(templ.CSSClasses(templ_7745c5c3_Var46).String())
 		if templ_7745c5c3_Err != nil {
 			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 1, Col: 0}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var45))
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var48))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -862,12 +934,12 @@ func appSidebarNavItem(data DashboardShellData, item appNavItem) templ.Component
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var46 string
-		templ_7745c5c3_Var46, templ_7745c5c3_Err = templ.JoinStringErrs(item.Label)
+		var templ_7745c5c3_Var49 string
+		templ_7745c5c3_Var49, templ_7745c5c3_Err = templ.JoinStringErrs(item.Label)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 182, Col: 25}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 194, Col: 25}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var46))
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var49))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -875,12 +947,12 @@ func appSidebarNavItem(data DashboardShellData, item appNavItem) templ.Component
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var47 string
-		templ_7745c5c3_Var47, templ_7745c5c3_Err = templ.JoinStringErrs(item.ID)
+		var templ_7745c5c3_Var50 string
+		templ_7745c5c3_Var50, templ_7745c5c3_Err = templ.JoinStringErrs(item.ID)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 183, Col: 33}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 195, Col: 33}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var47))
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var50))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -888,12 +960,12 @@ func appSidebarNavItem(data DashboardShellData, item appNavItem) templ.Component
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var48 string
-		templ_7745c5c3_Var48, templ_7745c5c3_Err = templ.JoinStringErrs("sidebar-nav-" + item.ID)
+		var templ_7745c5c3_Var51 string
+		templ_7745c5c3_Var51, templ_7745c5c3_Err = templ.JoinStringErrs("sidebar-nav-" + item.ID)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 186, Col: 43}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 198, Col: 43}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var48))
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var51))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -901,12 +973,12 @@ func appSidebarNavItem(data DashboardShellData, item appNavItem) templ.Component
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var49 string
-		templ_7745c5c3_Var49, templ_7745c5c3_Err = templ.JoinStringErrs(item.Label)
+		var templ_7745c5c3_Var52 string
+		templ_7745c5c3_Var52, templ_7745c5c3_Err = templ.JoinStringErrs(item.Label)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 187, Col: 30}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 199, Col: 30}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var49))
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var52))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -922,12 +994,12 @@ func appSidebarNavItem(data DashboardShellData, item appNavItem) templ.Component
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var50 string
-		templ_7745c5c3_Var50, templ_7745c5c3_Err = templ.JoinStringErrs(item.Icon)
+		var templ_7745c5c3_Var53 string
+		templ_7745c5c3_Var53, templ_7745c5c3_Err = templ.JoinStringErrs(item.Icon)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 190, Col: 124}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 202, Col: 124}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var50))
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var53))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -943,12 +1015,12 @@ func appSidebarNavItem(data DashboardShellData, item appNavItem) templ.Component
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var51 string
-		templ_7745c5c3_Var51, templ_7745c5c3_Err = templ.JoinStringErrs(item.Label)
+		var templ_7745c5c3_Var54 string
+		templ_7745c5c3_Var54, templ_7745c5c3_Err = templ.JoinStringErrs(item.Label)
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 193, Col: 93}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 205, Col: 93}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var51))
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var54))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -994,9 +1066,9 @@ func appTopbar(data DashboardShellData, scope templ.Component) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var52 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var52 == nil {
-			templ_7745c5c3_Var52 = templ.NopComponent
+		templ_7745c5c3_Var55 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var55 == nil {
+			templ_7745c5c3_Var55 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
 		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 72, "<header class=\"relative flex h-12 flex-none items-center gap-1 border-b border-line px-1 md:gap-4 md:px-5\"><button type=\"button\" class=\"grid size-11 flex-none place-items-center rounded-card text-sec hover:bg-elev hover:text-text focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent md:hidden\" data-mobile-sidebar-toggle aria-label=\"Open navigation\" aria-controls=\"app-sidebar\" aria-expanded=\"false\">")
@@ -1011,12 +1083,12 @@ func appTopbar(data DashboardShellData, scope templ.Component) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var53 string
-		templ_7745c5c3_Var53, templ_7745c5c3_Err = templ.JoinStringErrs(appShellTopbarTitle(data))
+		var templ_7745c5c3_Var56 string
+		templ_7745c5c3_Var56, templ_7745c5c3_Err = templ.JoinStringErrs(appShellTopbarTitle(data))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 214, Col: 113}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 226, Col: 113}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var53))
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var56))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -1058,47 +1130,12 @@ func appTopbar(data DashboardShellData, scope templ.Component) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var54 = []any{appDensityButtonClass(data, "compact")}
-		templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var54...)
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 80, "<button type=\"button\" class=\"")
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		var templ_7745c5c3_Var55 string
-		templ_7745c5c3_Var55, templ_7745c5c3_Err = templ.JoinStringErrs(templ.CSSClasses(templ_7745c5c3_Var54).String())
-		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 1, Col: 0}
-		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var55))
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 81, "\" data-density-choice=\"compact\" aria-pressed=\"")
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		var templ_7745c5c3_Var56 string
-		templ_7745c5c3_Var56, templ_7745c5c3_Err = templ.JoinStringErrs(appDensityPressed(data, "compact"))
-		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 239, Col: 154}
-		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var56))
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 82, "\">Compact</button> ")
-		if templ_7745c5c3_Err != nil {
-			return templ_7745c5c3_Err
-		}
-		var templ_7745c5c3_Var57 = []any{appDensityButtonClass(data, "cozy")}
+		var templ_7745c5c3_Var57 = []any{appDensityButtonClass(data, "compact")}
 		templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var57...)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 83, "<button type=\"button\" class=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 80, "<button type=\"button\" class=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -1111,29 +1148,29 @@ func appTopbar(data DashboardShellData, scope templ.Component) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 84, "\" data-density-choice=\"cozy\" aria-pressed=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 81, "\" data-density-choice=\"compact\" aria-pressed=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var59 string
-		templ_7745c5c3_Var59, templ_7745c5c3_Err = templ.JoinStringErrs(appDensityPressed(data, "cozy"))
+		templ_7745c5c3_Var59, templ_7745c5c3_Err = templ.JoinStringErrs(appDensityPressed(data, "compact"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 240, Col: 145}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 251, Col: 154}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var59))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 85, "\">Cozy</button> ")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 82, "\">Compact</button> ")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var60 = []any{appDensityButtonClass(data, "comfy")}
+		var templ_7745c5c3_Var60 = []any{appDensityButtonClass(data, "cozy")}
 		templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var60...)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 86, "<button type=\"button\" class=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 83, "<button type=\"button\" class=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -1146,16 +1183,51 @@ func appTopbar(data DashboardShellData, scope templ.Component) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 87, "\" data-density-choice=\"comfy\" aria-pressed=\"")
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 84, "\" data-density-choice=\"cozy\" aria-pressed=\"")
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
 		var templ_7745c5c3_Var62 string
-		templ_7745c5c3_Var62, templ_7745c5c3_Err = templ.JoinStringErrs(appDensityPressed(data, "comfy"))
+		templ_7745c5c3_Var62, templ_7745c5c3_Err = templ.JoinStringErrs(appDensityPressed(data, "cozy"))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 241, Col: 148}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 252, Col: 145}
 		}
 		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var62))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 85, "\">Cozy</button> ")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var63 = []any{appDensityButtonClass(data, "comfy")}
+		templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var63...)
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 86, "<button type=\"button\" class=\"")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var64 string
+		templ_7745c5c3_Var64, templ_7745c5c3_Err = templ.JoinStringErrs(templ.CSSClasses(templ_7745c5c3_Var63).String())
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 1, Col: 0}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var64))
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 87, "\" data-density-choice=\"comfy\" aria-pressed=\"")
+		if templ_7745c5c3_Err != nil {
+			return templ_7745c5c3_Err
+		}
+		var templ_7745c5c3_Var65 string
+		templ_7745c5c3_Var65, templ_7745c5c3_Err = templ.JoinStringErrs(appDensityPressed(data, "comfy"))
+		if templ_7745c5c3_Err != nil {
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 253, Col: 148}
+		}
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var65))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -1191,13 +1263,13 @@ func LiveStatus(data DashboardShellData) templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var63 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var63 == nil {
-			templ_7745c5c3_Var63 = templ.NopComponent
+		templ_7745c5c3_Var66 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var66 == nil {
+			templ_7745c5c3_Var66 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
-		var templ_7745c5c3_Var64 = []any{"flex flex-none items-center gap-2 text-xs " + appLiveStatusTextClass(data)}
-		templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var64...)
+		var templ_7745c5c3_Var67 = []any{"flex flex-none items-center gap-2 text-xs " + appLiveStatusTextClass(data)}
+		templ_7745c5c3_Err = templ.RenderCSSItems(ctx, templ_7745c5c3_Buffer, templ_7745c5c3_Var67...)
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -1205,12 +1277,12 @@ func LiveStatus(data DashboardShellData) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var65 string
-		templ_7745c5c3_Var65, templ_7745c5c3_Err = templ.JoinStringErrs(templ.CSSClasses(templ_7745c5c3_Var64).String())
+		var templ_7745c5c3_Var68 string
+		templ_7745c5c3_Var68, templ_7745c5c3_Err = templ.JoinStringErrs(templ.CSSClasses(templ_7745c5c3_Var67).String())
 		if templ_7745c5c3_Err != nil {
 			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 1, Col: 0}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var65))
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var68))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -1218,12 +1290,12 @@ func LiveStatus(data DashboardShellData) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var66 string
-		templ_7745c5c3_Var66, templ_7745c5c3_Err = templ.JoinStringErrs(appShellVersionLabel(data))
+		var templ_7745c5c3_Var69 string
+		templ_7745c5c3_Var69, templ_7745c5c3_Err = templ.JoinStringErrs(appShellVersionLabel(data))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 265, Col: 55}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 277, Col: 55}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var66))
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var69))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -1231,12 +1303,12 @@ func LiveStatus(data DashboardShellData) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var67 string
-		templ_7745c5c3_Var67, templ_7745c5c3_Err = templ.JoinStringErrs(string(appLiveStatusKind(data)))
+		var templ_7745c5c3_Var70 string
+		templ_7745c5c3_Var70, templ_7745c5c3_Err = templ.JoinStringErrs(string(appLiveStatusKind(data)))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 266, Col: 55}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 278, Col: 55}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var67))
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var70))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -1244,12 +1316,12 @@ func LiveStatus(data DashboardShellData) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var68 string
-		templ_7745c5c3_Var68, templ_7745c5c3_Err = templ.JoinStringErrs(appLiveStatusLabel(data))
+		var templ_7745c5c3_Var71 string
+		templ_7745c5c3_Var71, templ_7745c5c3_Err = templ.JoinStringErrs(appLiveStatusLabel(data))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 267, Col: 49}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 279, Col: 49}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var68))
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var71))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -1265,12 +1337,12 @@ func LiveStatus(data DashboardShellData) templ.Component {
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
-		var templ_7745c5c3_Var69 string
-		templ_7745c5c3_Var69, templ_7745c5c3_Err = templ.JoinStringErrs(appLiveStatusLabel(data))
+		var templ_7745c5c3_Var72 string
+		templ_7745c5c3_Var72, templ_7745c5c3_Err = templ.JoinStringErrs(appLiveStatusLabel(data))
 		if templ_7745c5c3_Err != nil {
-			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 272, Col: 50}
+			return templ.Error{Err: templ_7745c5c3_Err, FileName: `internal/web/templates/shell.templ`, Line: 284, Col: 50}
 		}
-		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var69))
+		_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var72))
 		if templ_7745c5c3_Err != nil {
 			return templ_7745c5c3_Err
 		}
@@ -1316,9 +1388,9 @@ func liveBehaviorScript() templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var70 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var70 == nil {
-			templ_7745c5c3_Var70 = templ.NopComponent
+		templ_7745c5c3_Var73 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var73 == nil {
+			templ_7745c5c3_Var73 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
 		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 98, "<script>\n\t\t(function () {\n\t\t\tvar reduceMotion = window.matchMedia && window.matchMedia(\"(prefers-reduced-motion: reduce)\").matches;\n\t\t\tvar servedVersion = document.documentElement.getAttribute(\"data-detent-served-version\") || \"\";\n\t\t\tvar buildConfirmed = false;\n\t\t\tvar connectedOnce = false;\n\t\t\tvar eventSources = new Map();\n\t\t\tvar createEventSource = window.htmx && window.htmx.createEventSource;\n\t\t\tif (typeof createEventSource === \"function\") {\n\t\t\t\twindow.htmx.createEventSource = function (url) {\n\t\t\t\t\tvar existing = eventSources.get(url);\n\t\t\t\t\tif (existing && existing.readyState !== EventSource.CLOSED) return existing;\n\t\t\t\t\tvar source = createEventSource(url);\n\t\t\t\t\teventSources.set(url, source);\n\t\t\t\t\treturn source;\n\t\t\t\t};\n\t\t\t}\n\n\t\t\tfunction isDashboardStreamEvent(event) {\n\t\t\t\tvar target = event.target instanceof Element ? event.target : null;\n\t\t\t\tvar owner = target && target.closest(\"[sse-connect], [data-sse-connect]\");\n\t\t\t\treturn owner && owner.hasAttribute(\"data-detent-dashboard-stream\");\n\t\t\t}\n\n\t\t\tfunction connectionNotice(visible) {\n\t\t\t\tvar notice = document.querySelector(\"[data-detent-connection-notice]\");\n\t\t\t\tif (!notice) return;\n\t\t\t\tnotice.hidden = !visible;\n\t\t\t\tnotice.classList.toggle(\"hidden\", !visible);\n\t\t\t\tnotice.classList.toggle(\"flex\", visible);\n\t\t\t}\n\n\t\t\tfunction setBoardMovesDisabled(disabled) {\n\t\t\t\tdocument.querySelectorAll(\"[data-kanban-card]\").forEach(function (card) {\n\t\t\t\t\tif (!(card instanceof HTMLElement)) return;\n\t\t\t\t\tif (disabled) {\n\t\t\t\t\t\tif (card.dataset.kanbanAction === \"move\") {\n\t\t\t\t\t\t\tcard.dataset.kanbanConnectionAction = \"move\";\n\t\t\t\t\t\t\tdelete card.dataset.kanbanAction;\n\t\t\t\t\t\t}\n\t\t\t\t\t\tif (card.dataset.kanbanConnectionAction === \"move\") {\n\t\t\t\t\t\t\tcard.dataset.kanbanConnectionDisabled = \"true\";\n\t\t\t\t\t\t}\n\t\t\t\t\t\treturn;\n\t\t\t\t\t}\n\t\t\t\t\tif (card.dataset.kanbanConnectionAction !== \"move\") return;\n\t\t\t\t\tcard.dataset.kanbanAction = \"move\";\n\t\t\t\t\tdelete card.dataset.kanbanConnectionAction;\n\t\t\t\t\tdelete card.dataset.kanbanConnectionDisabled;\n\t\t\t\t});\n\t\t\t}\n\n\t\t\tfunction setConnectionState(state) {\n\t\t\t\tdocument.documentElement.setAttribute(\"data-detent-connection\", state);\n\t\t\t\tvar connected = state === \"connected\";\n\t\t\t\tsetBoardMovesDisabled(!connected);\n\t\t\t\tconnectionNotice(!connected && connectedOnce && state !== \"reload-required\");\n\t\t\t\tdocument.dispatchEvent(new CustomEvent(\"detent:connectionChange\", { detail: { state: state } }));\n\t\t\t}\n\n\t\t\tfunction applyBuildVersion(event) {\n\t\t\t\tif (!isDashboardStreamEvent(event)) return;\n\t\t\t\tvar target = event.target instanceof Element ? event.target : null;\n\t\t\t\tif (!target) return;\n\t\t\t\tvar detail = event.detail || {};\n\t\t\t\tvar markup = typeof detail.data === \"string\" ? detail.data : \"\";\n\t\t\t\tif (!markup) return;\n\t\t\t\tvar template = document.createElement(\"template\");\n\t\t\t\ttemplate.innerHTML = markup;\n\t\t\t\tvar incoming = target.id === \"detent-build-version\"\n\t\t\t\t\t? template.content.querySelector(\"[data-detent-build-version]\")\n\t\t\t\t\t: template.content.querySelector(\"[data-detent-live-version]\");\n\t\t\t\tif (!incoming) return;\n\t\t\t\tvar liveVersion = incoming.getAttribute(\"data-detent-build-version\") || incoming.getAttribute(\"data-detent-live-version\") || \"\";\n\t\t\t\tvar footer = target.id === \"detent-build-version\" ? target : null;\n\t\t\t\tif (footer) {\n\t\t\t\t\tfooter.textContent = liveVersion;\n\t\t\t\t\tfooter.setAttribute(\"title\", liveVersion);\n\t\t\t\t\tfooter.setAttribute(\"data-detent-build-version\", liveVersion);\n\t\t\t\t}\n\t\t\t\tif (!servedVersion || !liveVersion) return;\n\t\t\t\tif (servedVersion === liveVersion) {\n\t\t\t\t\tbuildConfirmed = true;\n\t\t\t\t\treturn;\n\t\t\t\t}\n\t\t\t\tbuildConfirmed = false;\n\t\t\t\tsetConnectionState(\"reload-required\");\n\t\t\t\tvar notice = document.querySelector(\"[data-detent-build-update]\");\n\t\t\t\tif (!notice) return;\n\t\t\t\tvar message = notice.querySelector(\"[data-detent-build-update-message]\");\n\t\t\t\tif (message) message.textContent = \"Detent updated to \" + liveVersion + \" —\";\n\t\t\t\tnotice.hidden = false;\n\t\t\t\tnotice.classList.remove(\"hidden\");\n\t\t\t\tnotice.classList.add(\"flex\");\n\t\t\t}\n\t\t\tdocument.addEventListener(\"htmx:sseBeforeMessage\", applyBuildVersion);\n\t\t\tdocument.addEventListener(\"click\", function (event) {\n\t\t\t\tvar reload = event.target instanceof Element ? event.target.closest(\"[data-detent-build-reload]\") : null;\n\t\t\t\tvar connectionReload = event.target instanceof Element ? event.target.closest(\"[data-detent-connection-reload]\") : null;\n\t\t\t\tif (reload || connectionReload) window.location.reload();\n\t\t\t});\n\n\t\t\tfunction liveParts() {\n\t\t\t\tvar indicator = document.querySelector(\"[data-live-indicator]\");\n\t\t\t\tif (!indicator) return null;\n\t\t\t\treturn {\n\t\t\t\t\tindicator: indicator,\n\t\t\t\t\tdot: indicator.querySelector(\"span[aria-hidden]\"),\n\t\t\t\t\tlabel: indicator.querySelector(\"[data-live-label]\"),\n\t\t\t\t\tclock: document.getElementById(\"live-clock\"),\n\t\t\t\t};\n\t\t\t}\n\t\t\tfunction setDisconnected(event) {\n\t\t\t\tif (!isDashboardStreamEvent(event)) return;\n\t\t\t\tbuildConfirmed = false;\n\t\t\t\tsetConnectionState(\"disconnected\");\n\t\t\t\tvar parts = liveParts();\n\t\t\t\tif (!parts || document.documentElement.getAttribute(\"data-live\") === \"stale\") return;\n\t\t\t\tdocument.documentElement.setAttribute(\"data-live\", \"stale\");\n\t\t\t\tif (parts.label) parts.label.textContent = \"Reconnecting… data as of\";\n\t\t\t\tif (parts.dot) {\n\t\t\t\t\tparts.dot.classList.remove(\"bg-ok\", \"bg-warn\", \"bg-err\", \"bg-info\", \"bg-dim\");\n\t\t\t\t\tparts.dot.classList.add(\"bg-warn\");\n\t\t\t\t}\n\t\t\t\tparts.indicator.classList.remove(\"text-sec\");\n\t\t\t\tparts.indicator.classList.add(\"text-warn\");\n\t\t\t\tvar snapshot = document.getElementById(\"snapshot\");\n\t\t\t\tif (snapshot) snapshot.style.opacity = \"0.85\";\n\t\t\t}\n\t\t\tfunction restoreFreshness(parts) {\n\t\t\t\tvar kind = parts.indicator.getAttribute(\"data-freshness-kind\") || \"neutral\";\n\t\t\t\tvar label = parts.indicator.getAttribute(\"data-freshness-label\") || \"Live\";\n\t\t\t\tif (parts.label) parts.label.textContent = label + \" ·\";\n\t\t\t\tif (parts.dot) {\n\t\t\t\t\tparts.dot.classList.remove(\"bg-ok\", \"bg-warn\", \"bg-err\", \"bg-info\", \"bg-dim\");\n\t\t\t\t\tparts.dot.classList.add(kind === \"ok\" ? \"bg-ok\" : kind === \"warn\" ? \"bg-warn\" : kind === \"err\" ? \"bg-err\" : kind === \"info\" ? \"bg-info\" : \"bg-dim\");\n\t\t\t\t}\n\t\t\t\tparts.indicator.classList.remove(\"text-warn\", \"text-err\", \"text-info\", \"text-sec\");\n\t\t\t\tparts.indicator.classList.add(kind === \"warn\" ? \"text-warn\" : kind === \"err\" ? \"text-err\" : kind === \"info\" ? \"text-info\" : \"text-sec\");\n\t\t\t}\n\t\t\tfunction setConnecting(event) {\n\t\t\t\tif (!isDashboardStreamEvent(event)) return;\n\t\t\t\tif (document.documentElement.getAttribute(\"data-detent-connection\") === \"reload-required\") return;\n\t\t\t\tbuildConfirmed = false;\n\t\t\t\tsetConnectionState(\"connecting\");\n\t\t\t}\n\t\t\tfunction setConnected(event) {\n\t\t\t\tif (!isDashboardStreamEvent(event)) return;\n\t\t\t\tif (!buildConfirmed || document.documentElement.getAttribute(\"data-detent-connection\") === \"reload-required\") return;\n\t\t\t\tvar parts = liveParts();\n\t\t\t\tif (!parts) return;\n\t\t\t\tconnectedOnce = true;\n\t\t\t\tsetConnectionState(\"connected\");\n\t\t\t\tdocument.documentElement.removeAttribute(\"data-live\");\n\t\t\t\trestoreFreshness(parts);\n\t\t\t\tvar snapshot = document.getElementById(\"snapshot\");\n\t\t\t\tif (snapshot) snapshot.style.opacity = \"\";\n\t\t\t}\n\t\t\tdocument.addEventListener(\"htmx:sseError\", setDisconnected);\n\t\t\tdocument.addEventListener(\"htmx:sseClose\", setDisconnected);\n\t\t\tdocument.addEventListener(\"htmx:sseOpen\", setConnecting);\n\t\t\tdocument.addEventListener(\"htmx:sseBeforeMessage\", setConnected);\n\t\t\tdocument.addEventListener(\"htmx:afterSettle\", function () {\n\t\t\t\tsetBoardMovesDisabled(document.documentElement.getAttribute(\"data-detent-connection\") !== \"connected\");\n\t\t\t});\n\t\t\tdocument.addEventListener(\"DOMContentLoaded\", function () {\n\t\t\t\tsetBoardMovesDisabled(document.documentElement.getAttribute(\"data-detent-connection\") !== \"connected\");\n\t\t\t});\n\n\t\t\tvar previousText = new Map();\n\t\t\tvar previousCounts = new Map();\n\t\t\tfunction snapshotState() {\n\t\t\t\tvar snapshot = document.getElementById(\"snapshot\");\n\t\t\t\tif (!snapshot) return;\n\t\t\t\tpreviousText = new Map();\n\t\t\t\tsnapshot.querySelectorAll(\"[id]\").forEach(function (node) {\n\t\t\t\t\tpreviousText.set(node.id, node.textContent);\n\t\t\t\t});\n\t\t\t\tpreviousCounts = new Map();\n\t\t\t\tsnapshot.querySelectorAll(\"[data-preserve-scroll]\").forEach(function (container) {\n\t\t\t\t\tpreviousCounts.set(container.getAttribute(\"data-preserve-scroll\"), {\n\t\t\t\t\t\tcount: container.childElementCount,\n\t\t\t\t\t\tscrolled: container.scrollTop > 24,\n\t\t\t\t\t});\n\t\t\t\t});\n\t\t\t}\n\t\t\tfunction highlightChanges() {\n\t\t\t\tif (reduceMotion) return;\n\t\t\t\tvar snapshot = document.getElementById(\"snapshot\");\n\t\t\t\tif (!snapshot || previousText.size === 0) return;\n\t\t\t\tsnapshot.querySelectorAll(\"[id]\").forEach(function (node) {\n\t\t\t\t\tvar before = previousText.get(node.id);\n\t\t\t\t\tif (before === undefined || before === node.textContent) return;\n\t\t\t\t\tnode.removeAttribute(\"data-changed\");\n\t\t\t\t\tvoid node.offsetWidth;\n\t\t\t\t\tnode.setAttribute(\"data-changed\", \"true\");\n\t\t\t\t\tsetTimeout(function () {\n\t\t\t\t\t\tnode.removeAttribute(\"data-changed\");\n\t\t\t\t\t}, 1100);\n\t\t\t\t});\n\t\t\t}\n\t\t\tfunction accumulateNew() {\n\t\t\t\tvar snapshot = document.getElementById(\"snapshot\");\n\t\t\t\tif (!snapshot) return;\n\t\t\t\tsnapshot.querySelectorAll(\"[data-preserve-scroll]\").forEach(function (container) {\n\t\t\t\t\tvar key = container.getAttribute(\"data-preserve-scroll\");\n\t\t\t\t\tvar before = previousCounts.get(key);\n\t\t\t\t\tif (!before || !before.scrolled) return;\n\t\t\t\t\tvar added = container.childElementCount - before.count;\n\t\t\t\t\tif (added <= 0) return;\n\t\t\t\t\tvar chip = container.querySelector(\"[data-new-chip]\");\n\t\t\t\t\tvar count = added;\n\t\t\t\t\tif (chip) {\n\t\t\t\t\t\tcount += parseInt(chip.getAttribute(\"data-new-count\") || \"0\", 10);\n\t\t\t\t\t} else {\n\t\t\t\t\t\tchip = document.createElement(\"button\");\n\t\t\t\t\t\tchip.type = \"button\";\n\t\t\t\t\t\tchip.setAttribute(\"data-new-chip\", \"\");\n\t\t\t\t\t\tchip.className = \"sticky top-0 z-10 mx-auto flex-none rounded-chip border border-line bg-elev px-2.5 py-1 text-2xs font-medium text-accent\";\n\t\t\t\t\t\tchip.addEventListener(\"click\", function () {\n\t\t\t\t\t\t\tcontainer.scrollTo({ top: 0 });\n\t\t\t\t\t\t\tchip.remove();\n\t\t\t\t\t\t});\n\t\t\t\t\t\tcontainer.prepend(chip);\n\t\t\t\t\t}\n\t\t\t\t\tchip.setAttribute(\"data-new-count\", String(count));\n\t\t\t\t\tchip.textContent = count + \" new ↑\";\n\t\t\t\t});\n\t\t\t}\n\t\t\tdocument.addEventListener(\"htmx:beforeSwap\", function (event) {\n\t\t\t\tvar target = event.detail && event.detail.target;\n\t\t\t\tif (target instanceof Element && (target.id === \"snapshot\" || target.closest(\"#snapshot\"))) {\n\t\t\t\t\tsnapshotState();\n\t\t\t\t}\n\t\t\t});\n\t\t\tdocument.addEventListener(\"htmx:afterSettle\", function (event) {\n\t\t\t\tvar target = event.detail && event.detail.target;\n\t\t\t\tif (target instanceof Element && (target.id === \"snapshot\" || target.closest(\"#snapshot\"))) {\n\t\t\t\t\thighlightChanges();\n\t\t\t\t\taccumulateNew();\n\t\t\t\t}\n\t\t\t});\n\t\t})();\n\t</script>")
@@ -1345,9 +1417,9 @@ func appShellScript() templ.Component {
 			}()
 		}
 		ctx = templ.InitializeContext(ctx)
-		templ_7745c5c3_Var71 := templ.GetChildren(ctx)
-		if templ_7745c5c3_Var71 == nil {
-			templ_7745c5c3_Var71 = templ.NopComponent
+		templ_7745c5c3_Var74 := templ.GetChildren(ctx)
+		if templ_7745c5c3_Var74 == nil {
+			templ_7745c5c3_Var74 = templ.NopComponent
 		}
 		ctx = templ.ClearChildren(ctx)
 		templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 99, "<script>\n\t\t(function () {\n\t\t\tvar detailSheetRefreshing = false;\n\t\t\tfunction setChatPanel(open) {\n\t\t\t\tvar panel = document.querySelector(\"[data-chat-panel]\");\n\t\t\t\tvar scrim = document.querySelector(\"[data-chat-scrim]\");\n\t\t\t\tvar toggle = document.querySelector(\"[data-chat-toggle]\");\n\t\t\t\tif (!panel || !scrim || !toggle) return;\n\t\t\t\tvar wasOpen = panel.getAttribute(\"data-chat-open\") === \"true\";\n\t\t\t\tvar value = open ? \"true\" : \"false\";\n\t\t\t\tpanel.setAttribute(\"data-chat-open\", value);\n\t\t\t\tpanel.setAttribute(\"aria-hidden\", open ? \"false\" : \"true\");\n\t\t\t\tscrim.setAttribute(\"data-chat-open\", value);\n\t\t\t\ttoggle.setAttribute(\"aria-expanded\", value);\n\t\t\t\tif (open) {\n\t\t\t\t\tvar input = panel.querySelector(\"textarea\");\n\t\t\t\t\tif (input) input.focus();\n\t\t\t\t} else if (wasOpen) {\n\t\t\t\t\ttoggle.focus();\n\t\t\t\t}\n\t\t\t}\n\t\t\tfunction setMobileTopbar(open) {\n\t\t\t\tvar controls = document.querySelector(\"[data-mobile-topbar-controls]\");\n\t\t\t\tvar toggle = document.querySelector(\"[data-mobile-topbar-toggle]\");\n\t\t\t\tif (!controls || !toggle) return;\n\t\t\t\tvar value = open ? \"true\" : \"false\";\n\t\t\t\tcontrols.setAttribute(\"data-mobile-open\", value);\n\t\t\t\ttoggle.setAttribute(\"aria-expanded\", value);\n\t\t\t}\n\t\t\tfunction setMobileSidebar(open, restoreFocus) {\n\t\t\t\tvar sidebar = document.getElementById(\"app-sidebar\");\n\t\t\t\tvar scrim = document.querySelector(\"[data-mobile-sidebar-scrim]\");\n\t\t\t\tvar toggle = document.querySelector(\"[data-mobile-sidebar-toggle]\");\n\t\t\t\tif (!sidebar || !scrim || !toggle) return;\n\t\t\t\tvar wasOpen = sidebar.getAttribute(\"data-mobile-open\") === \"true\";\n\t\t\t\tvar value = open ? \"true\" : \"false\";\n\t\t\t\tif (open && sidebar.dataset.desktopRail === undefined) {\n\t\t\t\t\tsidebar.dataset.desktopRail = sidebar.getAttribute(\"data-rail\") || \"false\";\n\t\t\t\t\tsidebar.setAttribute(\"data-rail\", \"false\");\n\t\t\t\t} else if (!open && sidebar.dataset.desktopRail !== undefined) {\n\t\t\t\t\tsidebar.setAttribute(\"data-rail\", sidebar.dataset.desktopRail);\n\t\t\t\t\tdelete sidebar.dataset.desktopRail;\n\t\t\t\t}\n\t\t\t\tsidebar.setAttribute(\"data-mobile-open\", value);\n\t\t\t\tscrim.setAttribute(\"data-mobile-open\", value);\n\t\t\t\ttoggle.setAttribute(\"aria-expanded\", value);\n\t\t\t\tif (open) {\n\t\t\t\t\tvar firstLink = sidebar.querySelector(\"a\");\n\t\t\t\t\tif (firstLink) firstLink.focus();\n\t\t\t\t} else if (restoreFocus && wasOpen) {\n\t\t\t\t\ttoggle.focus();\n\t\t\t\t}\n\t\t\t}\n\t\t\tfunction applyDetailSheetTab(host) {\n\t\t\t\tif (!host) return;\n\t\t\t\tvar selected = host.dataset.detailSheetTab || \"activity\";\n\t\t\t\thost.querySelectorAll(\"[data-sheet-tab]\").forEach(function (button) {\n\t\t\t\t\tvar active = button.getAttribute(\"data-sheet-tab\") === selected;\n\t\t\t\t\tbutton.setAttribute(\"aria-selected\", active ? \"true\" : \"false\");\n\t\t\t\t\tbutton.classList.toggle(\"border-accent\", active);\n\t\t\t\t\tbutton.classList.toggle(\"border-transparent\", !active);\n\t\t\t\t\tbutton.classList.toggle(\"text-text\", active);\n\t\t\t\t\tbutton.classList.toggle(\"text-sec\", !active);\n\t\t\t\t});\n\t\t\t\thost.querySelectorAll(\"[data-sheet-panel]\").forEach(function (panel) {\n\t\t\t\t\tpanel.classList.toggle(\"hidden\", panel.getAttribute(\"data-sheet-panel\") !== selected);\n\t\t\t\t});\n\t\t\t}\n\t\t\tfunction abortDetailSheetRequest(host) {\n\t\t\t\tif (!host || !host.dataset.detailSheetTrigger || !window.htmx) return;\n\t\t\t\tvar trigger = document.getElementById(host.dataset.detailSheetTrigger);\n\t\t\t\tif (trigger) window.htmx.trigger(trigger, \"htmx:abort\");\n\t\t\t}\n\t\t\tfunction removeDetailSheetChildren(host) {\n\t\t\t\tif (!host) return;\n\t\t\t\tArray.from(host.children).forEach(function (child) {\n\t\t\t\t\tif (window.htmx) window.htmx.swap(child, \"\", { swapStyle: \"delete\" });\n\t\t\t\t\telse child.remove();\n\t\t\t\t});\n\t\t\t}\n\t\t\tfunction mountImmediateDetailSheet(trigger, path) {\n\t\t\t\tvar host = document.getElementById(\"detail-sheet-host\");\n\t\t\t\tvar template = document.getElementById(\"detail-sheet-immediate-template\");\n\t\t\t\tif (!host || !(template instanceof HTMLTemplateElement)) return;\n\t\t\t\tdetailSheetRefreshing = false;\n\t\t\t\tif (host.dataset.detailSheetTrigger && host.dataset.detailSheetTrigger !== trigger.id) {\n\t\t\t\t\tabortDetailSheetRequest(host);\n\t\t\t\t}\n\t\t\t\tremoveDetailSheetChildren(host);\n\t\t\t\thost.appendChild(template.content.cloneNode(true));\n\t\t\t\tvar sheet = host.querySelector(\"[data-detail-sheet]\");\n\t\t\t\tvar title = trigger.querySelector(\"[data-board-card-title]\");\n\t\t\t\tvar state = trigger.querySelector(\"[data-board-card-state]\");\n\t\t\t\tvar referenceText = trigger.dataset.detailSheetReference || \"\";\n\t\t\t\tvar values = [\n\t\t\t\t\t[\"[data-immediate-project]\", trigger.dataset.detailSheetProject || \"\"],\n\t\t\t\t\t[\"[data-immediate-reference]\", referenceText],\n\t\t\t\t\t[\"[data-immediate-title]\", title ? title.textContent.trim() : \"\"],\n\t\t\t\t\t[\"[data-immediate-state]\", state ? state.textContent.trim() : \"\"],\n\t\t\t\t\t[\"[data-immediate-identity]\", referenceText]\n\t\t\t\t];\n\t\t\t\tvalues.forEach(function (entry) {\n\t\t\t\t\tvar target = host.querySelector(entry[0]);\n\t\t\t\t\tif (target) target.textContent = entry[1];\n\t\t\t\t});\n\t\t\t\tif (sheet) sheet.dataset.detailSheetKey = trigger.id;\n\t\t\t\tvar dialog = host.querySelector('[role=\"dialog\"]');\n\t\t\t\tif (dialog && referenceText) dialog.setAttribute(\"aria-label\", \"Details for \" + referenceText);\n\t\t\t\thost.dataset.detailSheetTrigger = trigger.id;\n\t\t\t\thost.dataset.detailSheetURL = path || trigger.getAttribute(\"hx-get\") || \"\";\n\t\t\t\tdelete host.dataset.detailSheetTab;\n\t\t\t\tdocument.dispatchEvent(new CustomEvent(\"detent:closeHelpTooltip\"));\n\t\t\t\tapplyDetailSheetTab(host);\n\t\t\t}\n\t\t\tfunction closeDetailSheet() {\n\t\t\t\tdocument.dispatchEvent(new CustomEvent(\"detent:closeHelpTooltip\"));\n\t\t\t\tdetailSheetRefreshing = false;\n\t\t\t\tvar host = document.getElementById(\"detail-sheet-host\");\n\t\t\t\tif (host) {\n\t\t\t\t\tabortDetailSheetRequest(host);\n\t\t\t\t\tremoveDetailSheetChildren(host);\n\t\t\t\t\tdelete host.dataset.detailSheetURL;\n\t\t\t\t\tdelete host.dataset.detailSheetTab;\n\t\t\t\t\tdelete host.dataset.detailSheetTrigger;\n\t\t\t\t}\n\t\t\t}\n\t\t\tdocument.addEventListener(\"htmx:beforeRequest\", function (event) {\n\t\t\t\tvar trigger = event.detail && event.detail.elt;\n\t\t\t\tvar target = event.detail && event.detail.target;\n\t\t\t\tif (target instanceof Element && target.matches(\"[data-detail-enrichment]\")) {\n\t\t\t\t\ttarget.setAttribute(\"aria-busy\", \"true\");\n\t\t\t\t}\n\t\t\t\tif (!(trigger instanceof Element) || !trigger.matches(\"[data-detail-sheet-trigger]\")) return;\n\t\t\t\tvar requestConfig = event.detail && event.detail.requestConfig;\n\t\t\t\tmountImmediateDetailSheet(trigger, requestConfig && requestConfig.path);\n\t\t\t});\n\t\t\tdocument.addEventListener(\"htmx:beforeSwap\", function (event) {\n\t\t\t\tvar host = document.getElementById(\"detail-sheet-host\");\n\t\t\t\tvar target = event.detail && event.detail.target;\n\t\t\t\tvar requestConfig = event.detail && event.detail.requestConfig;\n\t\t\t\tvar trigger = requestConfig && requestConfig.elt;\n\t\t\t\tif (!host || target !== host || !(trigger instanceof Element) || !trigger.matches(\"[data-detail-sheet-trigger]\")) return;\n\t\t\t\tif (host.dataset.detailSheetTrigger !== trigger.id) event.detail.shouldSwap = false;\n\t\t\t});\n\t\t\tdocument.addEventListener(\"htmx:afterRequest\", function (event) {\n\t\t\t\tvar host = document.getElementById(\"detail-sheet-host\");\n\t\t\t\tvar target = event.detail && event.detail.target;\n\t\t\t\tif (target instanceof Element && target.matches(\"[data-detail-enrichment]\")) {\n\t\t\t\t\ttarget.setAttribute(\"aria-busy\", \"false\");\n\t\t\t\t}\n\t\t\t\tif (target instanceof Element && target.matches(\"[data-detail-sheet-core]\")) {\n\t\t\t\t\tdetailSheetRefreshing = false;\n\t\t\t\t}\n\t\t\t\tif (!host || target !== host) return;\n\t\t\t\tvar requestConfig = event.detail && event.detail.requestConfig;\n\t\t\t\tvar trigger = requestConfig && requestConfig.elt;\n\t\t\t\tif (trigger instanceof Element && trigger.matches(\"[data-detail-sheet-trigger]\") && host.dataset.detailSheetTrigger !== trigger.id) return;\n\t\t\t\tdocument.dispatchEvent(new CustomEvent(\"detent:closeHelpTooltip\"));\n\t\t\t\tvar path = requestConfig && requestConfig.path;\n\t\t\t\tif (path) host.dataset.detailSheetURL = path;\n\t\t\t\tapplyDetailSheetTab(host);\n\t\t\t});\n\t\t\tdocument.addEventListener(\"htmx:afterSettle\", function (event) {\n\t\t\t\tvar target = event.detail && event.detail.target;\n\t\t\t\tvar host = document.getElementById(\"detail-sheet-host\");\n\t\t\t\tapplyDetailSheetTab(host);\n\t\t\t\tif (!(target instanceof Element) || (target.id !== \"snapshot\" && !target.closest(\"#snapshot\"))) return;\n\t\t\t\tif (!host || !host.querySelector(\"[data-detail-sheet]\") || detailSheetRefreshing) return;\n\t\t\t\tvar core = host.querySelector(\"[data-detail-sheet-core][hx-get]\");\n\t\t\t\tif (!core) return;\n\t\t\t\tdetailSheetRefreshing = true;\n\t\t\t\thtmx.trigger(core, \"detailSheetRefresh\");\n\t\t\t});\n\t\t\tfunction showActionNotice(message) {\n\t\t\t\tvar notice = document.querySelector(\"[data-detent-action-notice]\");\n\t\t\t\tvar content = notice && notice.querySelector(\"[data-detent-action-notice-message]\");\n\t\t\t\tif (!notice || !content || !message) return;\n\t\t\t\tcontent.textContent = message;\n\t\t\t\tnotice.hidden = false;\n\t\t\t\tnotice.classList.remove(\"hidden\");\n\t\t\t\tnotice.classList.add(\"flex\");\n\t\t\t}\n\t\t\tfunction hideActionNotice() {\n\t\t\t\tvar notice = document.querySelector(\"[data-detent-action-notice]\");\n\t\t\t\tif (!notice) return;\n\t\t\t\tnotice.hidden = true;\n\t\t\t\tnotice.classList.add(\"hidden\");\n\t\t\t\tnotice.classList.remove(\"flex\");\n\t\t\t}\n\t\t\tdocument.addEventListener(\"kanbanActionSucceeded\", function (event) {\n\t\t\t\tif (window.tui && window.tui.dialog) {\n\t\t\t\t\twindow.tui.dialog.close(\"kanban-action-dialog\");\n\t\t\t\t}\n\t\t\t\tvar content = document.getElementById(\"kanban-dialog-content\");\n\t\t\t\tif (content) content.replaceChildren();\n\t\t\t\tcloseDetailSheet();\n\t\t\t\tshowActionNotice(event.detail && event.detail.message);\n\t\t\t});\n\t\t\tdocument.addEventListener(\"keydown\", function (event) {\n\t\t\t\tif (event.key === \"Escape\") {\n\t\t\t\t\tsetMobileTopbar(false);\n\t\t\t\t\tsetMobileSidebar(false, true);\n\t\t\t\t\tsetChatPanel(false);\n\t\t\t\t\tcloseDetailSheet();\n\t\t\t\t\treturn;\n\t\t\t\t}\n\t\t\t\tif (event.key !== \"Enter\" && event.key !== \" \") return;\n\t\t\t\tvar target = event.target;\n\t\t\t\tif (target instanceof Element && target.matches('[role=\"button\"][hx-get]')) {\n\t\t\t\t\tevent.preventDefault();\n\t\t\t\t\ttarget.click();\n\t\t\t\t}\n\t\t\t});\n\t\t\tdocument.addEventListener(\"click\", function (event) {\n\t\t\t\tif (event.target.closest(\"[data-detent-action-notice-dismiss]\")) {\n\t\t\t\t\thideActionNotice();\n\t\t\t\t\treturn;\n\t\t\t\t}\n\t\t\t\tif (event.target.closest(\"[data-chat-toggle]\")) {\n\t\t\t\t\tsetMobileTopbar(false);\n\t\t\t\t\tsetChatPanel(true);\n\t\t\t\t\treturn;\n\t\t\t\t}\n\t\t\t\tif (event.target.closest(\"[data-chat-close], [data-chat-scrim]\")) {\n\t\t\t\t\tsetChatPanel(false);\n\t\t\t\t\treturn;\n\t\t\t\t}\n\t\t\t\tvar sheetTab = event.target.closest(\"[data-sheet-tab]\");\n\t\t\t\tif (sheetTab) {\n\t\t\t\t\tvar sheetHost = document.getElementById(\"detail-sheet-host\");\n\t\t\t\t\tif (sheetHost) {\n\t\t\t\t\t\tvar selectedTab = sheetTab.getAttribute(\"data-sheet-tab\") || \"activity\";\n\t\t\t\t\t\tsheetHost.dataset.detailSheetTab = selectedTab;\n\t\t\t\t\t\tapplyDetailSheetTab(sheetHost);\n\t\t\t\t\t\tif (selectedTab !== \"session\") {\n\t\t\t\t\t\t\tvar liveSession = sheetHost.querySelector(\"[data-board-live-session]\");\n\t\t\t\t\t\t\tremoveDetailSheetChildren(liveSession);\n\t\t\t\t\t\t}\n\t\t\t\t\t}\n\t\t\t\t\treturn;\n\t\t\t\t}\n\t\t\t\tvar resume = event.target.closest(\"[data-live-session-resume]\");\n\t\t\t\tif (resume) {\n\t\t\t\t\tvar log = resume.closest(\"[data-live-session-attach]\").querySelector(\"[data-live-session-log]\");\n\t\t\t\t\tif (log) {\n\t\t\t\t\t\tdelete log.dataset.autoscrollPaused;\n\t\t\t\t\t\tlog.scrollLeft = 0;\n\t\t\t\t\t\tlog.scrollTop = log.scrollHeight;\n\t\t\t\t\t\tresume.classList.add(\"hidden\");\n\t\t\t\t\t}\n\t\t\t\t\treturn;\n\t\t\t\t}\n\t\t\t\tif (event.target.closest(\"[data-sheet-close]\")) {\n\t\t\t\t\tcloseDetailSheet();\n\t\t\t\t\treturn;\n\t\t\t\t}\n\t\t\t\tvar mobileToggle = event.target.closest(\"[data-mobile-sidebar-toggle]\");\n\t\t\t\tif (mobileToggle) {\n\t\t\t\t\tsetMobileTopbar(false);\n\t\t\t\t\tsetMobileSidebar(true, false);\n\t\t\t\t\treturn;\n\t\t\t\t}\n\t\t\t\tif (event.target.closest(\"[data-mobile-sidebar-scrim]\")) {\n\t\t\t\t\tsetMobileSidebar(false, true);\n\t\t\t\t\treturn;\n\t\t\t\t}\n\t\t\t\tif (event.target.closest(\"#app-sidebar a\") && window.matchMedia(\"(max-width: 767px)\").matches) {\n\t\t\t\t\tsetMobileSidebar(false, false);\n\t\t\t\t\treturn;\n\t\t\t\t}\n\t\t\t\tvar topbarToggle = event.target.closest(\"[data-mobile-topbar-toggle]\");\n\t\t\t\tif (topbarToggle) {\n\t\t\t\t\tvar controls = document.querySelector(\"[data-mobile-topbar-controls]\");\n\t\t\t\t\tsetMobileSidebar(false, false);\n\t\t\t\t\tsetMobileTopbar(controls && controls.getAttribute(\"data-mobile-open\") !== \"true\");\n\t\t\t\t\treturn;\n\t\t\t\t}\n\t\t\t\tvar topbarControls = event.target.closest(\"[data-mobile-topbar-controls]\");\n\t\t\t\tif (!topbarControls) setMobileTopbar(false);\n\t\t\t\tvar toggle = event.target.closest(\"[data-sidebar-toggle]\");\n\t\t\t\tif (toggle) {\n\t\t\t\t\tvar sidebar = document.getElementById(\"app-sidebar\");\n\t\t\t\t\tif (!sidebar) return;\n\t\t\t\t\tvar rail = sidebar.getAttribute(\"data-rail\") !== \"true\";\n\t\t\t\t\tsidebar.setAttribute(\"data-rail\", rail ? \"true\" : \"false\");\n\t\t\t\t\tdocument.cookie = \"sidebar_state=\" + (rail ? \"false\" : \"true\") + \"; path=/; max-age=31536000; samesite=lax\";\n\t\t\t\t\treturn;\n\t\t\t\t}\n\t\t\t\tvar density = event.target.closest(\"[data-density-choice]\");\n\t\t\t\tif (density) {\n\t\t\t\t\tvar choice = density.getAttribute(\"data-density-choice\");\n\t\t\t\t\tdocument.documentElement.setAttribute(\"data-density\", choice);\n\t\t\t\t\tdocument.cookie = \"density=\" + choice + \"; path=/; max-age=31536000; samesite=lax\";\n\t\t\t\t\tdocument.querySelectorAll(\"[data-density-choice]\").forEach(function (button) {\n\t\t\t\t\t\tvar active = button === density;\n\t\t\t\t\t\tbutton.setAttribute(\"aria-pressed\", active ? \"true\" : \"false\");\n\t\t\t\t\t\tbutton.classList.toggle(\"bg-elev\", active);\n\t\t\t\t\t\tbutton.classList.toggle(\"text-text\", active);\n\t\t\t\t\t\tbutton.classList.toggle(\"font-medium\", active);\n\t\t\t\t\t\tbutton.classList.toggle(\"text-sec\", !active);\n\t\t\t\t\t});\n\t\t\t\t}\n\t\t\t});\n\t\t\tdocument.addEventListener(\"scroll\", function (event) {\n\t\t\t\tvar log = event.target;\n\t\t\t\tif (!(log instanceof Element) || !log.matches(\"[data-live-session-log]\")) return;\n\t\t\t\tvar paused = log.scrollHeight - log.scrollTop - log.clientHeight > 32;\n\t\t\t\tif (paused) log.dataset.autoscrollPaused = \"true\";\n\t\t\t\telse delete log.dataset.autoscrollPaused;\n\t\t\t\tvar resume = log.closest(\"[data-live-session-attach]\").querySelector(\"[data-live-session-resume]\");\n\t\t\t\tif (resume) resume.classList.toggle(\"hidden\", !paused);\n\t\t\t}, true);\n\t\t\tdocument.addEventListener(\"htmx:afterSwap\", function (event) {\n\t\t\t\tvar target = event.detail && event.detail.target;\n\t\t\t\tif (!(target instanceof Element)) return;\n\t\t\t\tvar log = target.matches(\"[data-live-session-log], [data-session-history-log]\")\n\t\t\t\t\t? target\n\t\t\t\t\t: target.closest(\"[data-live-session-log], [data-session-history-log]\");\n\t\t\t\tif (!log) return;\n\t\t\t\tlog.scrollLeft = 0;\n\t\t\t\tif (!log.matches(\"[data-live-session-log]\")) return;\n\t\t\t\twhile (log.children.length > 200) log.firstElementChild.remove();\n\t\t\t\tif (log.dataset.autoscrollPaused !== \"true\") log.scrollTop = log.scrollHeight;\n\t\t\t});\n\t\t})();\n\t</script>")

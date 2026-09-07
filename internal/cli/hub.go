@@ -61,6 +61,7 @@ func newHubCommandWithRun(version string, lookupEnv func(string) string, run hub
 }
 
 func newHubServeCommand(version string, lookupEnv func(string) string, run hubRunFunc) *cobra.Command {
+	var hostedConfigPath string
 	var githubDisabled bool
 	var databasePath string
 	var listenAddress string
@@ -104,8 +105,13 @@ func newHubServeCommand(version string, lookupEnv func(string) string, run hubRu
 			if githubWebhookSecretEnv != "" && !validEnvName(githubWebhookSecretEnv) {
 				return NewValidationError("Hub GitHub webhook secret environment variable name is invalid", "Use an environment variable name such as DETENT_HUB_GITHUB_WEBHOOK_SECRET.", nil)
 			}
+			hosted, _, err := readHostedConfig(hostedConfigPath, lookupEnv)
+			if err != nil {
+				return err
+			}
 			return run(cmd.Context(), hubserver.Config{
-				GitHubDisabled:             githubDisabled,
+				Hosted:                     hosted,
+				GitHubDisabled:             githubDisabled || hosted != nil,
 				DatabasePath:               databasePath,
 				ListenAddress:              listenAddress,
 				TLSCertFile:                strings.TrimSpace(tlsCertificateFile),
@@ -125,6 +131,7 @@ func newHubServeCommand(version string, lookupEnv func(string) string, run hubRu
 		},
 	}
 	cmd.Flags().StringVar(&databasePath, "database", "", "local filesystem path to the Hub SQLite database")
+	cmd.Flags().StringVar(&hostedConfigPath, "hosted-config", "", "hosted organization and WorkOS configuration file")
 	cmd.Flags().BoolVar(&githubDisabled, "github-disabled", false, "serve native collaboration without GitHub credentials or transport")
 	cmd.Flags().StringVar(&listenAddress, "listen", hubserver.DefaultListenAddress, "Hub listen address")
 	cmd.Flags().StringVar(&tlsCertificateFile, "tls-cert", "", "TLS certificate file")

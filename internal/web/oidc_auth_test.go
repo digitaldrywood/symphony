@@ -79,6 +79,8 @@ func TestOIDCFlowRejectsUnauthorizedAndUnverifiedEmails(t *testing.T) {
 		{name: "email is outside allowlist", identity: auth.Identity{Subject: "subject-2", Email: "other@example.net", EmailVerified: true}, want: http.StatusForbidden, title: "Access denied"},
 		{name: "domain is allowed", identity: auth.Identity{Subject: "subject-3", Email: "member@example.org", EmailVerified: true}, want: http.StatusSeeOther},
 		{name: "unverified exact email", identity: auth.Identity{Subject: "subject-4", Email: "operator@example.com"}, want: http.StatusForbidden, title: "Access denied"},
+		{name: "hosted customer cannot become local operator", identity: auth.Identity{Subject: "subject-5", Email: "operator@example.com", EmailVerified: true, Hosted: &auth.HostedIdentity{Subject: "subject-5", OrganizationID: "org_customer"}}, want: http.StatusForbidden, title: "Access denied"},
+		{name: "hosted support cannot become local operator", identity: auth.Identity{Subject: "subject-6", Email: "operator@example.com", EmailVerified: true, Hosted: &auth.HostedIdentity{Subject: "subject-6", OrganizationID: "org_customer", SupportActor: "support@example.com"}}, want: http.StatusForbidden, title: "Access denied"},
 		{name: "provider rejects unverified email", provider: auth.ErrOIDCUnverifiedEmail, want: http.StatusForbidden, title: "Access denied"},
 		{name: "provider rejects nonce", provider: auth.ErrOIDCInvalidNonce, want: http.StatusUnauthorized, title: "Identity unavailable"},
 	}

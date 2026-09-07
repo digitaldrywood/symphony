@@ -12,6 +12,18 @@ import (
 // children and owns the #snapshot live region. The scope component renders
 // in the topbar next to the title; pass nil when the page has no scope.
 templ AppShell(data DashboardShellData, scope templ.Component) {
+	if data.Hosted != nil {
+		@hostedAppShell(*data.Hosted) {
+			{ children... }
+		}
+	} else {
+		@instanceAppShell(data, scope) {
+			{ children... }
+		}
+	}
+}
+
+templ instanceAppShell(data DashboardShellData, scope templ.Component) {
 	<!DOCTYPE html>
 	<html { appShellHTMLAttributes(data)... } data-detent-served-version={ appShellVersionLabel(data) }>
 		<head>

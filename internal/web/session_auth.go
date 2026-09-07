@@ -73,6 +73,9 @@ func (s *Server) sessionGate(next echo.HandlerFunc) echo.HandlerFunc {
 		cookie, err := c.Cookie(webSessionCookieName)
 		if err == nil {
 			session, authErr := s.sessions.Authenticate(c.Request().Context(), cookie.Value)
+			if authErr == nil && session.Identity != nil {
+				authErr = auth.ErrInvalidSession
+			}
 			if authErr == nil {
 				ctx := context.WithValue(c.Request().Context(), sessionContextKey{}, session)
 				c.SetRequest(c.Request().WithContext(ctx))

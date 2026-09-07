@@ -401,11 +401,16 @@ type MergeFastPath struct {
 }
 
 type Agents struct {
-	Backends []AgentBackend `yaml:"backends"`
-	Routes   []AgentRoute   `yaml:"routes"`
+	Backends       []AgentBackend    `yaml:"backends"`
+	Routes         []AgentRoute      `yaml:"routes"`
+	ModelSelection ModelSelection    `yaml:"model_selection"`
+	Sources        map[string]string `yaml:"-"`
+	local          *Agents
+	pricingPath    string
 }
 
 type AgentBackend struct {
+	Disabled bool           `yaml:"disabled,omitempty"`
 	ID       string         `yaml:"id"`
 	Kind     string         `yaml:"kind"`
 	Protocol string         `yaml:"protocol"`
@@ -417,7 +422,7 @@ type AgentBackend struct {
 	codexOptionsSet      bool
 	claudeCodeOptions    ClaudeCodeOptions
 	claudeCodeOptionsSet bool
-	optionsErr           error
+	optionsProblem       string
 }
 
 type BackendOptions struct {
@@ -450,6 +455,7 @@ type ClaudeCodeOptions struct {
 }
 
 type AgentRoute struct {
+	Disabled   bool              `yaml:"disabled,omitempty"`
 	Name       string            `yaml:"name"`
 	Role       string            `yaml:"role"`
 	Backend    string            `yaml:"backend"`
@@ -721,8 +727,8 @@ func (b AgentBackend) CodexOptions() CodexOptions {
 }
 
 func (b AgentBackend) decodedCodexOptions() (CodexOptions, error) {
-	if b.optionsErr != nil {
-		return CodexOptions{}, b.optionsErr
+	if b.optionsProblem != "" {
+		return CodexOptions{}, errors.New(b.optionsProblem)
 	}
 	if b.codexOptionsSet {
 		return b.codexOptions, nil
@@ -745,8 +751,8 @@ func (b AgentBackend) ClaudeCodeOptions() ClaudeCodeOptions {
 }
 
 func (b AgentBackend) decodedClaudeCodeOptions() (ClaudeCodeOptions, error) {
-	if b.optionsErr != nil {
-		return ClaudeCodeOptions{}, b.optionsErr
+	if b.optionsProblem != "" {
+		return ClaudeCodeOptions{}, errors.New(b.optionsProblem)
 	}
 	if b.claudeCodeOptionsSet {
 		return b.claudeCodeOptions, nil
@@ -765,13 +771,13 @@ func (b *AgentBackend) decodeOptions() {
 	b.codexOptionsSet = false
 	b.claudeCodeOptions = ClaudeCodeOptions{}
 	b.claudeCodeOptionsSet = false
-	b.optionsErr = nil
+	b.optionsProblem = ""
 
 	switch b.Kind {
 	case AgentBackendCodex:
 		options, err := b.decodedCodexOptions()
 		if err != nil {
-			b.optionsErr = err
+			b.optionsProblem = err.Error()
 			return
 		}
 		b.codexOptions = options
@@ -779,7 +785,7 @@ func (b *AgentBackend) decodeOptions() {
 	case AgentBackendClaudeCode:
 		options, err := b.decodedClaudeCodeOptions()
 		if err != nil {
-			b.optionsErr = err
+			b.optionsProblem = err.Error()
 			return
 		}
 		b.claudeCodeOptions = options
@@ -2351,11 +2357,19 @@ func normalizeAgentProtocol(protocol string) string {
 }
 
 func (a *Agents) validate(problems *[]string) {
+	policy := a.ModelSelection
+	if policy.Sources == nil {
+		policy = ResolveModelSelection(ModelSelection{}, policy)
+	}
+	*problems = append(*problems, policy.Validate()...)
 	backendIDs := make(map[string]struct{}, len(a.Backends))
 	if len(a.Backends) == 0 {
 		backendIDs[DefaultAgentBackendID] = struct{}{}
 	}
 	for _, backend := range a.Backends {
+		if backend.Disabled {
+			continue
+		}
 		if strings.TrimSpace(backend.ID) == "" {
 			*problems = append(*problems, "agents.backends.id is required")
 			continue
@@ -2391,6 +2405,9 @@ func (a *Agents) validate(problems *[]string) {
 
 	defaultRoutes := map[string]int{}
 	for _, route := range a.Routes {
+		if route.Disabled {
+			continue
+		}
 		if strings.TrimSpace(route.Backend) == "" {
 			*problems = append(*problems, "agents.routes.backend is required")
 		} else if _, ok := backendIDs[route.Backend]; !ok {

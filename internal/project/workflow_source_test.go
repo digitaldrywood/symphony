@@ -440,6 +440,53 @@ func TestGitRefWorkflowWatcherReloadsWhenRefAdvances(t *testing.T) {
 	}
 }
 
+func TestWorkflowWatchersUseReloadedHostBackends(t *testing.T) {
+	for _, ref := range []string{"", "origin/main"} {
+		t.Run("ref="+ref, func(t *testing.T) {
+			repo := initWorkflowSourceRepo(t)
+			path := filepath.Join(repo, "WORKFLOW.md")
+			writeWorkflowSourceFile(t, path, "initial")
+			commitWorkflowSourceRepo(t, repo, "initial")
+			updateWorkflowSourceRef(t, repo, "origin/main", "HEAD")
+			project := &Project{cfg: globalconfig.Project{Workflow: path, WorkflowRef: ref, Workdir: repo}}
+			factory := resolveWorkflowWatcherFactory(Dependencies{}, project.Config(), "", slog.New(slog.DiscardHandler), project.Config)
+			watcher, err := factory(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			ctx, cancel := context.WithCancel(context.Background())
+			defer cancel()
+			updates, err := watcher.Watch(ctx)
+			if err != nil {
+				t.Fatal(err)
+			}
+			project.mu.Lock()
+			project.cfg.GlobalAgents = workflowconfig.Agents{Backends: []workflowconfig.AgentBackend{{ID: "new-backend", Kind: workflowconfig.AgentBackendCodex, Command: "codex"}}}
+			project.mu.Unlock()
+			if ref != "" {
+				path = workflowconfig.LocalWorkflowPath(path)
+			}
+			raw := "---\ntracker:\n  kind: memory\nagents:\n  routes:\n    - name: new-default\n      backend: new-backend\n      default: true\n---\nupdated\n"
+			if err := os.WriteFile(path, []byte(raw), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			update := readWorkflowSourceUpdate(t, updates)
+			if update.Err != nil {
+				t.Fatal(update.Err)
+			}
+			found := false
+			for _, backend := range update.Workflow.Config.AgentBackendConfigs() {
+				if backend.ID == "new-backend" {
+					found = true
+				}
+			}
+			if !found {
+				t.Fatal("watcher used obsolete host backends")
+			}
+		})
+	}
+}
+
 func TestGitRefWorkflowWatcherReloadsLocalOverlayLifecycle(t *testing.T) {
 	t.Parallel()
 

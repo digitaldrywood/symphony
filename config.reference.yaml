@@ -781,6 +781,8 @@
 #   # agents.backends | type: list<object> | default: [] | required: No | validation: None
 #   backends:
 #     -
+#       # agents.backends[].disabled | type: boolean | default: false when configured | required: No | validation: None
+#       disabled: false
 #       # agents.backends[].id | type: string | default: none | required: Conditional | validation: is required
 #       id: null
 #       # agents.backends[].kind | type: string | default: none | required: Conditional | validation: is required
@@ -835,6 +837,8 @@
 #   # agents.routes | type: list<object> | default: [] | required: No | validation: None
 #   routes:
 #     -
+#       # agents.routes[].disabled | type: boolean | default: false when configured | required: No | validation: None
+#       disabled: false
 #       # agents.routes[].name | type: string | default: none | required: No | validation: None
 #       name: null
 #       # agents.routes[].role | type: string | default: none | required: No | validation: None
@@ -872,6 +876,82 @@
 #         and: []
 #         # agents.routes[].selector.or | type: list<mapping> | default: [] | required: No | validation: None
 #         or: []
+#   # agents.model_selection | type: object | default: see child fields | required: No | validation: None
+#   model_selection:
+#     # agents.model_selection.enabled | type: boolean | default: none | required: No | validation: None
+#     enabled: null
+#     # agents.model_selection.preset | type: string | default: none | required: No | validation: must be sol_first or empty
+#     preset: null
+#     # agents.model_selection.normal_model | type: string | default: none | required: Conditional | validation: is required when enabled
+#     normal_model: null
+#     # agents.model_selection.complex_model | type: string | default: none | required: Conditional | validation: is required when enabled
+#     complex_model: null
+#     # agents.model_selection.backend_kinds | type: list<string> | default: none | required: No | validation: None
+#     backend_kinds: null
+#     # agents.model_selection.default_level | type: string | default: none | required: Conditional | validation: is required when enabled; must reference a configured level
+#     default_level: null
+#     # agents.model_selection.levels | type: mapping<string, mapping> | default: {} | required: No | validation: None
+#     levels:
+#       # agents.model_selection.levels.<name> | type: object | default: backend-dependent | required: No | validation: None
+#       <name>:
+#         # agents.model_selection.levels.<name>.model | type: string | default: backend-dependent | required: No | validation: None
+#         model: null
+#         # agents.model_selection.levels.<name>.effort | type: string | default: none for Claude Code | required: No | validation: None
+#         effort: null
+#     # agents.model_selection.stages | type: mapping<string, mapping> | default: {} | required: No | validation: None
+#     stages:
+#       # agents.model_selection.stages.<name> | type: object | default: backend-dependent | required: No | validation: None
+#       <name>:
+#         # agents.model_selection.stages.<name>.model | type: string | default: backend-dependent | required: No | validation: None
+#         model: null
+#         # agents.model_selection.stages.<name>.effort | type: string | default: none for Claude Code | required: No | validation: None
+#         effort: null
+#         # agents.model_selection.stages.<name>.level | type: string | default: backend-dependent | required: No | validation: None
+#         level: null
+#         # agents.model_selection.stages.<name>.issue_complexity | type: boolean | default: backend-dependent | required: No | validation: None
+#         issue_complexity: null
+#     # agents.model_selection.rules | type: list<object> | default: none | required: No | validation: None
+#     rules:
+#       -
+#         # agents.model_selection.rules[].name | type: string | default: none | required: No | validation: None
+#         name: null
+#         # agents.model_selection.rules[].disabled | type: boolean | default: none | required: No | validation: None
+#         disabled: null
+#         # agents.model_selection.rules[].level | type: string | default: none | required: No | validation: None
+#         level: null
+#         # agents.model_selection.rules[].roles | type: list<string> | default: none | required: No | validation: None
+#         roles: null
+#         # agents.model_selection.rules[].selector | type: object | default: none | required: No | validation: None
+#         selector:
+#           # agents.model_selection.rules[].selector.assignee_in | type: list<string> | default: none | required: No | validation: None
+#           assignee_in: null
+#           # agents.model_selection.rules[].selector.author_in | type: list<string> | default: none | required: No | validation: None
+#           author_in: null
+#           # agents.model_selection.rules[].selector.priority_in | type: list<integer> | default: none | required: No | validation: None
+#           priority_in: null
+#           # agents.model_selection.rules[].selector.labels | type: object | default: none | required: No | validation: None
+#           labels:
+#             # agents.model_selection.rules[].selector.labels.include | type: list<string> | default: none | required: No | validation: None
+#             include: null
+#             # agents.model_selection.rules[].selector.labels.exclude | type: list<string> | default: none | required: No | validation: None
+#             exclude: null
+#           # agents.model_selection.rules[].selector.fields | type: list<object> | default: none | required: No | validation: None
+#           fields:
+#             -
+#               # agents.model_selection.rules[].selector.fields[].name | type: string | default: none | required: No | validation: None
+#               name: null
+#               # agents.model_selection.rules[].selector.fields[].value | type: string | default: none | required: No | validation: None
+#               value: null
+#           # agents.model_selection.rules[].selector.and | type: list<mapping> | default: none | required: No | validation: None
+#           and: null
+#           # agents.model_selection.rules[].selector.or | type: list<mapping> | default: none | required: No | validation: None
+#           or: null
+#         # agents.model_selection.rules[].efforts | type: list<string> | default: none | required: No | validation: None
+#         efforts: null
+#     # agents.model_selection.unavailable | type: string | default: none | required: No | validation: must be fallback or fail
+#     unavailable: null
+#     # agents.model_selection.fallback_order | type: list<string> | default: none | required: No | validation: None
+#     fallback_order: null
 # # codex | type: object | default: see child fields | required: No | validation: agents.backends.protocol must be app-server for codex
 # codex:
 #   # codex.command | type: string | default: "codex app-server" | required: No | validation: is required

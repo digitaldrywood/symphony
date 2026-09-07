@@ -511,6 +511,7 @@ type AgentResumeLookup struct {
 }
 
 type AgentResumeState struct {
+	RuntimeIdentity   agentidentity.Identity
 	DetentSessionID   int64
 	ProviderThreadID  string
 	ProviderSessionID string

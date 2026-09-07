@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/digitaldrywood/detent/internal/agentidentity"
 	"github.com/digitaldrywood/detent/internal/config"
 	"github.com/digitaldrywood/detent/internal/gate"
 	"github.com/digitaldrywood/detent/internal/procgroup"
@@ -63,8 +64,20 @@ func (r *Runner) Audit(ctx context.Context, req SecurityAuditRequest) (execution
 	if configuredModel := strings.TrimSpace(auditConfig.Model); configuredModel != "" {
 		selectedModel = configuredModel
 	}
+	baseModel := effectiveModel("", selectedModel, agentRuntime.defaultModelForRole(RoleSecurityAudit))
+	selectionIssue := req.Issue
+	selectionIssue.Description = ""
+	resolvedSelection := resolveAgentSelection(ctx, selectionIssue, auditWorkspace, baseModel, RoleSecurityAudit, workflow.Config, backendConfig, backend)
+	if resolvedSelection.Err != nil {
+		return execution, resolvedSelection.Err
+	}
+	selectedModel = resolvedSelection.Model
 	sessionModel := effectiveModel("", selectedModel, agentRuntime.defaultModelForRole(RoleSecurityAudit))
 	runtimeIdentity := configuredRuntimeIdentity(selection, backendConfig, RoleSecurityAudit, sessionModel, startedAt)
+	runtimeIdentity.Selection = resolvedSelection.Selection
+	if resolvedSelection.Effort != "" {
+		runtimeIdentity.ReasoningEffort = agentidentity.NewValue(resolvedSelection.Effort, agentidentity.ProvenanceConfigured)
+	}
 	runReq := RunRequest{Issue: req.Issue, StartedAt: startedAt, SelectorContext: req.SelectorContext}
 	sessionID, sessionStarted, err := r.startSession(ctx, runReq, startedAt, runtimeIdentity, store.AgentResumeState{}, "", "")
 	if err != nil {
@@ -74,6 +87,9 @@ func (r *Runner) Audit(ctx context.Context, req SecurityAuditRequest) (execution
 	runResult := RunResult{FinalState: FinalStateCompleted, RuntimeIdentity: runtimeIdentity}
 	var output strings.Builder
 	modelProvider, serviceTier, effort := agentTurnIdentityOptions(backendConfig)
+	if resolvedSelection.Effort != "" {
+		effort = resolvedSelection.Effort
+	}
 	removeAuditWorkspace = false
 	turnResult, cleanupScratch, turnErr := runAgentBackendTurnWithToolsUsingLimitPreservingScratch(ctx, backend, AgentTurnRequest{
 		Workspace:               auditWorkspace,

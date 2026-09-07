@@ -201,6 +201,13 @@ func structNodes(
 			node.children = []*schemaNode{{key: "<name>", path: profilePath, typ: reflect.TypeFor[policy.Requirements](), synthetic: true, conditional: true, children: children}}
 		case valueType == reflect.TypeFor[config.BackendOptions]():
 			node.children = backendOptionNodes(path)
+		case valueType.Kind() == reflect.Map && valueType.Key().Kind() == reflect.String && valueType.Elem().Kind() == reflect.Struct && expandable(valueType.Elem()) && stack[valueType.Elem()] == 0:
+			entryPath := path + ".<name>"
+			children := structNodes(valueType.Elem(), entryPath, nil, true, stack)
+			for _, child := range flatten(children) {
+				child.synthetic = true
+			}
+			node.children = []*schemaNode{{key: "<name>", path: entryPath, typ: valueType.Elem(), synthetic: true, conditional: true, children: children}}
 		case valueType.Kind() == reflect.Struct && expandable(valueType) && stack[valueType] == 0:
 			node.children = structNodes(valueType, path, nodeSteps, node.conditional, stack)
 		case valueType.Kind() == reflect.Slice:

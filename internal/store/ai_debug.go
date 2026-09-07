@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/digitaldrywood/detent/internal/agentidentity"
 	"github.com/digitaldrywood/detent/internal/store/sqlc"
 )
 
@@ -19,23 +20,24 @@ type AIDebugAttemptReader interface {
 }
 
 type AIDebugSession struct {
-	ID                    int64      `json:"id"`
-	WorkAttemptID         int64      `json:"work_attempt_id,omitempty"`
-	StartedAt             *time.Time `json:"started_at,omitempty"`
-	CompletedAt           *time.Time `json:"completed_at,omitempty"`
-	InputTokens           int64      `json:"input_tokens"`
-	CachedInputTokens     int64      `json:"cached_input_tokens"`
-	OutputTokens          int64      `json:"output_tokens"`
-	ReasoningOutputTokens int64      `json:"reasoning_output_tokens"`
-	TotalTokens           int64      `json:"total_tokens"`
-	Turns                 int64      `json:"turns"`
-	Model                 string     `json:"model,omitempty"`
-	RequestedModel        string     `json:"requested_model,omitempty"`
-	Effort                string     `json:"effort,omitempty"`
-	RuntimeSeconds        int64      `json:"runtime_seconds"`
-	FinalState            string     `json:"final_state,omitempty"`
-	ResumedFromSessionID  int64      `json:"resumed_from_session_id,omitempty"`
-	ProviderSessionID     string     `json:"provider_session_id,omitempty"`
+	RuntimeIdentity       agentidentity.Identity `json:"runtime_identity,omitzero"`
+	ID                    int64                  `json:"id"`
+	WorkAttemptID         int64                  `json:"work_attempt_id,omitempty"`
+	StartedAt             *time.Time             `json:"started_at,omitempty"`
+	CompletedAt           *time.Time             `json:"completed_at,omitempty"`
+	InputTokens           int64                  `json:"input_tokens"`
+	CachedInputTokens     int64                  `json:"cached_input_tokens"`
+	OutputTokens          int64                  `json:"output_tokens"`
+	ReasoningOutputTokens int64                  `json:"reasoning_output_tokens"`
+	TotalTokens           int64                  `json:"total_tokens"`
+	Turns                 int64                  `json:"turns"`
+	Model                 string                 `json:"model,omitempty"`
+	RequestedModel        string                 `json:"requested_model,omitempty"`
+	Effort                string                 `json:"effort,omitempty"`
+	RuntimeSeconds        int64                  `json:"runtime_seconds"`
+	FinalState            string                 `json:"final_state,omitempty"`
+	ResumedFromSessionID  int64                  `json:"resumed_from_session_id,omitempty"`
+	ProviderSessionID     string                 `json:"provider_session_id,omitempty"`
 }
 
 func (s *sqliteStore) ListIssueAIDebugWorkAttempts(ctx context.Context, identity IssueIdentity) ([]WorkAttempt, error) {
@@ -87,7 +89,12 @@ func (s *sqliteStore) ListIssueAIDebugSessions(ctx context.Context, identity Iss
 		}
 		startedAt := aiDebugTimePointer(startedAtValue)
 		completedAt := aiDebugTimePointer(completedAtValue)
+		runtimeIdentity, err := unmarshalRuntimeIdentity(row.RuntimeIdentityJson.String)
+		if err != nil {
+			return nil, err
+		}
 		sessions = append(sessions, AIDebugSession{
+			RuntimeIdentity:       runtimeIdentity,
 			ID:                    row.ID,
 			WorkAttemptID:         row.WorkAttemptID.Int64,
 			StartedAt:             startedAt,

@@ -136,18 +136,20 @@ func (u Update) NormalizedMaxDeferralHours() int {
 }
 
 type Settings struct {
-	MaxConcurrentAgents int                             `yaml:"max_concurrent_agents"`
-	RateWindowPacing    workflowconfig.RateWindowPacing `yaml:"rate_window_pacing"`
-	Scheduling          string                          `yaml:"scheduling"`
-	AgentPools          []AgentPool                     `yaml:"agent_pools,omitempty"`
-	ActiveHours         *activehours.Config             `yaml:"active_hours,omitempty"`
-	Identity            Identity                        `yaml:"identity,omitempty"`
-	Knowledge           Knowledge                       `yaml:"knowledge,omitempty"`
-	FairShare           map[string]any                  `yaml:"fair_share,omitempty"`
-	Startup             map[string]any                  `yaml:"startup,omitempty"`
-	Memory              Memory                          `yaml:"memory,omitempty"`
-	IO                  IO                              `yaml:"io,omitempty"`
-	CPU                 CPU                             `yaml:"cpu,omitempty"`
+	Agents              workflowconfig.Agents              `yaml:"agents,omitempty"`
+	Budget              workflowconfig.AgentBudgetDefaults `yaml:"budget,omitempty"`
+	MaxConcurrentAgents int                                `yaml:"max_concurrent_agents"`
+	RateWindowPacing    workflowconfig.RateWindowPacing    `yaml:"rate_window_pacing"`
+	Scheduling          string                             `yaml:"scheduling"`
+	AgentPools          []AgentPool                        `yaml:"agent_pools,omitempty"`
+	ActiveHours         *activehours.Config                `yaml:"active_hours,omitempty"`
+	Identity            Identity                           `yaml:"identity,omitempty"`
+	Knowledge           Knowledge                          `yaml:"knowledge,omitempty"`
+	FairShare           map[string]any                     `yaml:"fair_share,omitempty"`
+	Startup             map[string]any                     `yaml:"startup,omitempty"`
+	Memory              Memory                             `yaml:"memory,omitempty"`
+	IO                  IO                                 `yaml:"io,omitempty"`
+	CPU                 CPU                                `yaml:"cpu,omitempty"`
 }
 
 type Memory struct {
@@ -213,34 +215,36 @@ type AgentPool struct {
 }
 
 type Project struct {
-	ID                       string                          `yaml:"id"`
-	Pool                     string                          `yaml:"pool,omitempty"`
-	Workflow                 string                          `yaml:"workflow"`
-	WorkflowRef              string                          `yaml:"workflow_ref,omitempty"`
-	Workdir                  string                          `yaml:"workdir"`
-	Color                    string                          `yaml:"color,omitempty"`
-	Knowledge                Knowledge                       `yaml:"knowledge,omitempty"`
-	Weight                   int                             `yaml:"weight"`
-	Priority                 int                             `yaml:"priority"`
-	Paused                   bool                            `yaml:"paused,omitempty"`
-	PausedReason             string                          `yaml:"paused_reason,omitempty"`
-	PausedAt                 string                          `yaml:"paused_at,omitempty"`
-	PausedUntilIssue         string                          `yaml:"paused_until_issue,omitempty"`
-	PausedUntil              string                          `yaml:"paused_until,omitempty"`
-	ActiveHours              *activehours.Config             `yaml:"active_hours,omitempty"`
-	ActiveHoursOverrideUntil string                          `yaml:"active_hours_override_until,omitempty"`
-	CredentialRef            string                          `yaml:"credential_ref,omitempty"`
-	Authorization            selector.Selector               `yaml:"authorization,omitempty"`
-	Intake                   intakeconfig.Config             `yaml:"intake,omitempty"`
-	Memory                   ProjectMemory                   `yaml:"memory,omitempty"`
-	Identity                 Identity                        `yaml:"-"`
-	GlobalKnowledge          Knowledge                       `yaml:"-"`
-	GlobalActiveHours        *activehours.Config             `yaml:"-"`
-	GlobalRateWindowPacing   workflowconfig.RateWindowPacing `yaml:"-"`
-	GlobalMemory             Memory                          `yaml:"-"`
-	GlobalIO                 IO                              `yaml:"-"`
-	GlobalCPU                CPU                             `yaml:"-"`
-	IntakeConfigured         bool                            `yaml:"-"`
+	GlobalAgents             workflowconfig.Agents              `yaml:"-"`
+	GlobalBudget             workflowconfig.AgentBudgetDefaults `yaml:"-"`
+	ID                       string                             `yaml:"id"`
+	Pool                     string                             `yaml:"pool,omitempty"`
+	Workflow                 string                             `yaml:"workflow"`
+	WorkflowRef              string                             `yaml:"workflow_ref,omitempty"`
+	Workdir                  string                             `yaml:"workdir"`
+	Color                    string                             `yaml:"color,omitempty"`
+	Knowledge                Knowledge                          `yaml:"knowledge,omitempty"`
+	Weight                   int                                `yaml:"weight"`
+	Priority                 int                                `yaml:"priority"`
+	Paused                   bool                               `yaml:"paused,omitempty"`
+	PausedReason             string                             `yaml:"paused_reason,omitempty"`
+	PausedAt                 string                             `yaml:"paused_at,omitempty"`
+	PausedUntilIssue         string                             `yaml:"paused_until_issue,omitempty"`
+	PausedUntil              string                             `yaml:"paused_until,omitempty"`
+	ActiveHours              *activehours.Config                `yaml:"active_hours,omitempty"`
+	ActiveHoursOverrideUntil string                             `yaml:"active_hours_override_until,omitempty"`
+	CredentialRef            string                             `yaml:"credential_ref,omitempty"`
+	Authorization            selector.Selector                  `yaml:"authorization,omitempty"`
+	Intake                   intakeconfig.Config                `yaml:"intake,omitempty"`
+	Memory                   ProjectMemory                      `yaml:"memory,omitempty"`
+	Identity                 Identity                           `yaml:"-"`
+	GlobalKnowledge          Knowledge                          `yaml:"-"`
+	GlobalActiveHours        *activehours.Config                `yaml:"-"`
+	GlobalRateWindowPacing   workflowconfig.RateWindowPacing    `yaml:"-"`
+	GlobalMemory             Memory                             `yaml:"-"`
+	GlobalIO                 IO                                 `yaml:"-"`
+	GlobalCPU                CPU                                `yaml:"-"`
+	IntakeConfigured         bool                               `yaml:"-"`
 }
 
 func (p Project) EffectiveMemory() Memory {
@@ -757,6 +761,9 @@ func (c Config) Validate(opts ...Option) error {
 		problems = append(problems, "global.max_concurrent_agents: must be a positive integer")
 	}
 	problems = append(problems, c.Global.RateWindowPacing.Validate("global.rate_window_pacing")...)
+	if err := c.Global.Agents.ValidateDefaults(); err != nil {
+		problems = append(problems, err.Error())
+	}
 	if !validSchedulingMode(c.Global.Scheduling) {
 		problems = append(problems, "global.scheduling: must be one of "+strings.Join(schedulingModes, ", "))
 	}
@@ -2016,6 +2023,10 @@ func build(attrs map[string]any, path string, opts options) (Config, error) {
 		return Config{}, buildValidationError(path, err)
 	}
 
+	for index := range builtProjects {
+		builtProjects[index].GlobalAgents = settings.Agents
+		builtProjects[index].GlobalBudget = settings.Budget
+	}
 	return Config{
 		Path:                  path,
 		APIVersion:            apiVersion,
@@ -2143,6 +2154,19 @@ func buildUpdate(value any) (Update, error) {
 
 func buildSettings(attrs map[string]any, opts options) (Settings, error) {
 	settings := defaultSettings()
+	if attrs["agents"] != nil {
+		if err := decodeYAMLValue(attrs["agents"], &settings.Agents); err != nil {
+			return Settings{}, fmt.Errorf("global.agents: %w", err)
+		}
+		if err := settings.Agents.ValidateDefaults(); err != nil {
+			return Settings{}, err
+		}
+	}
+	if attrs["budget"] != nil {
+		if err := decodeYAMLValue(attrs["budget"], &settings.Budget); err != nil {
+			return Settings{}, fmt.Errorf("global.budget: %w", err)
+		}
+	}
 	maxConcurrentAgents, err := intValue(attrs["max_concurrent_agents"], "global.max_concurrent_agents")
 	if err != nil {
 		return Settings{}, err

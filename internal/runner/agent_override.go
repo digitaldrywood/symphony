@@ -40,6 +40,7 @@ func resolveAgentOverride(
 		})
 		override = agentoverride.Override{}
 	}
+	override.Model, _ = override.ModelForRole(role)
 	efforts := agentEffortCandidates(override, role, projectEffort)
 	if override.Model == "" && len(efforts) == 0 {
 		return result

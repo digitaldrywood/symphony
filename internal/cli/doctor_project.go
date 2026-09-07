@@ -42,6 +42,8 @@ func checkDoctorProjects(ctx context.Context, cfg globalconfig.Config, deps doct
 	}
 	for _, project := range cfg.Projects {
 		project.GlobalActiveHours = cfg.Global.ActiveHours
+		project.GlobalAgents = cfg.Global.Agents
+		project.GlobalBudget = cfg.Global.Budget
 		project.Identity = cfg.Global.Identity
 		checks = append(checks, checkDoctorProjectWithStore(ctx, project, doctorRuntimeStorePath(cfg.Path), deps, githubToken, allowWriteProbes)...)
 		if cfg.Client.Configured() {
@@ -212,6 +214,8 @@ func doctorProjectCheckJobs(cfg globalconfig.Config, deps doctorDeps, githubToke
 	jobs := make([]doctorCheckJob, 0, len(cfg.Projects))
 	for _, project := range cfg.Projects {
 		project.GlobalActiveHours = cfg.Global.ActiveHours
+		project.GlobalAgents = cfg.Global.Agents
+		project.GlobalBudget = cfg.Global.Budget
 		project.Identity = cfg.Global.Identity
 		id := doctorProjectID(project)
 		progress := newDoctorCheckProgress()
@@ -417,6 +421,9 @@ func checkDoctorProjectWithProgress(
 	checks = append(checks, checkDoctorFollowupGuidance(id, workflow.Config.Agent.Followups, workflow.Prompt))
 	setDoctorCurrentCheck("Project " + id + " pinned route models")
 	checks = append(checks, checkDoctorRouteModels(ctx, id, project, workflow.Config, deps))
+	if workflow.Config.Agents.ModelSelection.Configured() || len(workflow.Config.Agents.Sources) > 0 {
+		checks = append(checks, checkDoctorModelSelection(id, workflow.Config))
+	}
 	if doctorTrackerUsesGitHubReads(workflow.Config.Tracker.Kind) {
 		setDoctorCurrentCheck("Project " + id + " issue agent models")
 		checks = append(checks, checkDoctorIssueAgentModels(ctx, id, project, workflow.Config, deps))
@@ -1802,7 +1809,11 @@ func loadDoctorProjectWorkflow(ctx context.Context, project globalconfig.Project
 
 func loadDoctorProjectWorkflowUncached(ctx context.Context, project globalconfig.Project, deps doctorDeps) (workflowconfig.Workflow, error) {
 	if strings.TrimSpace(project.WorkflowRef) == "" {
-		return deps.loadWorkflow(project.Workflow)
+		workflow, err := deps.loadWorkflow(project.Workflow)
+		if err == nil {
+			workflow.Config = workflow.Config.WithAgentDefaults(project.GlobalAgents, project.GlobalBudget)
+		}
+		return workflow, err
 	}
 	return projectpkg.LoadWorkflowContext(ctx, project)
 }

@@ -269,6 +269,21 @@ func NewRunner(deps Dependencies) (*Runner, error) {
 }
 
 func (r *Runner) UpdateWorkflow(workflow config.Workflow) {
+	if err := r.UpdateWorkflowChecked(workflow); err != nil {
+		r.logger.Warn("reload agent configuration rejected; retaining last known good workflow", "error", err)
+	}
+}
+
+func (r *Runner) UpdateWorkflowChecked(workflow config.Workflow) error {
+	apply, err := r.PrepareWorkflowUpdate(workflow)
+	if err != nil {
+		return err
+	}
+	apply()
+	return nil
+}
+
+func (r *Runner) PrepareWorkflowUpdate(workflow config.Workflow) (func(), error) {
 	r.mu.RLock()
 	currentBackends := cloneAgentBackends(r.agentRuntime.backends)
 	factory := r.agentBackendFactory
@@ -278,6 +293,9 @@ func (r *Runner) UpdateWorkflow(workflow config.Workflow) {
 	r.mu.RUnlock()
 
 	runtime, err := newAgentRuntime(workflow, currentBackends, factory)
+	if err != nil {
+		return nil, err
+	}
 	budgetChecker := currentBudgetChecker
 	dispatchEstimator := currentDispatchEstimator
 	var budgetErr error
@@ -285,13 +303,14 @@ func (r *Runner) UpdateWorkflow(workflow config.Workflow) {
 		budgetChecker, dispatchEstimator, budgetErr = budgetGuardBuilder(workflow.Config.Budget)
 	}
 
-	r.mu.Lock()
-	defer r.mu.Unlock()
-
-	r.workflow = workflow
 	if budgetErr != nil {
-		r.logger.Warn("reload budget dispatch guards failed", "error", budgetErr)
-	} else {
+		return nil, fmt.Errorf("reload budget dispatch guards: %w", budgetErr)
+	}
+	return func() {
+		r.mu.Lock()
+		defer r.mu.Unlock()
+
+		r.workflow = workflow
 		r.budgetChecker = budgetChecker
 		r.dispatchEstimator = dispatchEstimator
 		r.enforcedBudget, r.enforcedBudgetKnown = enforcedBudgetConfig(workflow.Config.Budget, budgetChecker)
@@ -307,12 +326,8 @@ func (r *Runner) UpdateWorkflow(workflow config.Workflow) {
 				r.logger.Warn("budget dispatch guards reloaded without enforced config reporting")
 			}
 		}
-	}
-	if err != nil {
-		r.logger.Warn("reload agent runtime failed", "error", err)
-		return
-	}
-	r.agentRuntime = runtime
+		r.agentRuntime = runtime
+	}, nil
 }
 
 func (r *Runner) EnforcedBudget() (config.Budget, bool) {
@@ -407,6 +422,9 @@ func newAgentRuntime(
 	staticBackends map[string]AgentBackend,
 	factory AgentBackendFactory,
 ) (agentRuntime, error) {
+	if problems := workflow.Config.EffectiveModelSelection().Validate(); len(problems) > 0 {
+		return agentRuntime{}, errors.New(strings.Join(problems, "; "))
+	}
 	backendConfigs := workflow.Config.AgentBackendConfigs()
 	backends := make(map[string]AgentBackend, len(backendConfigs))
 	configsByID := make(map[string]config.AgentBackend, len(backendConfigs))
@@ -1532,7 +1550,7 @@ func (r *Runner) run(ctx context.Context, req RunRequest) (RunResult, error) {
 	}
 	prompt += recoveryPrompt
 	routeRole := agentRuntime.effectiveRunRole(role)
-	selection, backend, backendConfig, err := agentRuntime.selectBackendForRole(req.Issue, selectorContext(req.SelectorContext, workflow), routeRole)
+	selection, backend, backendConfig, err := agentRuntime.selectRequestBackend(req, selectorContext(req.SelectorContext, workflow), routeRole)
 	if err != nil {
 		return RunResult{}, err
 	}
@@ -1543,11 +1561,8 @@ func (r *Runner) run(ctx context.Context, req RunRequest) (RunResult, error) {
 	}
 	runStartedAt := r.now()
 	modelProvider, serviceTier, configuredEffort := agentTurnIdentityOptions(backendConfig)
-	projectEffort, projectEffortField := workflow.Config.Agent.Effort.Resolve(role)
-	resolvedOverride := resolveAgentOverride(ctx, req.Issue, info.Path, selection.Model, role, agentEffortCandidate{
-		Field:  projectEffortField,
-		Effort: projectEffort,
-	}, backend)
+	baseModel := effectiveModel("", selection.Model, agentRuntime.defaultModelForRole(role))
+	resolvedOverride := resolveRequestAgentSelection(ctx, req, info.Path, baseModel, role, workflow.Config, backendConfig, backend)
 	selectedModel := resolvedOverride.Model
 	effort := configuredEffort
 	if resolvedOverride.Effort != "" {
@@ -1558,14 +1573,26 @@ func (r *Runner) run(ctx context.Context, req RunRequest) (RunResult, error) {
 			r.logger.Warn("report detent-agent override rejection failed", "issue_id", req.Issue.ID, "identifier", req.Issue.Identifier, "error", err)
 		}
 	}
+	if resolvedOverride.Err != nil {
+		return RunResult{}, resolvedOverride.Err
+	}
 	sessionModel := effectiveModel("", selectedModel, agentRuntime.defaultModelForRole(role))
 	executionIdentity := tracker.NativeExecutionIdentity{Role: role, Backend: selection.BackendID, Model: sessionModel}
 	if executionIdentity.Model == "" {
 		executionIdentity.Model = "provider_default"
 	}
 	runtimeIdentity := configuredRuntimeIdentity(selection, backendConfig, role, sessionModel, startedAt)
+	runtimeIdentity.Selection = resolvedOverride.Selection
+	runtimeIdentity.Selection.BackendSource = workflow.Config.Agents.Sources["backends."+selection.BackendID]
+	runtimeIdentity.Selection.RouteSource = workflow.Config.Agents.Sources["routes."+selection.RouteName]
 	if effort != "" {
 		runtimeIdentity.ReasoningEffort = agentidentity.NewValue(effort, agentidentity.ProvenanceConfigured)
+	}
+	if hasResumeIdentity(req) {
+		runtimeIdentity = req.ResumeState.RuntimeIdentity.ObserveAt(startedAt)
+		effort = runtimeIdentity.ReasoningEffort.Value
+		modelProvider = runtimeIdentity.Provider.Value
+		serviceTier = runtimeIdentity.ServiceTier.Value
 	}
 	var budgetProjection *dispatchBudgetProjection
 	if workflow.Config.Budget.EffectiveBillingMode() != config.BillingModeSubscription {
@@ -2809,6 +2836,12 @@ func (r *Runner) Validate(ctx context.Context, req ValidatorRequest) (gate.Valid
 	if override := strings.TrimSpace(validator.Model); override != "" {
 		selectedModel = override
 	}
+	baseModel := effectiveModel("", selectedModel, agentRuntime.defaultModelForRole(RoleValidator))
+	resolvedSelection := resolveAgentSelection(ctx, req.Issue, info.Path, baseModel, RoleValidator, workflow.Config, backendConfig, backend)
+	if resolvedSelection.Err != nil {
+		return gate.ValidatorResult{}, resolvedSelection.Err
+	}
+	selectedModel = resolvedSelection.Model
 	sessionModel := effectiveModel("", selectedModel, agentRuntime.defaultModelForRole(RoleValidator))
 
 	startedAt := req.StartedAt
@@ -2817,6 +2850,12 @@ func (r *Runner) Validate(ctx context.Context, req ValidatorRequest) (gate.Valid
 	}
 	runStartedAt := r.now()
 	runtimeIdentity := configuredRuntimeIdentity(selection, backendConfig, RoleValidator, sessionModel, startedAt)
+	runtimeIdentity.Selection = resolvedSelection.Selection
+	runtimeIdentity.Selection.BackendSource = workflow.Config.Agents.Sources["backends."+selection.BackendID]
+	runtimeIdentity.Selection.RouteSource = workflow.Config.Agents.Sources["routes."+selection.RouteName]
+	if resolvedSelection.Effort != "" {
+		runtimeIdentity.ReasoningEffort = agentidentity.NewValue(resolvedSelection.Effort, agentidentity.ProvenanceConfigured)
+	}
 	runReq := RunRequest{
 		Issue:            req.Issue,
 		StartedAt:        req.StartedAt,
@@ -2873,6 +2912,9 @@ func (r *Runner) Validate(ctx context.Context, req ValidatorRequest) (gate.Valid
 	usage := newSessionTokenUsage(false)
 	workerProcessObserved := false
 	modelProvider, serviceTier, effort := agentTurnIdentityOptions(backendConfig)
+	if resolvedSelection.Effort != "" {
+		effort = resolvedSelection.Effort
+	}
 	turnResult, cleanupScratch, turnErr := runAgentBackendTurnWithToolsUsingLimitPreservingScratch(sessionCtx, backend, AgentTurnRequest{
 		Workspace:          info.Path,
 		Prompt:             prompt,
@@ -5257,6 +5299,15 @@ func runtimeIdentityProviderSessionID(backendKind string, threadID string, turnI
 func runtimeIdentityLogAttrs(identity agentidentity.Identity) []any {
 	identity = identity.Normalize()
 	attrs := []any{
+		"model_selection_policy", identity.Selection.Policy,
+		"model_selection_policy_source", identity.Selection.PolicySource,
+		"model_selection_reason", identity.Selection.Reason,
+		"model_selection_requested", identity.Selection.RequestedModel,
+		"model_selection_fallback_reason", identity.Selection.FallbackReason,
+		"model_selection_model_source", identity.Selection.ModelSource,
+		"model_selection_effort_source", identity.Selection.EffortSource,
+		"backend_source", identity.Selection.BackendSource,
+		"route_source", identity.Selection.RouteSource,
 		"backend_id", identity.BackendID,
 		"backend_kind", identity.BackendKind,
 		"route", identity.Route,

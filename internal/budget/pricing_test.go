@@ -3,6 +3,7 @@ package budget
 import (
 	"bytes"
 	"log/slog"
+	"math"
 	"os"
 	"path/filepath"
 	"strings"
@@ -20,6 +21,9 @@ func TestDefaultPricingTable(t *testing.T) {
 		wantCached float64
 		wantOutput float64
 	}{
+		{model: "gpt-5.6-sol", wantInput: 0.000004, wantCached: 0.0000004, wantOutput: 0.000020},
+		{model: "gpt-5.6", wantInput: 0.000004, wantCached: 0.0000004, wantOutput: 0.000020},
+		{model: "gpt-6-astra", wantInput: 0.000010, wantCached: 0.000001, wantOutput: 0.000050},
 		{
 			model:      " GPT-5.5 ",
 			wantInput:  0.000005,
@@ -111,6 +115,26 @@ func TestDefaultPricingTable(t *testing.T) {
 			assertInDelta(t, row.USDPerInputToken, tt.wantInput)
 			assertInDelta(t, row.USDPerCachedInputToken, tt.wantCached)
 			assertInDelta(t, row.USDPerOutputToken, tt.wantOutput)
+		})
+	}
+}
+
+func TestSolAstraExternalPricingOverride(t *testing.T) {
+	for _, model := range []string{"gpt-5.6-sol", "gpt-5.6", "gpt-6-astra"} {
+		t.Run(model, func(t *testing.T) {
+			path := filepath.Join(t.TempDir(), "prices.yaml")
+			raw := "models:\n  " + model + ":\n    input_usd_per_1m_tokens: 2\n    cached_input_usd_per_1m_tokens: 0.2\n    output_usd_per_1m_tokens: 6\n"
+			if err := os.WriteFile(path, []byte(raw), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			pricing, err := PricingForConfig(Config{PricingPath: path})
+			if err != nil {
+				t.Fatal(err)
+			}
+			cost, ok := UsageCostUSD(pricing, model, 1_000_000, 500_000, 1_000_000)
+			if !ok || math.Abs(cost-7.1) > 1e-9 {
+				t.Fatalf("override cost = %v, %v; want 7.1", cost, ok)
+			}
 		})
 	}
 }

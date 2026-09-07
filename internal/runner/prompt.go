@@ -268,14 +268,14 @@ func BuildMergeFallbackPrompt(workflow config.Workflow, issue connector.Issue, o
 	b.WriteString("- Resolve only merge conflicts or blockers required by the rebase.\n")
 	b.WriteString("- Do not perform general code review, investigate unrelated correctness findings, or make unrelated refactors.\n")
 	b.WriteString("- If you discover work beyond conflict resolution, record it in your final response and stop.\n\n")
-	b.WriteString("### Phase 2: re-verify the resolved head\n\n")
-	b.WriteString("- Start this phase only after the rebase is conflict-free and the workspace is source-clean.\n")
-	b.WriteString("- Run the focused merge gate when current validation remains valid; run the full configured gate if you edit code, resolve conflicts, or validation state is stale.\n")
-	b.WriteString("- Push with lease protection after the gate passes; never use an unguarded force-push.\n")
-	b.WriteString("- Do not merge the pull request or change the issue state. Detent re-checks the branch and performs the handoff.\n\n")
+	b.WriteString("### Phase 2: hand off the resolved head\n\n")
+	b.WriteString("- Finish the rebase and commit the conflict resolution; leave the workspace source-clean.\n")
+	b.WriteString("- Return immediately. Detent independently verifies branch ownership, cleanliness, and target ancestry, runs the full configured local gate with a separate bounded validation budget, and pushes with lease protection.\n")
+	b.WriteString("- Do not run or wait for local validation or CI in this agent session. Detent owns validation, publishing, and current-head CI waiting after your return.\n")
+	b.WriteString("- Do not merge the pull request or change the issue state.\n\n")
 	b.WriteString("End your final response with exactly one of these lines:\n")
-	b.WriteString("- `DETENT_MERGE_FALLBACK: resolved` only after both phases succeed.\n")
-	b.WriteString("- `DETENT_MERGE_FALLBACK: rework` when conflict resolution, verification, or an out-of-scope finding requires normal Rework.\n")
+	b.WriteString("- `DETENT_MERGE_FALLBACK: resolved` after the rebase and committed resolution are complete; this requests verification and is not proof of validation.\n")
+	b.WriteString("- `DETENT_MERGE_FALLBACK: rework` when conflict resolution or an out-of-scope finding requires normal Rework.\n")
 
 	prompt := prependWorkspaceIsolationBlock(b.String(), workflow.Config, opts.WorkspacePath, opts.Branch)
 	var err error
@@ -296,7 +296,7 @@ func BuildMergeFallbackPrompt(workflow config.Workflow, issue connector.Issue, o
 	if promptDeliverableKind(workflow.Config.Deliverable) == config.DeliverablePullRequest {
 		prompt = appendClosingReferenceInstruction(prompt, issue)
 	}
-	prompt = strings.TrimRight(prompt, " \t\r\n") + "\n\n## Merge-fallback enforcement\n\nBroader workflow instructions above do not authorize general review or unrelated fixes in this session. Detent accepts resolution only when your final response ends with `DETENT_MERGE_FALLBACK: resolved` and its deterministic recheck finds a clean head. Otherwise end with `DETENT_MERGE_FALLBACK: rework`."
+	prompt = strings.TrimRight(prompt, " \t\r\n") + "\n\n## Merge-fallback enforcement\n\nBroader workflow instructions above do not authorize general review or unrelated fixes in this session. Return immediately after committing the resolution; do not run the local gate, push, watch CI, or wait for checks, even if broader workflow instructions request them. Detent performs bounded local validation and current-head CI waiting after you return. Detent accepts resolution only when your final response ends with `DETENT_MERGE_FALLBACK: resolved` and its deterministic recheck finds a clean head. Otherwise end with `DETENT_MERGE_FALLBACK: rework`."
 	return prompt, nil
 }
 

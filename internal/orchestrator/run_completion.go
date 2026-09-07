@@ -1539,6 +1539,12 @@ func (o *Orchestrator) completeProgrammaticMergeWorkerResult(
 		o.finishMergeRevocation(ctx, state, event, running, revocation)
 		return true
 	}
+	if event.Result.Output == runpkg.RunOutputMergeFallbackResolved &&
+		event.Result.MergePrecheck != nil && event.Result.MergePrecheck.HeadSHA != "" &&
+		(issue.PullRequest == nil || issue.PullRequest.HeadSHA != event.Result.MergePrecheck.HeadSHA) {
+		o.reworkMergeWorkerResult(ctx, state, event, running, issue, mergeFallbackRequiresReworkReason, nil, "Pull request head changed after deterministic merge-fallback validation.")
+		return true
+	}
 	missingChecks := mergeWorkerMissingRequiredChecks(issue)
 	streaks := o.evaluateMergeRequiredCheckStreaks(ctx, issue, missingChecks, event.CompletedAt)
 	if persistent := persistentMissingRequiredCheckStreaks(streaks); len(persistent) > 0 {

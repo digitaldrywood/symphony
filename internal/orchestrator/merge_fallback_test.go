@@ -119,3 +119,70 @@ func TestMergeFallbackRoutesBoundedOutcomesToRework(t *testing.T) {
 		})
 	}
 }
+
+func TestMergeFallbackResolvedHeadHandoff(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		head       string
+		ci         string
+		wantRework bool
+	}{
+		{name: "resolved pushed head waits past resolution deadline", head: "validated-head", ci: "pending"},
+		{name: "validation failure", head: "validated-head", ci: "failure", wantRework: true},
+		{name: "replaced head with green CI", head: "replacement-head", ci: "success", wantRework: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			now := time.Date(2026, 9, 7, 22, 2, 24, 0, time.UTC)
+			cfg := normalizeConfig(Config{
+				MaxConcurrentAgents: 1, MergeFastPathEnabled: true,
+				ActiveStates: []string{"Rework", "Merging"}, ObservedStates: []string{"Merging"}, TerminalStates: []string{"Done"},
+			})
+			issue := connector.Issue{
+				ID: "issue-2273", Identifier: "digitaldrywood/detent#2273", State: "Merging", PRRepository: "digitaldrywood/detent",
+				PullRequest: &connector.PullRequest{
+					Number: 2274, State: "OPEN", MergeableState: "clean", HeadSHA: tt.head, CIStatus: tt.ci,
+				},
+			}
+			tracker := &autoPromoteTickMergeConnector{autoPromoteTickConnector: &autoPromoteTickConnector{stateIssues: []connector.Issue{issue}}}
+			orch := &Orchestrator{cfg: cfg, connector: tracker, logger: slog.New(slog.NewTextHandler(io.Discard, nil))}
+			state := newState(cfg)
+			state.Running[issue.ID] = Running{Issue: issue, Attempt: 1, Mode: runpkg.RunModeMerge, StartedAt: now.Add(-21 * time.Minute)}
+			state.Claimed[issue.ID] = Claimed{Issue: issue, ClaimedAt: now.Add(-21 * time.Minute)}
+			orch.handleRunResult(t.Context(), &state, runpkg.Completion{
+				IssueID: issue.ID, CompletedAt: now, Request: runpkg.RunRequest{Mode: runpkg.RunModeMerge},
+				Result: runpkg.RunResult{
+					FinalState: runpkg.FinalStateCompleted, Output: runpkg.RunOutputMergeFallbackResolved,
+					MergePrecheck: &runpkg.MergePrecheck{Status: "clean", HeadSHA: "validated-head"},
+				},
+			})
+			if len(tracker.merges) != 0 || len(state.Running) != 0 || len(state.Claimed) != 0 {
+				t.Fatalf("handoff retained execution or merged: merges=%v running=%v claimed=%v", tracker.merges, state.Running, state.Claimed)
+			}
+			if tt.wantRework {
+				if len(tracker.updates) != 1 || tracker.updates[0].state != "Rework" {
+					t.Fatalf("updates = %#v, want Rework", tracker.updates)
+				}
+				return
+			}
+			if len(tracker.updates) != 0 {
+				t.Fatalf("updates = %#v, want passive CI wait", tracker.updates)
+			}
+			retry := state.Retry[issue.ID]
+			if retry.Wait.Kind != retryWaitCurrentHeadCI || retry.Attempt != 1 {
+				t.Fatalf("retry = %#v, want current-head CI wait without another implementation", retry)
+			}
+			reservation := state.mergeReservations[issue.PRRepository]
+			if reservation.ExpiresAt.IsZero() || !reservation.ExpiresAt.After(now) {
+				t.Fatalf("reservation = %#v, want bounded merge ownership", reservation)
+			}
+			_, handled, _ := orch.pollMergeWorkerCurrentHeadCI(t.Context(), &state, issue, retry, now.Add(time.Minute))
+			if !handled || len(state.Running) != 0 || len(tracker.updates) != 0 {
+				t.Fatal("pending CI redispatched resolution or transitioned the issue after the fallback deadline")
+			}
+		})
+	}
+}

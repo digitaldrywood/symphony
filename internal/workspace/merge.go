@@ -7,9 +7,14 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+
+	"github.com/digitaldrywood/detent/internal/procgroup"
+	commandshell "github.com/digitaldrywood/detent/internal/shell"
 )
 
 const defaultGitRemote = "origin"
+
+var ErrMergeResolutionInvalid = errors.New("merge resolution is invalid")
 
 func (l *LocalGit) PrepareMerge(
 	ctx context.Context,
@@ -20,6 +25,9 @@ func (l *LocalGit) PrepareMerge(
 	normalized, err := l.normalizeInfo(info, issue)
 	if err != nil {
 		return MergePrepareResult{}, err
+	}
+	if opts.VerifyResolution {
+		return l.prepareResolvedMerge(ctx, normalized, issue, opts)
 	}
 	release, err := l.acquireSourceOperation(ctx)
 	if err != nil {
@@ -203,4 +211,121 @@ func commandErrorOutput(err error) string {
 		return strings.TrimSpace(commandErr.Output)
 	}
 	return strings.TrimSpace(err.Error())
+}
+
+func (l *LocalGit) prepareResolvedMerge(ctx context.Context, info Info, issue Issue, opts MergePrepareOptions) (MergePrepareResult, error) {
+	remote := strings.TrimSpace(opts.Remote)
+	if remote == "" {
+		remote = defaultGitRemote
+	}
+	target := strings.TrimSpace(opts.TargetBranch)
+	if target == "" {
+		var err error
+		target, err = remoteDefaultBranch(ctx, info.Path, remote)
+		if err != nil {
+			return MergePrepareResult{}, err
+		}
+	}
+	head, base, remoteHead, err := l.resolvedMergeHeads(ctx, info, issue, remote, target)
+	if err != nil {
+		return MergePrepareResult{}, err
+	}
+	if remoteHead != strings.TrimSpace(opts.ExpectedRemoteHead) && remoteHead != head {
+		return MergePrepareResult{}, fmt.Errorf("%w: remote branch changed before merge-fallback validation", ErrMergeResolutionInvalid)
+	}
+	if err := l.validateMergeResolution(ctx, info, issue, opts.ValidationCommand); err != nil {
+		return MergePrepareResult{}, err
+	}
+	currentHead, currentBase, currentRemote, err := l.resolvedMergeHeads(ctx, info, issue, remote, target)
+	if err != nil {
+		return MergePrepareResult{}, err
+	}
+	if currentHead != head || currentBase != base || currentRemote != remoteHead {
+		return MergePrepareResult{}, fmt.Errorf("%w: local head, target base, or remote branch changed during merge-fallback validation", ErrMergeResolutionInvalid)
+	}
+	if _, err := runGitAt(ctx, info.Path, "push", "--force-with-lease=refs/heads/"+info.Branch+":"+remoteHead, remote, head+":refs/heads/"+info.Branch); err != nil {
+		return MergePrepareResult{}, fmt.Errorf("push validated merge resolution: %w", err)
+	}
+	return MergePrepareResult{Status: MergePrepareStatusClean, HeadSHA: head, HeadChanged: remoteHead != head}, nil
+}
+
+func (l *LocalGit) resolvedMergeHeads(ctx context.Context, info Info, issue Issue, remote, target string) (string, string, string, error) {
+	release, err := l.acquireSourceOperation(ctx)
+	if err != nil {
+		return "", "", "", err
+	}
+	defer release()
+	branch, err := runGitAt(ctx, info.Path, "symbolic-ref", "--short", "HEAD")
+	if err != nil {
+		return "", "", "", err
+	}
+	if strings.TrimSpace(info.Branch) == "" || strings.TrimSpace(branch) != info.Branch {
+		return "", "", "", fmt.Errorf("%w: merge resolution is not on the owned workspace branch", ErrMergeResolutionInvalid)
+	}
+	inProgress, err := rebaseInProgress(ctx, info.Path)
+	if err != nil {
+		return "", "", "", err
+	}
+	if inProgress {
+		return "", "", "", fmt.Errorf("%w: merge resolution still has a rebase in progress", ErrMergeResolutionInvalid)
+	}
+	diff, err := l.DiffStat(ctx, info, issue)
+	if err != nil {
+		return "", "", "", err
+	}
+	if diff != (DiffStat{}) {
+		return "", "", "", fmt.Errorf("%w: merge resolution workspace is not source-clean", ErrMergeResolutionInvalid)
+	}
+	ref := "refs/remotes/" + remote + "/" + target
+	if _, err := runGitAt(ctx, info.Path, "fetch", remote, "+refs/heads/"+target+":"+ref); err != nil {
+		return "", "", "", err
+	}
+	base, err := runGitAt(ctx, info.Path, "rev-parse", ref)
+	if err != nil {
+		return "", "", "", err
+	}
+	head, err := runGitAt(ctx, info.Path, "rev-parse", "HEAD")
+	if err != nil {
+		return "", "", "", err
+	}
+	if _, err := runGitAt(ctx, info.Path, "merge-base", "--is-ancestor", strings.TrimSpace(base), strings.TrimSpace(head)); err != nil {
+		var commandErr *CommandError
+		if errors.As(err, &commandErr) && commandErr.ExitCode == 1 {
+			err = errors.Join(ErrMergeResolutionInvalid, err)
+		}
+		return "", "", "", fmt.Errorf("merge resolution does not contain the current target branch: %w", err)
+	}
+	remoteHead, exists, err := remoteBranchHead(ctx, info.Path, remote, info.Branch)
+	if err != nil {
+		return "", "", "", err
+	}
+	if !exists {
+		return "", "", "", fmt.Errorf("%w: merge resolution remote branch is missing", ErrMergeResolutionInvalid)
+	}
+	return strings.TrimSpace(head), strings.TrimSpace(base), remoteHead, nil
+}
+
+func (l *LocalGit) validateMergeResolution(ctx context.Context, info Info, issue Issue, command string) (err error) {
+	if strings.TrimSpace(command) == "" {
+		return nil
+	}
+	scratch, err := PrepareWorkerScratch(ctx, info.Path)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		err = errors.Join(err, CleanupWorkerScratch(info.Path))
+	}()
+	cmd := commandshell.Command(ctx, command, l.hooks.Shell)
+	cmd.Dir = info.Path
+	cmd.Env = hookEnv(info, issue)
+	cmd.WaitDelay = workspaceCommandWaitDelay
+	procgroup.SetTempDir(cmd, scratch)
+	procgroup.Configure(ctx, cmd)
+	l.logger.Info("validating merge resolution", "workspace_path", info.Path, "command", command)
+	output, err := cmd.CombinedOutput()
+	if err != nil {
+		return fmt.Errorf("merge resolution gate failed: %w: %s", errors.Join(ErrMergeResolutionInvalid, ctx.Err(), err), output)
+	}
+	return nil
 }

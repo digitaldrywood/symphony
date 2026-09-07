@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"strings"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/digitaldrywood/detent/internal/config"
@@ -408,7 +409,7 @@ func TestRunnerMergeFallbackUsesDedicatedBudget(t *testing.T) {
 	}
 }
 
-func TestRunnerMergeFallbackBudgetExpiresDuringReverification(t *testing.T) {
+func TestRunnerMergeFallbackValidationOutlivesResolutionBudget(t *testing.T) {
 	t.Parallel()
 
 	durationLimit := &controlledDurationLimit{}
@@ -418,9 +419,15 @@ func TestRunnerMergeFallbackBudgetExpiresDuringReverification(t *testing.T) {
 			if call == 0 {
 				return workspace.MergePrepareResult{Status: workspace.MergePrepareStatusConflict}, nil
 			}
+			deadline, bounded := ctx.Deadline()
+			if !bounded || time.Until(deadline) > time.Hour {
+				t.Fatal("deterministic validation must have a separate bounded context")
+			}
 			durationLimit.Expire()
-			<-ctx.Done()
-			return workspace.MergePrepareResult{}, ctx.Err()
+			if err := ctx.Err(); err != nil {
+				return workspace.MergePrepareResult{}, err
+			}
+			return workspace.MergePrepareResult{Status: workspace.MergePrepareStatusClean, HeadSHA: "validated-head"}, nil
 		},
 	}
 	runner, err := NewRunner(Dependencies{
@@ -447,11 +454,11 @@ func TestRunnerMergeFallbackBudgetExpiresDuringReverification(t *testing.T) {
 		},
 		Mode: RunModeMerge,
 	})
-	if !errors.Is(err, ErrMergeFallbackBudgetExceeded) {
-		t.Fatalf("Run() error = %v, want ErrMergeFallbackBudgetExceeded", err)
+	if err != nil {
+		t.Fatalf("Run() error = %v, want resolved handoff after validation outlives the resolution budget", err)
 	}
-	if result.FinalState != FinalStateMergeFallbackExceeded {
-		t.Fatalf("FinalState = %q, want %q", result.FinalState, FinalStateMergeFallbackExceeded)
+	if result.Output != RunOutputMergeFallbackResolved {
+		t.Fatalf("Output = %q, want resolved handoff", result.Output)
 	}
 	if result.MergeFallbackFindings == "" {
 		t.Fatal("MergeFallbackFindings is empty")
@@ -792,4 +799,52 @@ func (s *durationBlockingSessionStore) UpdateSessionWorkerProcess(ctx context.Co
 	s.expireSession()
 	<-ctx.Done()
 	return ctx.Err()
+}
+
+func TestMergeFallbackValidationBoundaries(t *testing.T) {
+	t.Parallel()
+
+	for _, tt := range []struct {
+		name   string
+		cancel bool
+		fail   bool
+	}{
+		{name: "gate failure", fail: true},
+		{name: "validation deadline"},
+		{name: "lease or shutdown cancellation", cancel: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			synctest.Test(t, func(t *testing.T) {
+				ctx, cancel := context.WithCancel(t.Context())
+				defer cancel()
+				backend := &fakeMergeWorkspaceBackend{prepareFunc: func(ctx context.Context, _ int) (workspace.MergePrepareResult, error) {
+					if tt.fail {
+						return workspace.MergePrepareResult{}, errors.Join(workspace.ErrMergeResolutionInvalid, errors.New("make check failed"))
+					}
+					if tt.cancel {
+						cancel()
+					}
+					<-ctx.Done()
+					return workspace.MergePrepareResult{}, ctx.Err()
+				}}
+				started := time.Now()
+				result, err := (&Runner{}).verifyMergeFallback(ctx, backend, workspace.Info{}, workspace.Issue{}, workspace.MergePrepareOptions{}, RunResult{
+					FinalState: FinalStateCompleted, Output: "DETENT_MERGE_FALLBACK: resolved",
+				})
+				if tt.cancel {
+					if !errors.Is(err, context.Canceled) {
+						t.Fatalf("error = %v, want parent cancellation", err)
+					}
+					return
+				}
+				if err != nil || result.Output != RunOutputMergeFallbackRework || !strings.Contains(result.MergeFallbackFindings, "Deterministic validation failed") {
+					t.Fatalf("verification = %#v, %v; want actionable Rework", result, err)
+				}
+				if !tt.fail && time.Since(started) != mergeFallbackValidationTimeout {
+					t.Fatalf("validation elapsed = %v, want bounded deadline %v", time.Since(started), mergeFallbackValidationTimeout)
+				}
+			})
+		})
+	}
 }

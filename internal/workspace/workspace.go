@@ -143,11 +143,15 @@ type MergePreparer interface {
 }
 
 type MergePrepareOptions struct {
-	Remote       string
-	TargetBranch string
+	VerifyResolution   bool
+	ValidationCommand  string
+	ExpectedRemoteHead string
+	Remote             string
+	TargetBranch       string
 }
 
 type MergePrepareResult struct {
+	HeadSHA     string
 	Status      MergePrepareStatus
 	DiffStat    DiffStat
 	Message     string

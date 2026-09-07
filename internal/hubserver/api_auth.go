@@ -14,6 +14,7 @@ import (
 	"github.com/labstack/echo/v4"
 
 	"github.com/digitaldrywood/detent/internal/apikey"
+	"github.com/digitaldrywood/detent/internal/auth"
 	"github.com/digitaldrywood/detent/internal/runnerauth"
 )
 
@@ -28,12 +29,16 @@ const (
 )
 
 type apiCredential struct {
-	Hash       string
-	ID         string
-	Name       string
-	Scope      apiScope
-	NativeOnly bool
-	Runner     runnerauth.Identity
+	Hosted        *auth.HostedIdentity
+	HostedRole    string
+	ManageRunners bool
+	SessionHash   string
+	Hash          string
+	ID            string
+	Name          string
+	Scope         apiScope
+	NativeOnly    bool
+	Runner        runnerauth.Identity
 }
 
 type apiErrorResponse struct {
@@ -85,6 +90,14 @@ func (s *Service) requireAPIScope(allowed ...apiScope) echo.MiddlewareFunc {
 			if err != nil {
 				return c.JSON(status, apiErrorResponse{Code: "unauthorized", Message: "Valid scoped API token is required"})
 			}
+			if s.config.Hosted != nil {
+				if credential.Hosted == nil && credential.Runner.RunnerID == "" && !s.hostedArtifactPublisher(c, credential) {
+					return s.nativeAPIError(c, nativeNotFound())
+				}
+				if credential.Hosted != nil && (!strings.HasPrefix(c.Path(), nativeBase) || strings.HasSuffix(c.Path(), "/checks") || strings.Contains(c.Path(), "/imports")) {
+					return s.nativeAPIError(c, nativeNotFound())
+				}
+			}
 			if credential.Runner.RunnerID != "" && !runnerOperationAllowed(c, credential.Runner.Operations) {
 				return c.JSON(http.StatusForbidden, apiErrorResponse{Code: "insufficient_scope", Message: "Runner does not permit this operation"})
 			}
@@ -108,6 +121,9 @@ func (s *Service) requireAPIScope(allowed ...apiScope) echo.MiddlewareFunc {
 }
 
 func (s *Service) authenticateAPIRequest(c echo.Context) (apiCredential, int, error) {
+	if s.config.Hosted != nil && c.Request().Header.Get(echo.HeaderAuthorization) == "" {
+		return s.hostedCredential(c)
+	}
 	token, err := apiBearerToken(c)
 	if err != nil {
 		return apiCredential{}, http.StatusUnauthorized, err

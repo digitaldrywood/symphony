@@ -8,9 +8,11 @@ import (
 	"net/url"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/digitaldrywood/detent/internal/auth"
 	globalconfig "github.com/digitaldrywood/detent/internal/config/global"
+	"github.com/digitaldrywood/detent/internal/store"
 	"github.com/digitaldrywood/detent/internal/web"
 )
 
@@ -133,6 +135,53 @@ func TestDisabledMagicLinkAuthLeavesRoutesUnchanged(t *testing.T) {
 	if login.Code != http.StatusNotFound {
 		t.Fatalf("GET /login status = %d, want 404 when auth disabled", login.Code)
 	}
+}
+
+func TestLocalSessionGateRejectsHostedIdentity(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name       string
+		path       string
+		accept     string
+		wantStatus int
+	}{
+		{name: "dashboard", path: "/", wantStatus: http.StatusSeeOther},
+		{name: "API", path: "/api/v1/state", wantStatus: http.StatusSeeOther},
+		{name: "SSE", path: "/events", accept: "text/event-stream", wantStatus: http.StatusUnauthorized},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			deps := testDeps(t)
+			deps.Store = hostedWebSessionStore{Store: openWebTestStore(t)}
+			deps.MagicLinkSender = &webAuthSender{}
+			server, err := web.NewServer(web.Config{
+				DashboardURL: "https://detent.test",
+				GlobalConfig: globalconfig.Config{Auth: globalconfig.Auth{
+					Mode: globalconfig.AuthModeMagicLink, AllowedEmails: []string{"operator@example.com"}, LinkTTL: "15m", SessionTTL: "1h",
+				}},
+			}, deps)
+			if err != nil {
+				t.Fatal(err)
+			}
+			request := httptest.NewRequest(http.MethodGet, tt.path, nil)
+			request.Header.Set("Accept", tt.accept)
+			request.AddCookie(&http.Cookie{Name: "detent_session", Value: "hosted-session"})
+			recorder := httptest.NewRecorder()
+			server.Handler().ServeHTTP(recorder, request)
+			cookie := responseCookie(recorder.Result(), "detent_session")
+			if recorder.Code != tt.wantStatus || cookie == nil || cookie.MaxAge != -1 {
+				t.Fatalf("hosted session status=%d clearing cookie=%#v", recorder.Code, cookie)
+			}
+		})
+	}
+}
+
+type hostedWebSessionStore struct {
+	store.Store
+}
+
+func (hostedWebSessionStore) WebSession(context.Context, string, time.Time) (auth.Session, error) {
+	return auth.Session{Email: "operator@example.com", ExpiresAt: time.Now().Add(time.Hour), Identity: &auth.HostedIdentity{Subject: "user_customer", OrganizationID: "org_customer"}}, nil
 }
 
 type webAuthSender struct {

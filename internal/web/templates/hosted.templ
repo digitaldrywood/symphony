@@ -1,0 +1,299 @@
+package templates
+
+templ HostedPage(data HostedPageData) {
+	@AppShell(DashboardShellData{Hosted: &data}, nil) {
+		<main id="hosted-content" class="min-h-0 flex-1 overflow-y-auto p-4 md:p-8">
+			<div class="mx-auto w-full max-w-4xl space-y-6">
+				if data.SupportActor != "" {
+					<section class="space-y-3 rounded-card border border-warn/50 bg-warn/10 p-4" role="status" aria-label="Temporary support session" data-hosted-impersonation>
+						<h2 class="font-semibold">Temporary support session</h2>
+						<p class="break-words text-sm">{ data.SupportActor } is acting as { data.Email } in { data.OrganizationName }.</p>
+						<p class="break-words text-sm">Reason: { data.SupportReason }</p>
+						<p class="break-words text-sm">Expires: { data.SupportExpiry }</p>
+						<form method="post" action="/logout">
+							@hostedCSRF(data.CSRF)
+							<button type="submit" class="min-h-11 rounded-card border border-line bg-surface px-4 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">Exit support session</button>
+						</form>
+					</section>
+				}
+				if data.Error != "" {
+					<p class="break-words rounded-card border border-err/40 bg-err/10 p-4 text-sm text-err" role="alert">{ data.Error }</p>
+				}
+				if data.Notice != "" {
+					<p class="break-words rounded-card border border-line bg-surface p-4 text-sm" role="status">{ data.Notice }</p>
+				}
+				switch data.Mode {
+					case "login":
+						<section class="max-w-lg space-y-4 rounded-card border border-line bg-surface p-6">
+							<h2 class="text-lg font-semibold">Welcome to Detent</h2>
+							<p class="text-sm text-sec">Sign in to create or join your organization and work in the projects shared with you.</p>
+							<a href="/auth/oidc/start" class="inline-flex min-h-11 items-center rounded-card bg-accent px-4 text-sm font-semibold text-page focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">Continue with WorkOS</a>
+							<a href="/auth/oidc/start?unscoped=1" class="inline-flex min-h-11 items-center rounded-card border border-line px-4 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">Join with invitation</a>
+						</section>
+					case "onboarding":
+						@hostedOnboarding(data)
+					case "organization":
+						@hostedOrganization(data)
+					case "project":
+						@hostedProject(data)
+					case "support":
+						@hostedSupport(data)
+					default:
+						<section class="max-w-lg space-y-4 rounded-card border border-line bg-surface p-6">
+							<h2 class="text-lg font-semibold">This page is unavailable to your account</h2>
+							<p class="text-sm text-sec">Your organization or project access may have changed. Sign in again or return to your organization to check your current access.</p>
+							<a href="/organization" class="inline-flex min-h-11 items-center rounded-card border border-line px-4 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">Return to organization</a>
+							<a href="/auth/oidc/start" class="inline-flex min-h-11 items-center rounded-card border border-line px-4 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">Sign in again</a>
+						</section>
+				}
+			</div>
+		</main>
+	}
+}
+
+templ hostedAppShell(data HostedPageData) {
+	<!DOCTYPE html>
+	<html lang="en" data-theme="dark">
+		<head>
+			<meta charset="utf-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1"/>
+			<meta name="application-name" content="Detent"/>
+			<meta name="referrer" content="no-referrer"/>
+			<title>{ hostedPageTitle(data) } · Detent</title>
+			<link rel="icon" type="image/svg+xml" href={ faviconPath(data.Assets) }/>
+			<link rel="preload" href="/static/fonts/Geist-Variable.woff2" as="font" type="font/woff2" crossorigin/>
+			<link rel="preload" href="/static/fonts/GeistMono-Variable.woff2" as="font" type="font/woff2" crossorigin/>
+			<link rel="stylesheet" href={ stylesheetPath(data.Assets) }/>
+		</head>
+		<body class="h-screen overflow-hidden bg-page font-sans text-text antialiased">
+			<div class="flex h-full">
+				<aside class="hidden w-52 flex-none overflow-y-auto border-r border-line px-3 py-4 md:block" aria-label="Organization navigation">
+					<a href="/organization" class="mb-6 flex min-h-11 items-center gap-3 rounded-card px-2 text-sm font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+						<span class="grid size-6 place-items-center rounded-card bg-accent font-mono text-sm text-page" aria-hidden="true">D</span>
+						Detent
+					</a>
+					@hostedNavigation(data)
+				</aside>
+				<div class="flex min-w-0 flex-1 flex-col">
+					<header class="flex min-h-12 flex-none flex-wrap items-center gap-3 border-b border-line px-4 py-2 md:px-8">
+						<details class="relative md:hidden">
+							<summary class="flex min-h-11 cursor-pointer items-center rounded-card border border-line px-3 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" aria-label="Open navigation">Menu</summary>
+							<div class="absolute left-0 top-full z-20 mt-2 w-64 max-w-[calc(100vw-2rem)] rounded-card border border-line bg-page p-3 shadow-lg">
+								@hostedNavigation(data)
+							</div>
+						</details>
+						<h1 class="min-w-0 flex-1 truncate text-base font-semibold">{ hostedPageTitle(data) }</h1>
+						if data.Email != "" {
+							<form method="post" action="/logout">
+								@hostedCSRF(data.CSRF)
+								<button type="submit" class="min-h-11 rounded-card border border-line px-3 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">Sign out</button>
+							</form>
+						}
+					</header>
+					{ children... }
+				</div>
+			</div>
+		</body>
+	</html>
+}
+
+templ hostedNavigation(data HostedPageData) {
+	<nav class="space-y-1" aria-label="Hosted workspace">
+		if data.Email != "" {
+			<p class="break-words px-2 py-3 text-xs text-sec">{ data.Email }</p>
+			<a href="/organization" class="flex min-h-11 items-center rounded-card px-2 text-sm hover:bg-elev focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">Organization</a>
+		} else {
+			<a href="/auth/oidc/start" class="flex min-h-11 items-center rounded-card px-2 text-sm hover:bg-elev focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">Sign in</a>
+		}
+		if hostedProjectMode(data) {
+			for _, project := range data.Projects {
+				<a href={ templ.SafeURL(hostedProjectPath(project.ID)) } class="flex min-h-11 items-center rounded-card px-2 text-sm hover:bg-elev focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent" { sidebarAriaCurrent(project.ID == data.SelectedProject)... }>
+					<span class="truncate">{ project.Name }</span>
+				</a>
+			}
+		}
+		if data.CanSupport && data.SupportActor == "" {
+			<a href="/support" class="flex min-h-11 items-center rounded-card px-2 text-sm hover:bg-elev focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">Support access</a>
+		}
+	</nav>
+}
+
+templ hostedCSRF(value string) {
+	<input type="hidden" name="csrf" value={ value }/>
+}
+
+templ hostedOrganizationSwitcher(data HostedPageData) {
+	if len(data.Organizations) > 0 {
+		<form method="post" action="/organization/switch" class="flex flex-col gap-3 sm:flex-row sm:items-end">
+			@hostedCSRF(data.CSRF)
+			<div class="min-w-0 flex-1 space-y-2">
+				<label for="hosted-organization" class="block text-sm font-medium">Organization</label>
+				<select id="hosted-organization" name="organization" required class="min-h-11 w-full rounded-card border border-line bg-page px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+					for _, organization := range data.Organizations {
+						<option value={ organization.ID } selected?={ organization.ID == data.OrganizationID }>{ organization.Name }</option>
+					}
+				</select>
+			</div>
+			<button type="submit" class="min-h-11 rounded-card border border-line px-4 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">Switch organization</button>
+		</form>
+	}
+}
+
+templ hostedOnboarding(data HostedPageData) {
+	<section class="space-y-5 rounded-card border border-line bg-surface p-6">
+		<h2 class="text-lg font-semibold">Create or join an organization</h2>
+		<p class="text-sm text-sec">Choose an organization you belong to, create one, or use the invitation sent to you.</p>
+		@hostedOrganizationSwitcher(data)
+		if data.CanCreate {
+			<form method="post" action="/organization/create" class="space-y-3">
+				@hostedCSRF(data.CSRF)
+				<label for="hosted-organization-name" class="block text-sm font-medium">Organization name</label>
+				<input id="hosted-organization-name" name="name" required maxlength="120" autocomplete="organization" class="min-h-11 w-full rounded-card border border-line bg-page px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"/>
+				<button type="submit" class="min-h-11 rounded-card bg-accent px-4 text-sm font-semibold text-page focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">Create organization</button>
+			</form>
+		}
+		<form method="post" action="/organization/join" class="space-y-3 border-t border-line pt-5">
+			@hostedCSRF(data.CSRF)
+			<label for="hosted-invitation-token" class="block text-sm font-medium">Invitation token</label>
+			<input id="hosted-invitation-token" name="token" type="password" required autocomplete="off" class="min-h-11 w-full rounded-card border border-line bg-page px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"/>
+			<button type="submit" class="min-h-11 rounded-card border border-line px-4 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">Join organization</button>
+		</form>
+	</section>
+}
+
+templ hostedOrganization(data HostedPageData) {
+	<section class="space-y-5 rounded-card border border-line bg-surface p-6">
+		<h2 class="break-words text-lg font-semibold">{ data.OrganizationName }</h2>
+		@hostedOrganizationSwitcher(data)
+		<h3 class="font-semibold">Your projects</h3>
+		if len(data.Projects) == 0 {
+			<p class="text-sm text-sec">No projects are shared with you yet. Ask an organization administrator for project access.</p>
+		} else {
+			<ul class="space-y-2">
+				for _, project := range data.Projects {
+					<li><a href={ templ.SafeURL(hostedProjectPath(project.ID)) } class="inline-flex min-h-11 items-center break-words text-sm text-accent underline underline-offset-4 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">{ project.Name }</a></li>
+				}
+			</ul>
+		}
+		if data.CanCreate {
+			<form method="post" action="/projects" class="space-y-3 border-t border-line pt-5">
+				@hostedCSRF(data.CSRF)
+				<h3 class="font-semibold">Create a project</h3>
+				<label for="hosted-project-name" class="block text-sm font-medium">Project name</label>
+				<input id="hosted-project-name" name="name" required maxlength="120" class="min-h-11 w-full rounded-card border border-line bg-page px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"/>
+				<label class="flex min-h-11 items-center gap-3 text-sm"><input name="grant_access" type="checkbox" value="true" required class="size-4"/> Grant me access to collaborate in this project</label>
+				<p class="text-xs text-sec">Project access does not grant runner management or code credentials.</p>
+				<button type="submit" class="min-h-11 rounded-card bg-accent px-4 text-sm font-semibold text-page focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">Create project</button>
+			</form>
+		}
+	</section>
+	if data.CanManage {
+		@hostedMembership(data)
+	}
+}
+
+templ hostedMembership(data HostedPageData) {
+	<section class="space-y-5 rounded-card border border-line bg-surface p-6">
+		<h2 class="text-lg font-semibold">Members and invitations</h2>
+		<form method="post" action="/organization/invite" class="space-y-3">
+			@hostedCSRF(data.CSRF)
+			<label for="hosted-invite-email" class="block text-sm font-medium">Email address</label>
+			<input id="hosted-invite-email" name="email" type="email" required autocomplete="email" class="min-h-11 w-full rounded-card border border-line bg-page px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"/>
+			<label for="hosted-invite-role" class="block text-sm font-medium">Organization role</label>
+			<select id="hosted-invite-role" name="role" required class="min-h-11 w-full rounded-card border border-line bg-page px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+				@hostedRoleOptions("member", false)
+			</select>
+			<p class="text-xs text-sec">An invitation grants organization membership. Share project and runner permissions separately.</p>
+			<button type="submit" class="min-h-11 rounded-card border border-line px-4 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">Send invitation</button>
+		</form>
+		<ul class="space-y-4">
+			for _, member := range data.Members {
+				<li class="space-y-3 border-t border-line pt-4">
+					<p class="break-words text-sm">{ member.UserID } <span class="text-sec">· { member.Role }</span></p>
+					if member.Role != "owner" || data.CanManageOwnership {
+						<form method="post" action={ hostedMemberPath(member.ID, "role") } class="flex flex-col gap-3 sm:flex-row sm:items-end">
+							@hostedCSRF(data.CSRF)
+							<label class="min-w-0 flex-1 space-y-2 text-sm font-medium">
+								<span class="block">Role for { member.UserID }</span>
+								<select name="role" required class="min-h-11 w-full rounded-card border border-line bg-page px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+									@hostedRoleOptions(member.Role, data.CanManageOwnership)
+								</select>
+							</label>
+							<button type="submit" class="min-h-11 rounded-card border border-line px-4 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">Update role</button>
+						</form>
+						<form method="post" action={ hostedMemberPath(member.ID, "revoke") }>
+							@hostedCSRF(data.CSRF)
+							<button type="submit" class="min-h-11 rounded-card border border-err/40 px-4 text-sm font-medium text-err focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">Revoke membership</button>
+						</form>
+					}
+				</li>
+			}
+		</ul>
+		<form method="post" action="/organization/grants" class="space-y-3 border-t border-line pt-5">
+			@hostedCSRF(data.CSRF)
+			<h3 class="font-semibold">Project access</h3>
+			<label for="hosted-grant-user" class="block text-sm font-medium">Member user ID</label>
+			<select id="hosted-grant-user" name="user" required class="min-h-11 w-full rounded-card border border-line bg-page px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+				for _, member := range data.Members {
+					<option value={ member.UserID }>{ member.UserID }</option>
+				}
+			</select>
+			<label for="hosted-grant-project" class="block text-sm font-medium">Project ID</label>
+			<input id="hosted-grant-project" name="project" required class="min-h-11 w-full rounded-card border border-line bg-page px-3 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"/>
+			<label class="flex min-h-11 items-center gap-3 text-sm"><input type="checkbox" name="write" value="true" class="size-4"/> Allow collaboration</label>
+			<label class="flex min-h-11 items-center gap-3 text-sm"><input type="checkbox" name="runner" value="true" class="size-4"/> Allow runner management for this project</label>
+			<p class="text-xs text-sec">Access is read-only unless collaboration is selected. A viewer remains read-only. Code credentials are managed separately.</p>
+			<button type="submit" class="min-h-11 rounded-card border border-line px-4 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">Save project access</button>
+			<button type="submit" name="revoke" value="true" class="min-h-11 rounded-card border border-err/40 px-4 text-sm font-medium text-err focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">Revoke project access</button>
+		</form>
+	</section>
+}
+
+templ hostedRoleOptions(current string, ownership bool) {
+	<option value="viewer" selected?={ current == "viewer" }>Viewer</option>
+	<option value="member" selected?={ current == "member" }>Member</option>
+	<option value="admin" selected?={ current == "admin" }>Admin</option>
+	if ownership {
+		<option value="owner" selected?={ current == "owner" }>Owner</option>
+	}
+}
+
+templ hostedProject(data HostedPageData) {
+	<section class="space-y-4 rounded-card border border-line bg-surface p-6">
+		<h2 class="text-lg font-semibold">Project work</h2>
+		if len(data.Issues) == 0 {
+			<p class="text-sm text-sec">No work items in this project yet.</p>
+		} else {
+			<ul class="divide-y divide-line">
+				for _, issue := range data.Issues {
+					if string(issue.OrganizationID) == data.OrganizationID && string(issue.ProjectID) == data.SelectedProject {
+						<li class="py-3">
+							<a href={ templ.SafeURL(hostedIssuePath(data.OrganizationID, data.SelectedProject, issue.WorkItemID)) } class="flex min-h-11 flex-col justify-center gap-1 rounded-card text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+								<span class="break-words font-medium text-accent">{ issue.Title }</span>
+								<span class="text-xs text-sec">{ issue.State }</span>
+							</a>
+						</li>
+					}
+				}
+			</ul>
+		}
+	</section>
+}
+
+templ hostedSupport(data HostedPageData) {
+	<section class="max-w-lg space-y-4 rounded-card border border-line bg-surface p-6">
+		<h2 class="text-lg font-semibold">Support access</h2>
+		if data.SupportActor != "" {
+			<p class="text-sm text-sec">Your temporary support session is active. Access follows the selected customer account's current organization and project permissions.</p>
+		} else if data.CanSupport {
+			<p class="text-sm text-sec">Start a support sign-in, then open the WorkOS dashboard using your authorized support account. Select the customer and organization and provide the required reason.</p>
+			<p class="text-sm text-sec">Customer content becomes available only after the temporary impersonation session is verified.</p>
+			<form method="post" action="/support/start">
+				@hostedCSRF(data.CSRF)
+				<button type="submit" class="min-h-11 rounded-card border border-line px-4 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">Start support sign-in</button>
+			</form>
+		} else {
+			<p class="text-sm text-sec" role="alert">Your account is not authorized to start support impersonation.</p>
+		}
+	</section>
+}

@@ -96,6 +96,7 @@ type DashboardData struct {
 }
 
 type DashboardShellData struct {
+	Hosted                 *HostedPageData
 	Title                  string
 	ApplicationName        string
 	InstanceName           string

@@ -40,6 +40,7 @@ var (
 )
 
 type Config struct {
+	Hosted                     *HostedConfig
 	GitHubRequestCounts        func() []GitHubRequestCount
 	GitHubDisabled             bool
 	ImportBackend              ImportBackend

@@ -18,6 +18,10 @@ import (
 const maxAPIRequestBodyBytes = 1 << 20
 
 func (s *Service) registerRoutes(e *echo.Echo) {
+	if s.config.Hosted != nil {
+		e.Use(s.hostedBoundary)
+		s.registerHostedRoutes(e)
+	}
 	s.registerNativeRoutes(e)
 	s.registerRunnerRoutes(e)
 	read := s.requireAPIScope(apiScopeWorker, apiScopeOperator, apiScopeAdmin)

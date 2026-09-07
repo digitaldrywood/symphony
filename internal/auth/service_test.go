@@ -128,6 +128,108 @@ func TestSessionServicePersistsAcrossRestartAndExpires(t *testing.T) {
 	}
 }
 
+func TestHostedIdentitySessionPreservesProviderLifetime(t *testing.T) {
+	t.Parallel()
+	now := time.Date(2026, 9, 7, 12, 0, 0, 0, time.UTC)
+	for _, tt := range []struct {
+		name    string
+		modify  func(*auth.Identity)
+		wantTTL time.Duration
+		wantErr bool
+	}{
+		{name: "provider expires first", wantTTL: 10 * time.Minute},
+		{name: "application expires first", modify: func(i *auth.Identity) { i.Hosted.ExpiresAt = now.Add(2 * time.Hour) }, wantTTL: time.Hour},
+		{name: "support metadata preserved", modify: func(i *auth.Identity) {
+			i.Hosted.SupportActor = "support@example.com"
+			i.Hosted.SupportReason = "troubleshooting"
+		}, wantTTL: 10 * time.Minute},
+		{name: "unverified email", modify: func(i *auth.Identity) { i.EmailVerified = false }, wantErr: true},
+		{name: "missing hosted identity", modify: func(i *auth.Identity) { i.Hosted = nil }, wantErr: true},
+		{name: "subject mismatch", modify: func(i *auth.Identity) { i.Subject = "user_other" }, wantErr: true},
+		{name: "expired provider", modify: func(i *auth.Identity) { i.Hosted.ExpiresAt = now }, wantErr: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			identity := auth.Identity{
+				Subject: "user_customer", Email: "Customer@Example.com", EmailVerified: true,
+				Hosted: &auth.HostedIdentity{
+					Subject: "user_customer", OrganizationID: "org_customer", SessionID: "session_customer",
+					CreatedAt: now.Add(-time.Minute), ExpiresAt: now.Add(10 * time.Minute),
+				},
+			}
+			if tt.modify != nil {
+				tt.modify(&identity)
+			}
+			backend := &recordingSessionStore{}
+			service, err := auth.NewSessionService(auth.SessionConfig{SessionTTL: time.Hour, PublicURL: "https://tenant.example.com"}, backend, auth.WithClock(func() time.Time { return now }))
+			if err != nil {
+				t.Fatal(err)
+			}
+			token, session, err := service.CreateIdentitySession(t.Context(), identity)
+			if tt.wantErr {
+				if !errors.Is(err, auth.ErrInvalidSession) || backend.record.TokenHash != "" || token != "" {
+					t.Fatalf("invalid identity created session: token=%q error=%v", token, err)
+				}
+				return
+			}
+			if err != nil || token == "" || session.Email != "customer@example.com" || session.Identity == nil || *session.Identity != *identity.Hosted || !session.ExpiresAt.Equal(now.Add(tt.wantTTL)) {
+				t.Fatalf("CreateIdentitySession() session = %#v, error = %v", session, err)
+			}
+			sum := sha256.Sum256([]byte(token))
+			if backend.record.TokenHash != hex.EncodeToString(sum[:]) || backend.record.Identity == nil || *backend.record.Identity != *identity.Hosted || !backend.record.ExpiresAt.Equal(session.ExpiresAt) {
+				t.Fatal("persisted session lost provider identity, expiry, or token hashing")
+			}
+		})
+	}
+}
+
+func TestLocalStoreRejectsHostedSessions(t *testing.T) {
+	t.Parallel()
+	backend := openAuthStore(t, filepath.Join(t.TempDir(), "detent.db"))
+	t.Cleanup(func() {
+		if err := backend.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	now := time.Now().UTC()
+	for _, tt := range []struct {
+		name     string
+		identity *auth.HostedIdentity
+		wantErr  bool
+	}{
+		{name: "local"},
+		{name: "hosted customer", identity: &auth.HostedIdentity{Subject: "user_customer", OrganizationID: "org_customer"}, wantErr: true},
+		{name: "hosted support", identity: &auth.HostedIdentity{Subject: "user_customer", OrganizationID: "org_customer", SupportActor: "support@example.com"}, wantErr: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			sum := sha256.Sum256([]byte(tt.name))
+			tokenHash := hex.EncodeToString(sum[:])
+			err := backend.CreateWebSession(t.Context(), auth.SessionRecord{TokenHash: tokenHash, Email: "operator@example.com", CreatedAt: now, ExpiresAt: now.Add(time.Hour), Identity: tt.identity})
+			if (err != nil) != tt.wantErr {
+				t.Fatalf("CreateWebSession() error = %v, wantErr %v", err, tt.wantErr)
+			}
+			session, readErr := backend.WebSession(t.Context(), tokenHash, now)
+			if tt.wantErr {
+				if !errors.Is(err, auth.ErrInvalidSession) || !errors.Is(readErr, auth.ErrInvalidSession) {
+					t.Fatalf("hosted identity persisted as local session: create=%v read=%v", err, readErr)
+				}
+			} else if readErr != nil || session.Identity != nil {
+				t.Fatalf("local session = %#v, error = %v", session, readErr)
+			}
+		})
+	}
+}
+
+type recordingSessionStore struct {
+	stubStore
+	record auth.SessionRecord
+}
+
+func (s *recordingSessionStore) CreateWebSession(_ context.Context, record auth.SessionRecord) error {
+	s.record = record
+	return nil
+}
+
 func TestMagicLinkExpirationAndAllowlist(t *testing.T) {
 	t.Parallel()
 

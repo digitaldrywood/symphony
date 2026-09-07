@@ -59,6 +59,9 @@ func (s *sqliteStore) ConsumeMagicLink(ctx context.Context, consumption auth.Mag
 }
 
 func (s *sqliteStore) CreateWebSession(ctx context.Context, session auth.SessionRecord) error {
+	if session.Identity != nil {
+		return auth.ErrInvalidSession
+	}
 	if err := s.queries.CreateWebSession(ctx, sqlc.CreateWebSessionParams{
 		TokenHash: session.TokenHash,
 		Email:     session.Email,

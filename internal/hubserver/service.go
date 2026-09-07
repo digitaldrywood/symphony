@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
 	"net"
 	"net/http"
 	"strings"
@@ -13,6 +14,7 @@ import (
 
 	"github.com/labstack/echo/v4"
 
+	"github.com/digitaldrywood/detent/internal/auth"
 	"github.com/digitaldrywood/detent/internal/tracker"
 )
 
@@ -22,6 +24,8 @@ const (
 )
 
 type Service struct {
+	hostedMutationMu  sync.Mutex
+	hostedSessions    *auth.Service
 	echo              *echo.Echo
 	database          *database
 	tracker           tracker.Tracker
@@ -51,6 +55,12 @@ func Open(ctx context.Context, cfg Config) (*Service, error) {
 		ctx = context.Background()
 	}
 	cfg = cfg.normalized()
+	if err := cfg.Hosted.validate(); err != nil {
+		return nil, err
+	}
+	if cfg.Hosted != nil {
+		cfg.Logger = slog.New(hostedLogHandler{output: cfg.Logger.Handler()})
+	}
 	database, err := openDatabase(ctx, cfg)
 	if err != nil {
 		return nil, err
@@ -83,6 +93,14 @@ func Open(ctx context.Context, cfg Config) (*Service, error) {
 	}
 	if cfg.OutboxBackend != nil {
 		service.outbox = newOutboxWorker(service)
+	}
+	if cfg.Hosted != nil {
+		service.hostedSessions, err = auth.NewSessionService(auth.SessionConfig{SessionTTL: 30 * 24 * time.Hour, PublicURL: cfg.Hosted.PublicURL}, service)
+		if err != nil {
+			workerCancel()
+			reconcileCancel()
+			return nil, errors.Join(err, database.Close())
+		}
 	}
 	service.registerRoutes(e)
 	service.maintainGitHubWebhooks(ctx)

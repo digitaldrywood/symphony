@@ -30,9 +30,9 @@ implementation without silently resolving the product choices in this table.
 
 | Decision | Status and recommended direction | Decision owner/follow-up |
 | --- | --- | --- |
-| Billing boundary and teams | Recommend organization billing with teams inside organizations; nested teams, inherited access, and exact role hierarchy remain unresolved | Human product review; [#2193](https://github.com/digitaldrywood/detent/issues/2193), [#2195](https://github.com/digitaldrywood/detent/issues/2195) |
+| Billing boundary and teams | Approved September 7: organization billing; flat owner/admin/member/viewer roles with explicit project and separate runner-management grants. Nested teams and inherited permissions are deferred | Human product review; [#2193](https://github.com/digitaldrywood/detent/issues/2193), [#2195](https://github.com/digitaldrywood/detent/issues/2195) |
 | Artifact deployment | Approved September 7: optional local-only operation, customer-managed storage, and explicit opt-in hosted storage through a portable service and configurable S3 adapter. DigitalOcean Spaces is the initial hosted provider | [#2190](https://github.com/digitaldrywood/detent/issues/2190); [artifact contract](artifact-access-contract.md) |
-| Hosted tenant allocation | Dedicated Hub processes/files simplify isolation but have baseline cost; pooled organization hosting requires pervasive scope enforcement. No allocation model is selected | Human architecture/cost review; #2193, [#2199](https://github.com/digitaldrywood/detent/issues/2199) |
+| Hosted tenant allocation | Approved September 7: one dedicated Hub process and SQLite file per organization, with persistent tenant binding and scoped APIs. Customer collaboration databases are not pooled; measure the per-process baseline cost | Human architecture/cost review; #2193, [#2199](https://github.com/digitaldrywood/detent/issues/2199) |
 | Pilot access | Recommend invitation-controlled pilot with configurable grants; eligibility and invitations remain operator decisions | #2194, #2195, #2199 |
 | Prices and free allowances | No approved prices, permanent free quantities, unlimited tier, or marginal-cost promise. Measure baseline and marginal cost before public commitments | #2195, [#2196](https://github.com/digitaldrywood/detent/issues/2196), #2199 |
 | Retention and deletion | Require explicit policies for collaboration, events, artifacts, and backups; durations, backup expiry, and revocation bounds remain unresolved | #2182, #2189, #2195, #2197 |
@@ -135,10 +135,14 @@ flowchart TB
 
 Each Hub process alone opens its database. Remote clients use authenticated HTTP;
 no SQLite file is shared over NFS/SMB, and no replicated writers are added. Hosted
-placement can assign organizations to separate Hubs or scope them in a Hub only
-after the allocation decision above. In either case, one process owns each file;
-pooling does not authorize shared file access. Tenant filters remain mandatory
-even with dedicated processes.
+placement assigns one organization to one dedicated Hub process and SQLite file.
+The organization binding persists across restart; a different tenant, host origin,
+or local-mode reopen is rejected. A reserved empty Hub can create its WorkOS
+organization for its configured bootstrap user. The deployment directory routes
+organization switching to a fresh protected login on the owning Hub. Automatic
+placement and recovery remain deployment work in #2199. Tenant filters remain
+mandatory even with dedicated processes; customer collaboration databases are
+not pooled.
 
 Preserve startup ownership locks, schema identity checks, WAL, foreign keys,
 busy-timeout handling, and fail-closed migration/version checks. Health becomes
@@ -437,7 +441,7 @@ flowchart LR
 
 | Credential/authority | Lifecycle and enforcement |
 | --- | --- |
-| Hosted human login | WorkOS is the chosen hosted adapter. Detent maps principals to stable organization/project grants, validates issuer/audience/session state, and enforces membership removal. Roles should distinguish administration, work mutation and read access; exact hierarchy remains under review |
+| Hosted human login | WorkOS is the chosen hosted adapter. Detent maps principals to stable organization/project grants, validates issuer/audience/session state, and enforces membership removal. Owner manages ownership, billing and organization lifecycle; admin manages membership and organization administration. Member collaborates and viewer reads only explicitly granted projects. Runner management requires a separate explicit grant; no role grants code credentials or privileged execution automatically |
 | Runner enrollment | Short-lived, one redemption, bound to intended organization/project/machine registration scope; concurrent redemption has one winner. Expired enrollment does not expire an already valid runner identity |
 | Runner identity | Separately renewable and revocable, generated/stored on the customer host. Server binds claims/events/heartbeats to it; changing JSON machine IDs cannot impersonate a host. Rotation/reinstall requires an auditable binding, not name reuse |
 | Provider/repository credentials | Customer-managed login or keys in private host facilities, injected only into permitted execution. Never Hub, WorkOS profile fields, repository files or event logs. An environment variable is not isolation from code in the same execution context |
@@ -452,6 +456,72 @@ bounds in the identity and artifact designs. Billing administration alone does
 not grant code credentials or privileged execution. Local/self-hosted auth stays
 pluggable and independent of WorkOS availability. Legacy Hub tokens need explicit
 overlap/rotation guidance, not silent invalidation.
+
+### Approved operational reporting and support access
+
+Routine staff identities, operator tokens and analytics may read only an explicit
+metadata allowlist: stable account and organization IDs; verified account email
+when required for support/billing; plan assignment; member/project/runner counts;
+activity timestamps; aggregate resource usage and quota consumption; and bounded
+service-health status. No free-form content or arbitrary metadata maps enter that
+contract. The owning tenant Hub reports these values through authenticated
+`GET /api/cloud/metadata`; analytics has no database handle or unrestricted query
+API. The initial report contains opaque organization/provider IDs, active member,
+project, runner and event counts, latest activity, database/WAL bytes, health,
+plan ID and configured storage/event quota ceilings. Empty plan and absent ceilings
+mean unassigned, not free or unlimited. Prices, enforcement and actual allowances
+remain #2195. Owner-only `GET /api/cloud/billing` exposes the same bounded usage
+for that Hub's organization. Organization administration cannot read project
+content without an explicit project grant.
+
+Reports exclude issue/comment bodies and titles, repository names and paths,
+prompts, source, diffs, logs, artifact references and contents, credentials, and
+bearer capabilities. Reports have no content cache and carry `Cache-Control:
+no-store`. Hosted service logs retain only timestamp, severity and a fixed event
+message; they discard arbitrary messages, attributes and errors from lower layers.
+Content-bearing native responses remain customer-only and are authorized before
+idempotency replay, pagination or rendering. Hosted pages do not attach the local
+instance dashboard, its process-wide caches, searches, SSE or operator tools.
+The tenant activity stream emits only project-scoped counters and rechecks active
+session/membership/grants before every frame. Artifact read grants bind to the
+originating hosted session, including support impersonation. The artifact
+authorizer rechecks session, membership and project read permission at redemption;
+grants expire within one minute or the earlier session/retention deadline. The
+bound artifact publisher has access only to service-scoped receipts and read
+authorization. Viewer read grants do not grant project write permission.
+
+Customer-content support requires a privileged WorkOS impersonation session.
+Ordinary staff membership never authorizes customer content. Detent requires an
+explicit support-actor allowlist, a CSRF-protected support start from that actor's
+current staff session, a one-use browser transaction bound to the selected
+organization, and matching signed-token, exchange and active-session actor data.
+The effective customer's current role and explicit project/runner grants still
+apply. Organization switching is disabled during impersonation. The temporary
+indicator names the support actor and effective customer, shows absolute expiry,
+and offers POST exit. Local logout revokes the local session first and requests
+provider revocation. Provider errors fail closed.
+
+WorkOS requires an impersonation reason and documents automatic expiry after
+60 minutes. Detent preserves the provider's earlier expiry, never refreshes a
+support session into an ordinary session, and accepts only the content-free
+reason codes `customer-request`, `account-recovery` and `troubleshooting`. Support
+staff enter one of those codes in WorkOS; customer text belongs outside the
+operator audit. Audit records contain actual support actor, effective user,
+organization, provider session ID, reason code, start/expiry, session end when
+explicitly logged out, route template, opaque project ID and action metadata.
+They never contain request bodies, query strings, credentials or bearer URLs.
+See [WorkOS impersonation](https://workos.com/docs/authkit/impersonation) and
+[session tokens](https://workos.com/docs/reference/authkit/session-tokens).
+
+This is restricted application access with exceptional audited support access.
+Database separation does not make infrastructure operators technically incapable
+of reading hosted data. Customer-managed artifacts and opt-in hosted artifacts
+have different custody boundaries; hosted artifacts do not automatically provide
+operator-inaccessible encryption. This delivery makes no zero-knowledge claim.
+Local and customer-hosted installations keep independent generic/local identity.
+Deployment and WorkOS team configuration are documented in
+[hosted identity setup](hosted-identity.md); no live WorkOS access is enabled by
+this change.
 
 Recommend entitlement resolution as a versioned free/paid base plus valid scoped
 complimentary grants; subscription state changes the base, and grant expiry

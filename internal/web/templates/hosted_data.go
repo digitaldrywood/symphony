@@ -3,32 +3,44 @@ package templates
 import (
 	"net/url"
 
+	"github.com/digitaldrywood/detent/internal/onboarding"
 	"github.com/digitaldrywood/detent/internal/tracker"
 )
 
 type HostedPageData struct {
-	Assets             AssetPaths
-	Title              string
-	Email              string
-	OrganizationName   string
-	OrganizationID     string
-	CSRF               string
-	Error              string
-	Notice             string
-	Mode               string
-	SelectedProject    string
-	CanManage          bool
-	CanCreate          bool
-	CanManageRunners   bool
-	CanManageOwnership bool
-	CanSupport         bool
-	SupportActor       string
-	SupportReason      string
-	SupportExpiry      string
-	Organizations      []HostedOrganizationChoice
-	Projects           []HostedProjectChoice
-	Members            []HostedMember
-	Issues             []tracker.NativeIssue
+	Setup               *onboarding.Project
+	SetupAPI            string
+	CanWriteProject     bool
+	ProjectStates       []tracker.NativeState
+	IntegrationSummary  string
+	IntegrationRevision string
+	GitHubRepository    string
+	GitHubIntake        string
+	GitHubProjection    string
+	GitHubPR            bool
+	GitHubAvailable     bool
+	Assets              AssetPaths
+	Title               string
+	Email               string
+	OrganizationName    string
+	OrganizationID      string
+	CSRF                string
+	Error               string
+	Notice              string
+	Mode                string
+	SelectedProject     string
+	CanManage           bool
+	CanCreate           bool
+	CanManageRunners    bool
+	CanManageOwnership  bool
+	CanSupport          bool
+	SupportActor        string
+	SupportReason       string
+	SupportExpiry       string
+	Organizations       []HostedOrganizationChoice
+	Projects            []HostedProjectChoice
+	Members             []HostedMember
+	Issues              []tracker.NativeIssue
 }
 
 type HostedOrganizationChoice struct {

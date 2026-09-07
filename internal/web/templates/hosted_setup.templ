@@ -1,0 +1,197 @@
+package templates
+
+import "fmt"
+import "strings"
+
+templ hostedSetupInput(id string, name string, label string) {
+ <label for={ id } class="block text-sm font-medium">{ label }</label>
+ <input id={ id } name={ name } required maxlength="200" class="min-h-11 w-full rounded-card border border-line bg-page px-3 text-sm focus-visible:ring-2 focus-visible:ring-accent"/>
+}
+
+templ hostedSetupButton(label string) {
+ <button type="submit" class="min-h-11 rounded-card border border-line bg-elev px-4 text-sm font-medium focus-visible:ring-2 focus-visible:ring-accent">{ label }</button>
+ <p role="status" aria-live="polite" class="break-words text-sm" data-setup-result></p>
+}
+
+templ hostedProjectSetup(data HostedPageData) {
+ <div class="space-y-5" data-project-setup data-api={ data.SetupAPI } data-csrf={ data.CSRF }>
+ <section class="space-y-4 rounded-card border border-line bg-surface p-5" aria-labelledby="setup-heading">
+  <h2 id="setup-heading" class="text-lg font-semibold">Project setup</h2>
+ if data.Setup.LatestRun != "" {
+ <p role="status" class="text-sm">Latest execution: { data.Setup.LatestRun }</p>
+ }
+  <p class="text-sm text-sec">Resume here at any time. Repository files, provider login and storage credentials stay on your customer hosts.</p>
+  <ul class="divide-y divide-line">
+   for _, step := range data.Setup.Steps {
+    <li class="space-y-1 py-3"><div class="flex flex-wrap justify-between gap-2 text-sm"><span class="font-medium">{ step.Name }</span><span>{ strings.ReplaceAll(step.State, "_", " ") }</span></div><p class="text-xs text-sec">{ step.Detail }</p></li>
+   }
+  </ul>
+  if data.Setup.Ready {
+<p role="status" class="text-sm">Setup checks satisfied. Local validation is user-reported; each run still enforces the approved policy.</p>
+}
+  if data.CanWriteProject {
+  <form method="post" class="space-y-3 border-t border-line pt-4" data-setup-action="progress" data-revision={ fmt.Sprint(data.Setup.Progress.Revision) }>
+   <label for="setup-repository" class="block text-sm font-medium">Repository configuration</label>
+   <select id="setup-repository" name="repository" required class="min-h-11 w-full rounded-card border border-line bg-page px-3 text-sm">
+    <option value="">Choose configuration</option>
+    <option value="existing" selected?={ data.Setup.Progress.Repository == "existing" }>Use existing detent.yaml and WORKFLOW.md</option>
+    <option value="generate" selected?={ data.Setup.Progress.Repository == "generate" }>Generate files locally for review</option>
+   </select>
+   <p class="text-xs text-sec">Inspect existing files first. For new files, use the existing onboarding answers and workflow builder, review the output, then apply changes locally. Cloud never writes to the repository.</p>
+   <pre class="overflow-x-auto whitespace-pre-wrap break-all rounded-card bg-page p-3 text-xs">{ "detent onboarding draft-answers\ndetent onboarding explain-answers\ndetent onboarding build-workflow --help\ndetent doctor --help\ndetent hub policy inspect --config /path/to/detent.yaml --project LOCAL_PROJECT" }</pre>
+   <p class="text-xs text-sec">Set client.organization_id to { data.OrganizationID } and map client.native_projects.LOCAL_PROJECT to { data.SelectedProject } in your local configuration. Run doctor with that configuration before approving its descriptor.</p>
+   <label class="flex min-h-11 items-center gap-3 text-sm"><input name="doctor" type="checkbox" checked?={ data.Setup.Progress.Doctor }/> I ran doctor successfully on the selected host</label>
+   <label class="flex min-h-11 items-center gap-3 text-sm"><input name="provider" type="checkbox" checked?={ data.Setup.Progress.Provider }/> I verified the selected provider login locally</label>
+   <label for="setup-artifacts" class="block text-sm font-medium">Artifact history</label>
+   <select id="setup-artifacts" name="artifacts" required class="min-h-11 w-full rounded-card border border-line bg-page px-3 text-sm">
+    <option value="">Choose history storage</option>
+    <option value="local" selected?={ data.Setup.Progress.Artifacts == "local" }>Local history only — no offline guarantee</option>
+    <option value="customer" selected?={ data.Setup.Progress.Artifacts == "customer" }>Customer artifact service and private bucket</option>
+   </select>
+   @hostedSetupButton("Save setup progress")
+  </form>
+  }
+ </section>
+ <section class="space-y-4 rounded-card border border-line bg-surface p-5">
+  <h2 class="font-semibold">Repository review and merge policy</h2>
+  <p class="text-sm text-sec">Configure gate.kind, gate.run, auto_promote and runner_requirements in the repository-owned configuration. Review changes through your repository's normal process, then inspect and approve the new descriptor.</p>
+  if data.Setup.Policy != nil {
+   <dl class="space-y-2 break-all text-sm">
+    <dt class="text-sec">Gate / auto-promotion / merge method</dt><dd>{ data.Setup.Policy.Policy.Gates.Kind } / { fmt.Sprint(data.Setup.Policy.Policy.Gates.AutoPromote) } / { data.Setup.Policy.Policy.Gates.MergeMethod }</dd>
+    <dt class="text-sec">Plan review / automated review / required checks</dt><dd>{ data.Setup.Policy.Policy.Gates.PlanReview } / { data.Setup.Policy.Policy.Gates.AutomatedReview } / { fmt.Sprint(data.Setup.Policy.Policy.Gates.RequiredChecks) }</dd>
+    <dt class="text-sec">Approved revision</dt><dd>{ data.Setup.Policy.Policy.SourceRevision }</dd>
+    <dt class="text-sec">Configuration digest</dt><dd>{ data.Setup.Policy.Policy.ConfigDigest }</dd>
+    <dt class="text-sec">Approved by / at</dt><dd>{ data.Setup.Policy.ApprovedBy } / { data.Setup.Policy.ApprovedAt }</dd>
+    <dt class="text-sec">Required tags / runner / host</dt><dd>{ strings.Join(data.Setup.Policy.Policy.Requirements.RequiredTags, ", ") } / { data.Setup.Policy.Policy.Requirements.RunnerID } / { data.Setup.Policy.Policy.Requirements.MachineID }</dd>
+   </dl>
+  } else {
+
+<p class="text-sm">Action required: no approved repository policy.</p>
+}
+  if data.CanManage && data.CanWriteProject {
+   <details><summary class="min-h-11 cursor-pointer py-3 text-sm">Approve inspected policy metadata</summary>
+   <form method="post" class="space-y-3" data-setup-action="policy">
+    <label for="setup-policy" class="block text-sm">Paste only the descriptor from detent hub policy inspect</label>
+    <textarea id="setup-policy" name="policy" required rows="6" class="w-full rounded-card border border-line bg-page p-3 font-mono text-xs"></textarea>
+    <p class="text-xs text-sec">No workflow source, commands or keys. This explicitly authorizes the displayed repository revision for execution.</p>
+    if data.Setup.Policy != nil {
+<input type="hidden" name="expected_policy_id" value={ data.Setup.Policy.Policy.ID }/>
+}
+    @hostedSetupButton("Approve repository policy")
+   </form></details>
+  }
+ </section>
+ <section class="space-y-4 rounded-card border border-line bg-surface p-5">
+  <h2 class="font-semibold">Customer runners</h2>
+  <p class="text-sm text-sec">A display name is a label, not host identity. Run init on the selected customer host; never copy another host's identity file. Only runners with access to this project appear here.</p>
+  <pre class="overflow-x-auto whitespace-pre-wrap break-all rounded-card bg-page p-3 text-xs">{ "detent hub runner init --hub-url HUB_URL\ndetent hub runner enroll --organization " + data.OrganizationID + " --display-name 'Customer host'" }</pre>
+  <p class="text-xs text-sec">Replace HUB_URL with this service's origin. Supply the one-time token locally through DETENT_RUNNER_ENROLLMENT_TOKEN. Retrying init/enroll with the same private identity file reuses that identity.</p>
+  if len(data.Setup.Runners) == 0 {
+<p role="status" class="text-sm">No matching runner: enroll a host with explicit project access.</p>
+}
+  <ul class="divide-y divide-line">
+   for _, entry := range data.Setup.Runners {
+    <li class="space-y-2 break-words py-3 text-sm">
+     <p class="font-medium">{ entry.Runner.DisplayName } · { entry.Runner.Hostname }</p>
+     <p class="break-all text-xs text-sec">{ entry.Runner.RunnerID } / { string(entry.Runner.MachineID) }</p>
+     <p>Tags: { strings.Join(entry.Runner.Tags, ", ") } · { entry.Runner.Health } · { entry.Runner.State }</p>
+     <p class="text-xs">Access: this project · operations: { strings.Join(entry.Runner.Operations, ", ") }</p>
+     if len(entry.Exclusions) == 0 {
+<p>Matches project requirements</p>
+}
+     for _, exclusion := range entry.Exclusions {
+<p class="text-xs text-sec">{ exclusion.Message }</p>
+}
+     if data.CanManageRunners {
+      <form method="post" class="space-y-2" data-setup-action="routing" data-runner={ entry.Runner.RunnerID } data-revision={ fmt.Sprint(entry.Runner.Revision) }>
+       <label for={ "tags-"+entry.Runner.RunnerID }>Authorized tags (comma separated)</label>
+       <input id={ "tags-"+entry.Runner.RunnerID } name="tags" value={ strings.Join(entry.Runner.Tags, ", ") } class="min-h-11 w-full rounded-card border border-line bg-page px-3"/>
+       @hostedSetupButton("Update authorized tags")
+      </form>
+     }
+    </li>
+   }
+  </ul>
+  if data.CanManageRunners {
+   <details><summary class="min-h-11 cursor-pointer py-3 text-sm">Enroll a runner on this project</summary>
+   <form method="post" class="space-y-3" data-setup-action="enroll">
+    @hostedSetupInput("setup-runner", "runner_id", "Runner ID from init on the selected host")
+    @hostedSetupInput("setup-machine", "machine_id", "Machine ID from the same host")
+    <p class="text-xs text-sec">Grants this project access for claims, lease renewal and events. Token expires in 15 minutes. Treat it as a temporary credential.</p>
+    @hostedSetupButton("Create one-time enrollment")
+   </form></details>
+  } else {
+
+<p class="text-xs text-sec">Ask an organization administrator to grant runner management separately under Organization → Members and invitations.</p>
+}
+ </section>
+ <section class="space-y-4 rounded-card border border-line bg-surface p-5">
+  <h2 class="font-semibold">Customer artifact storage</h2>
+  <p class="text-sm text-sec">Offline history needs a private S3-compatible bucket, durable catalog disk and a TLS artifact gateway running independently of execution runners. Keep storage keys in the gateway's local credential chain. The reviewed adapter verifies conditional writes, checksums and deletion.</p>
+  <pre class="overflow-x-auto whitespace-pre-wrap break-all rounded-card bg-page p-3 text-xs">{ "detent artifacts --artifact-config /etc/detent-artifacts/service.json verify-storage\ndetent artifacts --artifact-config /etc/detent-artifacts/service.json serve" }</pre>
+  <p class="text-xs text-sec">Follow docs/artifacts-deployment.md in your Detent checkout for the service configuration, dedicated publisher identity and project binding. With execution runners stopped, open a retained artifact through the gateway and verify its bytes. A binding below is configuration only; availability is checked when opening the artifact.</p>
+  if len(data.Setup.Artifacts) == 0 {
+<p role="status" class="text-sm">Missing artifact gateway: offline history is not configured.</p>
+}
+  if data.CanManage && data.CanWriteProject {
+   <details><summary class="min-h-11 cursor-pointer py-3 text-sm">Register an existing customer gateway</summary>
+   <form method="post" class="space-y-3" data-setup-action="binding">
+    @hostedSetupInput("setup-service", "service_id", "Service ID from the gateway configuration")
+    @hostedSetupInput("setup-origin", "origin", "Gateway HTTPS origin")
+    @hostedSetupInput("setup-publisher", "publisher_token_id", "Dedicated publisher token ID (never its secret)")
+    @hostedSetupButton("Register customer gateway")
+   </form></details>
+  }
+  for _, binding := range data.Setup.Artifacts {
+<p class="break-all text-sm">{ binding.ServiceID } · { binding.Origin } · { binding.Mode } (binding registered)</p>
+}
+ </section>
+ <section class="space-y-4 rounded-card border border-line bg-surface p-5">
+  <h2 class="font-semibold">Optional GitHub integration</h2>
+  <p class="break-words text-sm">{ data.IntegrationSummary }</p>
+  if !data.GitHubAvailable {
+<p class="text-sm">GitHub transport is not configured. Native issue creation remains available.</p>
+}
+  if data.CanManage && data.CanWriteProject && data.GitHubAvailable {
+   if data.GitHubRepository == "" {
+    <form method="post" class="space-y-3" data-setup-action="repository" data-revision={ data.IntegrationRevision }>
+     @hostedSetupInput("setup-github-repo", "repository", "Optional GitHub repository (owner/name)")
+     <p class="text-xs text-sec">Repository bindings are immutable. Attaching a repository does not import issues or enable projection.</p>
+     @hostedSetupButton("Attach GitHub repository")
+    </form>
+   } else {
+
+    <p class="text-sm">Repository: { data.GitHubRepository }</p>
+    <form method="post" class="space-y-3" data-setup-action="integration" data-revision={ data.IntegrationRevision }>
+     <label for="setup-intake" class="block text-sm">GitHub issue intake</label>
+     <select id="setup-intake" name="intake" class="min-h-11 w-full rounded-card border border-line bg-page px-3 text-sm"><option value="disabled" selected?={ data.GitHubIntake == "disabled" }>Disabled</option><option value="manual" selected?={ data.GitHubIntake == "manual" }>Manual import</option></select>
+     <label for="setup-projection" class="block text-sm">Native issue projection to GitHub</label>
+     <select id="setup-projection" name="projection" class="min-h-11 w-full rounded-card border border-line bg-page px-3 text-sm"><option value="disabled" selected?={ data.GitHubProjection == "disabled" }>Disabled</option><option value="summary" selected?={ data.GitHubProjection == "summary" }>Explicit summaries</option></select>
+     <label class="flex min-h-11 items-center gap-3 text-sm"><input type="checkbox" name="repository_enabled" checked?={ data.GitHubPR }/> Enable repository and PR integration</label>
+     @hostedSetupButton("Save GitHub choices")
+    </form>
+   }
+  }
+  <p class="text-sm text-sec">Native issues need no GitHub issue. Import, issue projection and repository/PR integration are separate, optional choices. Configure them explicitly through the project's integration API after reviewing supported profiles. No integration is enabled by saving setup progress.</p>
+ </section>
+ if data.CanWriteProject {
+ <section class="space-y-4 rounded-card border border-line bg-surface p-5">
+  <h2 class="font-semibold">Create your first native issue</h2>
+  <p class="text-sm text-sec">Create work now and resume setup later. A dispatchable state queues execution; the runner and approved repository policy still control whether it can start.</p>
+  <form method="post" class="space-y-3" data-setup-action="issue">
+   @hostedSetupInput("setup-issue-title", "title", "Title")
+   <label for="setup-issue-body" class="block text-sm">Description and acceptance criteria</label>
+   <textarea id="setup-issue-body" name="body" rows="4" class="w-full rounded-card border border-line bg-page p-3 text-sm"></textarea>
+   <label for="setup-issue-state" class="block text-sm">Initial state</label>
+   <select id="setup-issue-state" name="state" class="min-h-11 w-full rounded-card border border-line bg-page px-3 text-sm">
+    for _, state := range data.ProjectStates {
+<option value={ state.Name }>{ state.Name }</option>
+}
+   </select>
+   @hostedSetupButton("Create native issue")
+  </form>
+ </section>
+ }
+ </div>
+ <script src="/static/js/hosted-setup.js" defer></script>
+}

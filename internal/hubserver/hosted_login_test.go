@@ -2,6 +2,7 @@ package hubserver
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"net/http"
 	"net/http/httptest"
@@ -12,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/labstack/echo/v4"
 	"golang.org/x/oauth2"
 
 	"github.com/digitaldrywood/detent/internal/auth"
@@ -411,6 +413,44 @@ func TestHostedLoginOrganizationCreation(t *testing.T) {
 					t.Fatalf("local creator role = %q, error = %v", role, err)
 				}
 				_, _ = hostedLoginStart(t, s, false)
+			}
+		})
+	}
+}
+
+func TestHostedLoginCookieSecurity(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name, publicURL string
+		secure          bool
+		tls             bool
+	}{
+		{name: "hosted HTTPS", publicURL: "https://tenant.example.test", secure: true},
+		{name: "loopback HTTP", publicURL: "http://127.0.0.1:1234"},
+		{name: "loopback IPv6 HTTP", publicURL: "http://[::1]:1234"},
+		{name: "localhost HTTP", publicURL: "http://localhost:1234"},
+		{name: "loopback HTTP URL with TLS request", publicURL: "http://127.0.0.1:1234", secure: true, tls: true},
+		{name: "external HTTP fails secure", publicURL: "http://tenant.example.test", secure: true},
+		{name: "invalid URL fails secure", publicURL: "://invalid", secure: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			service := &Service{config: Config{Hosted: &HostedConfig{PublicURL: tt.publicURL}}}
+			for _, value := range []string{"session-fixture", ""} {
+				response := httptest.NewRecorder()
+				request := httptest.NewRequest(http.MethodGet, "/login", nil)
+				if tt.tls {
+					request.TLS = &tls.ConnectionState{}
+				}
+				c := echo.New().NewContext(request, response)
+				service.hostedSetCookie(c, hostedCookie, value, "/", time.Now().Add(time.Hour))
+				cookie := hostedLoginCookie(t, response, hostedCookie)
+				if cookie.Secure != tt.secure || !cookie.HttpOnly || cookie.SameSite != http.SameSiteLaxMode || cookie.Domain != "" || cookie.Path != "/" || cookie.Value != value {
+					t.Fatalf("cookie security = %#v", cookie)
+				}
+				if value == "" && cookie.MaxAge != -1 {
+					t.Fatal("clearing cookie retained the session")
+				}
 			}
 		})
 	}

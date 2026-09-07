@@ -28,7 +28,11 @@ func (s *Service) hostedSetCookie(c echo.Context, name, value, path string, expi
 	if value == "" {
 		maxAge = -1
 	}
-	c.SetCookie(&http.Cookie{Name: name, Value: value, Path: path, Expires: expires, MaxAge: maxAge, HttpOnly: true, Secure: strings.HasPrefix(s.config.Hosted.PublicURL, "https://"), SameSite: http.SameSiteLaxMode})
+	cookie := &http.Cookie{Name: name, Value: value, Path: path, Expires: expires, MaxAge: maxAge, HttpOnly: true, Secure: true, SameSite: http.SameSiteLaxMode}
+	if publicURL, err := url.Parse(s.config.Hosted.PublicURL); err == nil && publicURL.Scheme == "http" && listenerAddressLoopback(publicURL.Host) {
+		cookie.Secure = c.Request().TLS != nil
+	}
+	c.SetCookie(cookie)
 }
 
 func (s *Service) newHostedTransaction(c echo.Context, organization, actor, session string) (hostedTransaction, error) {

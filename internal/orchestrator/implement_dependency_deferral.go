@@ -6,10 +6,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/digitaldrywood/detent/internal/store"
-
 	"github.com/digitaldrywood/detent/internal/connector"
 	runpkg "github.com/digitaldrywood/detent/internal/runner"
+	"github.com/digitaldrywood/detent/internal/store"
 	"github.com/digitaldrywood/detent/internal/workpad"
 )
 
@@ -18,6 +17,7 @@ type deferredCandidate struct {
 	record             implementProgressRecord
 	blocked            bool
 	historyUnavailable bool
+	detail             string
 }
 
 func (o *Orchestrator) evaluateImplementDependencyDeferral(
@@ -100,7 +100,7 @@ func (o *Orchestrator) filterImplementDependencyDeferrals(
 			if o.logger != nil {
 				o.logger.Warn("implement dependency deferral history lookup failed", "issue_id", issue.ID, "identifier", issue.Identifier, "error", err)
 			}
-			candidates[issue.ID] = &deferredCandidate{issue: issue, blocked: true, historyUnavailable: true}
+			candidates[issue.ID] = &deferredCandidate{issue: issue, blocked: true, historyUnavailable: true, detail: "dependency deferral history unavailable: " + err.Error()}
 			continue
 		}
 		if len(attempts) == 0 {
@@ -110,7 +110,7 @@ func (o *Orchestrator) filterImplementDependencyDeferrals(
 		if !ok || !record.DependencyDeferral || record.Reason != implementDependencyDeferralReason || len(record.DependencyBlockers) == 0 {
 			continue
 		}
-		candidate := &deferredCandidate{issue: issue, record: record, blocked: true}
+		candidate := &deferredCandidate{issue: issue, record: record, blocked: true, detail: "dependency resolution unavailable: no blocker identifiers"}
 		candidates[issue.ID] = candidate
 		for _, blocker := range record.DependencyBlockers {
 			identifier := strings.TrimSpace(blocker.Identifier)
@@ -129,17 +129,17 @@ func (o *Orchestrator) filterImplementDependencyDeferrals(
 		return issues
 	}
 	if len(identifiers) == 0 {
-		return removeDeferredImplementCandidates(issues, candidates)
+		return o.removeDeferredImplementCandidates(ctx, issues, candidates)
 	}
 	resolver, ok := o.connector.(connector.IssueReferenceResolver)
 	if !ok {
-		o.warnImplementDependencyDeferralRefresh(candidates, errors.New("issue reference resolver unavailable"))
-		return removeDeferredImplementCandidates(issues, candidates)
+		o.markImplementDependencyDeferralRefreshUnavailable(candidates, errors.New("issue reference resolver unavailable"))
+		return o.removeDeferredImplementCandidates(ctx, issues, candidates)
 	}
 	resolved, err := resolver.FetchIssueStatesByIdentifiers(ctx, identifiers)
 	if err != nil {
-		o.warnImplementDependencyDeferralRefresh(candidates, err)
-		return removeDeferredImplementCandidates(issues, candidates)
+		o.markImplementDependencyDeferralRefreshUnavailable(candidates, err)
+		return o.removeDeferredImplementCandidates(ctx, issues, candidates)
 	}
 	byIdentifier := make(map[string]connector.Issue, len(resolved))
 	for _, issue := range resolved {
@@ -151,24 +151,28 @@ func (o *Orchestrator) filterImplementDependencyDeferrals(
 		if candidate.historyUnavailable {
 			continue
 		}
-		candidate.blocked = false
+		var details []string
 		for _, blocker := range candidate.record.DependencyBlockers {
 			resolvedIssue, found := byIdentifier[normalizedIssueIdentifier(blocker.Identifier)]
-			if !found || !implementDependencyTerminal(resolvedIssue, o.cfg.TerminalStates) {
-				candidate.blocked = true
-				break
+			if !found {
+				label := strings.TrimSpace(blocker.Identifier)
+				if label == "" {
+					label = "unknown dependency"
+				}
+				details = append(details, "dependency resolution unavailable: missing blocker result for "+label)
+				continue
 			}
-		}
-		var humanRefs []connector.BlockedRef
-		for _, blocker := range candidate.record.DependencyBlockers {
-			resolvedIssue := byIdentifier[normalizedIssueIdentifier(blocker.Identifier)]
+			if implementDependencyTerminal(resolvedIssue, o.cfg.TerminalStates) {
+				continue
+			}
 			if connector.HumanOwned(resolvedIssue) {
-				humanRefs = append(humanRefs, connector.BlockedRef{Identifier: blocker.Identifier, HumanOwned: true, HumanCompletionReady: connector.HumanPrerequisiteReady(resolvedIssue)})
+				details = append(details, humanDependencyWaitReason([]connector.BlockedRef{{Identifier: blocker.Identifier, HumanOwned: true}}))
+			} else {
+				details = append(details, "waiting on dependency "+blocker.Identifier)
 			}
 		}
-		if reason := humanDependencyWaitReason(humanRefs); reason != "" {
-			o.recordSchedulerDecision(ctx, nil, time.Now(), dispatchPlanDecision{Issue: candidate.issue, SkipDetail: reason}, string(store.SchedulerDecisionResultSkipped), dispatchSkipBlockedByDependency)
-		}
+		candidate.blocked = len(details) > 0
+		candidate.detail = strings.Join(details, "; ")
 		if o.logger != nil {
 			o.logger.Debug(
 				"implement dependency deferral evaluated",
@@ -179,10 +183,11 @@ func (o *Orchestrator) filterImplementDependencyDeferrals(
 			)
 		}
 	}
-	return removeDeferredImplementCandidates(issues, candidates)
+	return o.removeDeferredImplementCandidates(ctx, issues, candidates)
 }
 
-func removeDeferredImplementCandidates(
+func (o *Orchestrator) removeDeferredImplementCandidates(
+	ctx context.Context,
 	issues []connector.Issue,
 	candidates map[string]*deferredCandidate,
 ) []connector.Issue {
@@ -190,6 +195,7 @@ func removeDeferredImplementCandidates(
 	for _, issue := range issues {
 		candidate, ok := candidates[issue.ID]
 		if ok && candidate.blocked {
+			o.recordSchedulerDecision(ctx, nil, time.Now(), dispatchPlanDecision{Issue: issue, SkipDetail: candidate.detail}, string(store.SchedulerDecisionResultSkipped), dispatchSkipBlockedByDependency)
 			continue
 		}
 		filtered = append(filtered, issue)
@@ -251,11 +257,15 @@ func (o *Orchestrator) warnRejectedImplementDependencyRefs(issue connector.Issue
 	o.logger.Warn("implement dependency deferral rejected", attrs...)
 }
 
-func (o *Orchestrator) warnImplementDependencyDeferralRefresh(candidates map[string]*deferredCandidate, err error) {
-	if o == nil || o.logger == nil {
-		return
-	}
+func (o *Orchestrator) markImplementDependencyDeferralRefreshUnavailable(candidates map[string]*deferredCandidate, err error) {
 	for _, candidate := range candidates {
+		if candidate.historyUnavailable {
+			continue
+		}
+		candidate.detail = "dependency resolution unavailable for " + implementDependencyBlockerLabels(candidate.record.DependencyBlockers) + ": " + err.Error()
+		if o.logger == nil {
+			continue
+		}
 		o.logger.Warn(
 			"implement dependency deferral refresh failed",
 			"issue_id", candidate.issue.ID,

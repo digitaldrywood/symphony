@@ -3147,10 +3147,11 @@ func TestFilterImplementDependencyDeferralsUsesDurableAttemptHistory(t *testing.
 		blockerState  string
 		historyErr    error
 		wantCandidate bool
+		wantDetail    string
 	}{
-		{name: "unresolved blocker suppresses worker after restart", blockerState: "Todo"},
+		{name: "unresolved blocker suppresses worker after restart", blockerState: "Todo", wantDetail: "waiting on dependency digitaldrywood/detent#134"},
 		{name: "terminal blocker releases worker after restart", blockerState: "Done", wantCandidate: true},
-		{name: "history lookup failure suppresses worker", blockerState: "Todo", historyErr: errors.New("attempt store unavailable")},
+		{name: "history lookup failure suppresses worker", blockerState: "Todo", historyErr: errors.New("attempt store unavailable"), wantDetail: "dependency deferral history unavailable: attempt store unavailable"},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -3175,6 +3176,14 @@ func TestFilterImplementDependencyDeferralsUsesDurableAttemptHistory(t *testing.
 			filtered := orch.filterImplementDependencyDeferrals(t.Context(), []connector.Issue{issue})
 			if got := len(filtered) == 1; got != tt.wantCandidate {
 				t.Fatalf("candidate retained = %v, want %v", got, tt.wantCandidate)
+			}
+			decisions := orch.workAttempts.(*recordingWorkAttemptStore).decisions
+			if tt.wantCandidate {
+				if len(decisions) != 0 {
+					t.Fatalf("released candidate has refusals: %+v", decisions)
+				}
+			} else if len(decisions) != 1 || decisions[0].Reason != dispatchSkipBlockedByDependency || decisions[0].WaitReason != tt.wantDetail {
+				t.Fatalf("dependency refusal = %+v, want detail %q", decisions, tt.wantDetail)
 			}
 		})
 	}

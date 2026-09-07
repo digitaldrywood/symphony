@@ -71,13 +71,7 @@ func openCatalog(ctx context.Context, raw string) (*catalog, error) {
 			return nil, errors.Join(err, lock.Close())
 		}
 	}
-	u := url.URL{Scheme: "file", Path: filepath.ToSlash(path)}
-	q := u.Query()
-	for _, pragma := range []string{"busy_timeout(5000)", "foreign_keys(1)", "locking_mode(EXCLUSIVE)", "synchronous(FULL)"} {
-		q.Add("_pragma", pragma)
-	}
-	u.RawQuery = q.Encode()
-	db, err := sql.Open("sqlite", u.String())
+	db, err := sql.Open("sqlite", catalogDSN(path))
 	if err != nil {
 		return nil, errors.Join(err, lock.Close())
 	}
@@ -88,6 +82,20 @@ func openCatalog(ctx context.Context, raw string) (*catalog, error) {
 		return nil, errors.Join(err, c.Close())
 	}
 	return c, nil
+}
+
+func catalogDSN(path string) string {
+	databasePath := filepath.ToSlash(path)
+	if len(databasePath) >= 3 && databasePath[1] == ':' && databasePath[2] == '/' && (databasePath[0] >= 'A' && databasePath[0] <= 'Z' || databasePath[0] >= 'a' && databasePath[0] <= 'z') {
+		databasePath = "/" + databasePath
+	}
+	u := url.URL{Scheme: "file", Path: databasePath}
+	q := u.Query()
+	for _, pragma := range []string{"busy_timeout(5000)", "foreign_keys(1)", "locking_mode(EXCLUSIVE)", "synchronous(FULL)"} {
+		q.Add("_pragma", pragma)
+	}
+	u.RawQuery = q.Encode()
+	return u.String()
 }
 
 func (c *catalog) initialize(ctx context.Context) error {

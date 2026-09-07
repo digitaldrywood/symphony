@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -600,6 +601,32 @@ func TestReservationCustodyBinding(t *testing.T) {
 			s.config.ServiceID = NewID("service")
 			if _, err := s.Upload(t.Context(), upload.ArtifactID); !errors.Is(err, ErrDenied) {
 				t.Fatal("existing catalog silently changed service custody", err)
+			}
+		})
+	}
+}
+
+func TestCatalogDSNPaths(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name, path, want string
+	}{
+		{"Unix", "/var/lib/artifacts/catalog.db", "file:///var/lib/artifacts/catalog.db?"},
+		{"Windows uppercase", "C:/artifacts/catalog.db", "file:///C:/artifacts/catalog.db?"},
+		{"Windows lowercase", "d:/artifacts/catalog.db", "file:///d:/artifacts/catalog.db?"},
+		{"special characters", "C:/artifact data/catalog#1.db", "file:///C:/artifact%20data/catalog%231.db?"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			dsn := catalogDSN(test.path)
+			if !strings.HasPrefix(dsn, test.want) {
+				t.Fatalf("catalogDSN() = %q, want prefix %q", dsn, test.want)
+			}
+			parsed, err := url.Parse(dsn)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if parsed.Host != "" || len(parsed.Query()["_pragma"]) != 4 {
+				t.Fatal("catalog path became an authority or lost its pragmas", dsn)
 			}
 		})
 	}

@@ -7,7 +7,6 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
-	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -687,7 +686,7 @@ func TestHostedLoginSessionExpiryAndRevocation(t *testing.T) {
 
 func hostedLoginConfig(t *testing.T, provider *hostedLoginProvider, allocated bool) Config {
 	t.Helper()
-	cfg := Config{DatabasePath: filepath.Join(t.TempDir(), "hosted-login.db"), Hosted: &HostedConfig{
+	cfg := Config{DatabasePath: hostedTestDatabasePath(t), Hosted: &HostedConfig{
 		OrganizationID: "org_local_login", BootstrapSubject: "user_customer", PublicURL: "https://login.example.test", Provider: provider,
 		StaffEmails: []string{"staff@example.test", "support@example.test"}, SupportActors: []string{"support@example.test"},
 		Directory: []HostedDestination{{OrganizationID: "org_destination", WorkOSOrganizationID: "org_provider_destination", PublicURL: "https://destination.example.test"}},

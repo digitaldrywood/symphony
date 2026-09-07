@@ -12,6 +12,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
 	"path/filepath"
 	"strings"
 	"sync"
@@ -177,11 +178,86 @@ type hostedSecurityFixture struct {
 	base     string
 }
 
+var hostedMigratedDatabase struct {
+	once     sync.Once
+	contents []byte
+	err      error
+}
+
+func hostedTestDatabasePath(t *testing.T) string {
+	t.Helper()
+	hostedMigratedDatabase.once.Do(func() {
+		path := filepath.Join(t.TempDir(), "schema.db")
+		db, err := openDatabase(t.Context(), Config{DatabasePath: path, Logger: discardLogger()}.normalized())
+		if err != nil {
+			hostedMigratedDatabase.err = err
+			return
+		}
+		if err := db.Close(); err != nil {
+			hostedMigratedDatabase.err = err
+			return
+		}
+		hostedMigratedDatabase.contents, hostedMigratedDatabase.err = os.ReadFile(path)
+	})
+	if hostedMigratedDatabase.err != nil {
+		t.Fatalf("build hosted schema fixture: %v", hostedMigratedDatabase.err)
+	}
+	path := filepath.Join(t.TempDir(), "hosted.db")
+	if err := os.WriteFile(path, hostedMigratedDatabase.contents, 0o600); err != nil {
+		t.Fatalf("write hosted schema fixture: %v", err)
+	}
+	return path
+}
+
+func TestHostedSchemaFixtureTenantIsolation(t *testing.T) {
+	t.Parallel()
+	for _, organization := range []string{"org_first", "org_second", "org_third"} {
+		t.Run(organization, func(t *testing.T) {
+			t.Parallel()
+			service := openTestService(t, Config{
+				DatabasePath: hostedTestDatabasePath(t),
+				Hosted: &HostedConfig{
+					OrganizationID:       organization,
+					WorkOSOrganizationID: "provider_" + organization,
+					PublicURL:            "https://" + organization + ".example.test",
+					Provider:             newHostedSecurityProvider(),
+				},
+			})
+			if service.database.schemaVersion != supportedSchemaVersion {
+				t.Fatalf("schema version = %d, want %d", service.database.schemaVersion, supportedSchemaVersion)
+			}
+			var boundOrganization string
+			if err := service.database.db.QueryRowContext(t.Context(), "SELECT organization_id FROM hosted_tenant").Scan(&boundOrganization); err != nil {
+				t.Fatal(err)
+			}
+			if boundOrganization != organization {
+				t.Fatalf("tenant binding = %q, want %q", boundOrganization, organization)
+			}
+			var sessions int
+			if err := service.database.db.QueryRowContext(t.Context(), "SELECT count(*) FROM hosted_sessions").Scan(&sessions); err != nil {
+				t.Fatal(err)
+			}
+			if sessions != 0 {
+				t.Fatalf("new fixture contains %d sessions", sessions)
+			}
+			if _, err := service.database.db.ExecContext(t.Context(), "INSERT INTO hosted_sessions (token_hash,email,identity_json,expires_at,created_at) VALUES ('same-token','fixture@example.test','{}',?,?)", testTimestamp, testTimestamp); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := service.database.db.ExecContext(t.Context(), "CREATE TABLE fixture_probe (id INTEGER PRIMARY KEY)"); err != nil {
+				t.Fatalf("fixture schema was shared: %v", err)
+			}
+			if err := service.database.health(t.Context()); err != nil {
+				t.Fatal(err)
+			}
+		})
+	}
+}
+
 func newHostedSecurityFixture(t *testing.T) hostedSecurityFixture {
 	t.Helper()
 	provider := newHostedSecurityProvider()
 	service := openTestService(t, Config{
-		DatabasePath:   filepath.Join(t.TempDir(), "hosted.db"),
+		DatabasePath:   hostedTestDatabasePath(t),
 		GitHubDisabled: true,
 		Hosted: &HostedConfig{
 			OrganizationID:       "org_security",

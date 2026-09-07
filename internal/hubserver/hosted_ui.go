@@ -73,11 +73,11 @@ func (s *Service) hostedHome(c echo.Context) error {
 		return c.Redirect(http.StatusSeeOther, "/login")
 	}
 	data := templates.HostedPageData{Mode: "onboarding", Title: "Your organization", Email: session.Email}
-	providerID, err := s.hostedProviderOrganization(c.Request().Context())
-	if err != nil {
+	var members int
+	if err := s.database.db.QueryRowContext(c.Request().Context(), "SELECT count(*) FROM hosted_members").Scan(&members); err != nil {
 		return s.hostedError(c, http.StatusServiceUnavailable, "Organization information is temporarily unavailable")
 	}
-	data.CanCreate = providerID == "" && session.Identity.Subject == s.config.Hosted.BootstrapSubject && session.Identity.SupportActor == "" && !hostedEmailListed(s.config.Hosted.StaffEmails, session.Email)
+	data.CanCreate = members == 0 && session.Identity.Subject == s.config.Hosted.BootstrapSubject && session.Identity.SupportActor == "" && !hostedEmailListed(s.config.Hosted.StaffEmails, session.Email)
 	data.CanSupport = session.Identity.SupportActor == "" && hostedEmailListed(s.config.Hosted.SupportActors, session.Email)
 	if hostedEmailListed(s.config.Hosted.StaffEmails, session.Email) && session.Identity.SupportActor == "" {
 		data.Mode = "organization"

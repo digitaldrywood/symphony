@@ -244,10 +244,7 @@ func (s *Service) createHostedOrganization(c echo.Context) error {
 	if err != nil {
 		return s.hostedError(c, http.StatusServiceUnavailable, "Organization membership could not be confirmed; retry setup")
 	}
-	if err := s.addHostedMember(c.Request().Context(), auth.Identity{Subject: session.Identity.Subject, Email: session.Email, EmailVerified: true}, membership); err != nil {
-		return s.hostedError(c, http.StatusServiceUnavailable, "Organization membership is temporarily unavailable")
-	}
-	if _, err := s.database.db.ExecContext(c.Request().Context(), "UPDATE organizations SET name = ? WHERE id = ?", name, s.config.Hosted.OrganizationID); err != nil {
+	if err := s.storeHostedMember(c.Request().Context(), auth.Identity{Subject: session.Identity.Subject, Email: session.Email, EmailVerified: true}, membership, name); err != nil {
 		return s.hostedError(c, http.StatusServiceUnavailable, "Organization setup is temporarily unavailable")
 	}
 	return c.Redirect(http.StatusSeeOther, "/auth/oidc/start")

@@ -416,6 +416,63 @@ func TestHostedLoginOrganizationCreation(t *testing.T) {
 	}
 }
 
+func TestHostedLoginOrganizationSetupRecovery(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name             string
+		membershipFailed bool
+	}{
+		{name: "provider membership failed", membershipFailed: true},
+		{name: "local organization name failed"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			provider := newHostedLoginProvider()
+			service := openTestService(t, hostedLoginConfig(t, provider, false))
+			identity := hostedLoginIdentity("user_customer", "customer@example.test", "")
+			token := hostedLoginSession(t, service, provider, identity)
+			if tt.membershipFailed {
+				provider.createMembershipErr = auth.ErrHostedIdentity
+			} else {
+				hostedLoginExec(t, service, "CREATE TRIGGER reject_hosted_name BEFORE UPDATE OF name ON organizations BEGIN SELECT RAISE(ABORT, 'fixture'); END")
+			}
+			form := url.Values{"name": {"Recovered organization"}}
+			response := hostedLoginRequest(service, http.MethodPost, "/organization/create", token, form, true)
+			if response.Code != http.StatusServiceUnavailable {
+				t.Fatalf("interrupted setup status = %d", response.Code)
+			}
+			providerID, err := service.hostedProviderOrganization(t.Context())
+			if err != nil || providerID != provider.organization.ID {
+				t.Fatalf("interrupted provider binding = %q, error = %v", providerID, err)
+			}
+			var members int
+			if err := service.database.db.QueryRowContext(t.Context(), "SELECT count(*) FROM hosted_members").Scan(&members); err != nil || members != 0 {
+				t.Fatalf("incomplete local setup persisted members = %d, error = %v", members, err)
+			}
+			page := hostedLoginRequest(service, http.MethodGet, "/organization", token, nil, false)
+			if page.Code != http.StatusOK || !strings.Contains(page.Body.String(), `action="/organization/create"`) {
+				t.Fatal("interrupted setup lost the organization creation form")
+			}
+			provider.createMembershipErr = nil
+			if !tt.membershipFailed {
+				hostedLoginExec(t, service, "DROP TRIGGER reject_hosted_name")
+			}
+			response = hostedLoginRequest(service, http.MethodPost, "/organization/create", token, form, true)
+			if response.Code != http.StatusSeeOther {
+				t.Fatalf("recovered setup status = %d: %s", response.Code, response.Body.String())
+			}
+			var name string
+			if err := service.database.db.QueryRowContext(t.Context(), "SELECT name FROM organizations WHERE id = ?", service.config.Hosted.OrganizationID).Scan(&name); err != nil || name != "Recovered organization" {
+				t.Fatalf("recovered organization name = %q, error = %v", name, err)
+			}
+			page = hostedLoginRequest(service, http.MethodGet, "/organization", token, nil, false)
+			if page.Code != http.StatusOK || strings.Contains(page.Body.String(), `action="/organization/create"`) {
+				t.Fatal("completed setup still offers organization creation")
+			}
+		})
+	}
+}
+
 func TestHostedLoginBootstrapMembershipLifecycle(t *testing.T) {
 	t.Parallel()
 	for _, tt := range []struct {
@@ -708,6 +765,7 @@ type hostedLoginProvider struct {
 	revoked             []string
 	createdOrganization string
 	createdRole         string
+	createMembershipErr error
 	lastInvitationToken string
 }
 
@@ -764,7 +822,7 @@ func (p *hostedLoginProvider) CreateOrganization(_ context.Context, external, _ 
 
 func (p *hostedLoginProvider) CreateMembership(_ context.Context, user, organization, role string) (auth.Membership, error) {
 	p.createdRole = role
-	return hostedLoginMembership(user, organization, role), nil
+	return hostedLoginMembership(user, organization, role), p.createMembershipErr
 }
 
 func (*hostedLoginProvider) SetMembershipRole(context.Context, string, string) error {

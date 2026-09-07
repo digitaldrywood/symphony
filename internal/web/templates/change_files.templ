@@ -1,0 +1,75 @@
+package templates
+
+import "strconv"
+
+templ ChangeFilesReview(data ChangePageData) {
+	if version, ok := data.Version(); ok {
+		<section class="review-surface flex min-w-0 flex-col gap-3 rounded-card border border-line bg-surface p-4" aria-label="Files and review" data-review-config={ data.ReviewConfig() }>
+			<link rel="stylesheet" href="/static/css/review.css"/>
+			<header class="flex flex-wrap items-center justify-between gap-2">
+				<h2 class="text-sm font-semibold text-text">Files / Review · Version { strconv.FormatInt(version.Number,10) }</h2>
+				<nav aria-label="Review version" class="flex flex-wrap gap-2">
+					for _, candidate := range data.Detail.Versions {
+						<a class="rounded-chip border border-line px-2 py-1 text-xs text-accent" href={ changeVersionPath(data,candidate) } aria-current={ changeVersionCurrent(data,candidate.ID) }>{ "v"+strconv.FormatInt(candidate.Number,10) }
+							if candidate.ID == data.Detail.Change.CurrentVersion {
+								<span> · current</span>
+							}
+						</a>
+					}
+				</nav>
+			</header>
+			<p class="break-all font-mono text-2xs text-sec">Base { version.BaseSHA } → Head { version.HeadSHA }</p>
+			<p class="text-xs text-sec" data-review-current>
+				if version.ID == data.Detail.Change.CurrentVersion {
+					<span>Current version.</span>
+				} else {
+					<span>Older version. Approval requires the current version.</span>
+				}
+			</p>
+			<p class="text-xs text-sec">Current gates: native { changeStatusLabel(data.Detail.Summary.NativeReview) } · checks { changeStatusLabel(data.Detail.Summary.Checks) } · external { changeStatusLabel(data.Detail.Summary.ExternalReview) }. Native approval preserves repository policy and GitHub required reviews.</p>
+			<form class="flex min-w-0 flex-col gap-3" data-review-form method="post" action={ ChangePath(data.ProjectID,data.IssueID,data.ChangeID)+"/versions/"+version.ID+"/review" }>
+				<input type="hidden" name="form_token" value={ data.ArtifactFormToken }/>
+				<div class="flex flex-wrap items-end gap-3">
+					<label class="flex min-w-0 flex-1 flex-col gap-1 text-xs text-sec">Project access token
+						<input type="password" name="member_token" required maxlength="4096" autocomplete="off" class="min-w-0 rounded-chip border border-line bg-elev px-2 py-1 text-text"/>
+					</label>
+					<label class="flex min-w-0 flex-1 flex-col gap-1 text-xs text-sec">Immutable bundle
+						<select name="bundle" class="min-w-0 rounded-chip border border-line bg-elev px-2 py-1 text-text">
+							for index, ref := range data.ReviewBundles() {
+								<option value={ strconv.Itoa(index) }>{ "Bundle "+strconv.Itoa(index+1)+" · "+ref.State+" · "+ref.Availability }</option>
+							}
+						</select>
+					</label>
+					<button type="submit" name="action" value="load" class="rounded-chip border border-line px-3 py-1 text-xs text-accent" disabled?={ len(data.ReviewBundles())==0 }>Load files</button>
+				</div>
+				if len(data.ReviewBundles()) == 0 {
+					<p class="text-xs text-sec">No complete diff bundle is pinned to this version. Local, partial, or unbound artifacts cannot be reviewed here.</p>
+				}
+				if data.ArtifactError != "" {
+					<p class="text-xs text-sec">{ data.ArtifactError }</p>
+				}
+				<p role="status" aria-live="polite" class="text-xs text-sec" data-review-status>Load and verify the selected bundle to review files. Uploaded content remains available with execution runners offline.</p>
+				<div class="review-toolbar flex flex-wrap items-center gap-3 text-xs text-sec">
+					<label>Diff layout <select name="layout" class="rounded-chip border border-line bg-elev px-2 py-1 text-text"><option value="line-by-line">Unified</option><option value="side-by-side">Split</option></select></label>
+					<label class="flex items-center gap-2"><input type="checkbox" data-review-viewed disabled/>Viewed this version</label>
+					<span data-review-count></span>
+				</div>
+				<div class="review-files">
+					<nav aria-label="Changed files" data-review-files></nav>
+					<div data-review-diff tabindex="0" role="region" aria-label="Selected file diff"></div>
+				</div>
+				<label class="flex flex-col gap-1 text-xs text-sec">Change discussion or review message
+					<textarea name="body" maxlength="65536" rows="3" class="min-w-0 rounded-chip border border-line bg-elev p-2 text-text"></textarea>
+				</label>
+				<div class="flex flex-wrap gap-2 text-xs">
+					<button type="submit" name="action" value="discuss" class="rounded-chip border border-line px-3 py-1 text-accent">Post discussion</button>
+					<button type="submit" name="action" value="changes_requested" data-review-decision disabled class="rounded-chip border border-line px-3 py-1 text-accent">Request changes</button>
+					<button type="submit" name="action" value="approved" data-review-decision disabled class="rounded-chip border border-line px-3 py-1 text-accent">Approve version</button>
+					<a href={ data.Path() } class="px-2 py-1 text-accent">Refresh history and gates</a>
+				</div>
+				<p class="text-2xs text-sec">Changed files and captured context only. Repository browsing, relocated inline threads, suggested edits, and conflict editing are separate follow-ups. Access credentials remain only in this page.</p>
+			</form>
+			<script src="/static/js/review.js" defer></script>
+		</section>
+	}
+}

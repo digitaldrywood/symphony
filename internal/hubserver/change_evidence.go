@@ -34,8 +34,17 @@ func (s *Service) reviewChange(c echo.Context) error {
 		if err != nil {
 			return nil, err
 		}
-		if _, err := readChangeVersion(ctx, tx, change.ID, c.Param("version")); err != nil {
+		version, err := readChangeVersion(ctx, tx, change.ID, c.Param("version"))
+		if err != nil {
 			return nil, err
+		}
+		if request.Decision == "approved" && change.CurrentVersion != version.ID || request.ExpectedVersionID != "" && (request.ExpectedVersionID != version.ID || change.CurrentVersion != version.ID) {
+			return nil, nativeConflict(change.Revision)
+		}
+		if request.Bundle != nil {
+			if err := validateReviewBundle(ctx, tx, scope, change, version, *request.Bundle, now); err != nil {
+				return nil, err
+			}
 		}
 		if !slices.Contains([]string{"approved", "changes_requested", "commented"}, request.Decision) || len(request.Body) > 64<<10 {
 			return nil, nativeInvalid("Review decision is invalid or body exceeds 64 KiB")

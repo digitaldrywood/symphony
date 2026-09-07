@@ -95,8 +95,13 @@ records base, head, merge base, context lines, `file_context: changed_files`, an
 `working_tree: false`. The base side is the merge-base tree, including when base
 and head have diverged. Unchanged files are not present: the bundle supports a
 changed-file viewer, not reconstruction of a repository. No GitHub API or live
-workspace is required to read it. Binary files, symlinks, submodules, invalid UTF-8,
-unsafe paths, and non-SHA-1 repositories report unsupported/invalid capture.
+workspace is required to read it. Binary changes retain a textual Git binary marker
+and omit binary source bodies. Rename detection uses a 1,000-candidate exhaustive
+search ceiling. Symlinks, submodules, invalid UTF-8 patches, unsafe paths, and
+non-SHA-1 repositories report unsupported/invalid capture.
+
+The [native Files / Review surface](native-review.md) verifies pinned manifests
+and supports bounded diffs, version-bound decisions, and opaque viewed-file state.
 
 Native execution records its initial HEAD, journals log deltas privately, freezes
 64 KiB UTF-8 chunk boundaries before upload, and replays identical chunks after

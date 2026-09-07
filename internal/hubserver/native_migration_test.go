@@ -3,13 +3,108 @@ package hubserver
 import (
 	"database/sql"
 	"fmt"
+	"io/fs"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"testing"
 	"testing/fstest"
 
 	"github.com/pressly/goose/v3"
 )
+
+func TestViewedFilesMigrationPreservesExistingData(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name           string
+		version        int64
+		hostedSessions string
+	}{
+		{"artifacts", 16, "0"},
+		{"hosted identity", 17, "1"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			path := filepath.Join(t.TempDir(), "hub.db")
+			db, err := sql.Open("sqlite", path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() {
+				if err := db.Close(); err != nil {
+					t.Error(err)
+				}
+			})
+			if _, err := db.ExecContext(t.Context(), fmt.Sprintf("PRAGMA application_id = %d", hubApplicationID)); err != nil {
+				t.Fatal(err)
+			}
+			migrations, err := fs.Sub(migrationFiles, "migrations")
+			if err != nil {
+				t.Fatal(err)
+			}
+			provider, err := goose.NewProvider(goose.DialectSQLite3, db, migrations, goose.WithDisableGlobalRegistry(true), goose.WithTableName(hubSchemaTable), goose.WithSlog(discardLogger()))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := provider.UpTo(t.Context(), 7); err != nil {
+				t.Fatal(err)
+			}
+			_, issueID := seedProjection(t, db)
+			if _, err := provider.UpTo(t.Context(), test.version); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := db.ExecContext(t.Context(), `INSERT INTO change_requests (id, organization_id, project_id, work_item_id, record_json)
+				SELECT 'existing-change', organization_id, project_id, native_id, '{}' FROM issues WHERE id = ?`, issueID); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := db.ExecContext(t.Context(), `INSERT INTO change_versions (id, change_id, number, record_json) VALUES ('existing-version', 'existing-change', 1, '{"head_sha":"preserved"}')`); err != nil {
+				t.Fatal(err)
+			}
+			if test.version == 17 {
+				if _, err := db.ExecContext(t.Context(), `INSERT INTO hosted_sessions (token_hash, email, identity_json, expires_at, created_at) VALUES ('existing-session', 'reviewer@example.test', '{}', ?, ?)`, testTimestamp, testTimestamp); err != nil {
+					t.Fatal(err)
+				}
+			}
+			var viewedTables int
+			if err := db.QueryRowContext(t.Context(), "SELECT count(*) FROM sqlite_schema WHERE name = 'change_viewed_files'").Scan(&viewedTables); err != nil || viewedTables != 0 {
+				t.Fatalf("pre-upgrade viewed tables = %d, error = %v", viewedTables, err)
+			}
+			if err := db.Close(); err != nil {
+				t.Fatal(err)
+			}
+			cfg := Config{DatabasePath: path}
+			service := openTestService(t, cfg)
+			if _, err := service.database.db.ExecContext(t.Context(), `INSERT INTO change_viewed_files (version_id, principal_id, manifest_sha256, file_sha256, viewed) VALUES ('existing-version', 'reviewer', ?, ?, 1)`, strings.Repeat("a", 64), strings.Repeat("b", 64)); err != nil {
+				t.Fatal(err)
+			}
+			if err := service.Close(); err != nil {
+				t.Fatal(err)
+			}
+			service = openTestService(t, cfg)
+			for _, check := range []struct{ name, query, want string }{
+				{"schema version", "SELECT max(version_id) FROM hub_schema_version WHERE is_applied = 1", strconv.FormatInt(supportedSchemaVersion, 10)},
+				{"identity migration", "SELECT count(*) FROM hub_schema_version WHERE version_id = 17 AND is_applied = 1", "1"},
+				{"viewed migration", "SELECT count(*) FROM hub_schema_version WHERE version_id = 18 AND is_applied = 1", "1"},
+				{"existing code version", "SELECT record_json FROM change_versions WHERE id = 'existing-version'", `{"head_sha":"preserved"}`},
+				{"viewed state", "SELECT viewed FROM change_viewed_files WHERE version_id = 'existing-version' AND principal_id = 'reviewer'", "1"},
+				{"hosted sessions", "SELECT count(*) FROM hosted_sessions WHERE token_hash = 'existing-session' AND email = 'reviewer@example.test'", test.hostedSessions},
+				{"foreign keys", "SELECT count(*) FROM pragma_foreign_key_check", "0"},
+				{"foreign key enforcement", "PRAGMA foreign_keys", "1"},
+				{"integrity", "PRAGMA integrity_check", "ok"},
+			} {
+				t.Run(check.name, func(t *testing.T) {
+					var got string
+					if err := service.database.db.QueryRowContext(t.Context(), check.query).Scan(&got); err != nil {
+						t.Fatal(err)
+					}
+					if got != check.want {
+						t.Fatalf("got %q, want %q", got, check.want)
+					}
+				})
+			}
+		})
+	}
+}
 
 func TestNativeMigrationPreservesCompatibilityIdentity(t *testing.T) {
 	t.Parallel()

@@ -65,6 +65,7 @@ func TestOpenCreatesHubSchemaAndConfiguresSQLite(t *testing.T) {
 		"change_requests",
 		"change_review_policies",
 		"change_versions",
+		"change_viewed_files",
 		"github_cutovers",
 		"github_import_records",
 		"github_imports",

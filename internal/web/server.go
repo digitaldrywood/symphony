@@ -467,6 +467,7 @@ func (s *Server) registerRoutes() {
 	s.echo.GET("/projects/:project_id/issues/:issue_ref/export", s.nativeIssueExport, s.nativeReadAccess)
 	s.echo.GET("/projects/:project_id/issues/:issue_ref", s.issueDetail, s.nativeReadAccess)
 	s.echo.GET("/projects/:project_id/issues/:issue_ref/changes/:change", s.changeDetail, s.nativeReadAccess)
+	s.echo.POST("/projects/:project_id/issues/:issue_ref/changes/:change/versions/:version/review", s.changeReviewAction, s.nativeFormAuth)
 	s.echo.GET("/projects/:project_id/issues/:issue_ref/runs/:attempt", s.nativeRunDetail, s.nativeReadAccess)
 	s.echo.POST("/projects/:project_id/issues/:issue_ref/artifacts/:artifact/access", s.artifactAccess, s.nativeFormAuth)
 	s.echo.GET("/projects/*", s.projectDashboard)

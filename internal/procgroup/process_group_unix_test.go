@@ -306,6 +306,80 @@ func TestTerminateTreeDisambiguatesEPERM(t *testing.T) {
 	}
 }
 
+func TestCleanupDisambiguatesEPERM(t *testing.T) {
+	inspectErr := errors.New("inspect failed")
+	tests := []struct {
+		name       string
+		members    []processGroupMember
+		inspectErr error
+		probeErr   error
+		wantProbe  bool
+		wantErr    error
+	}{
+		{name: "exited process group", probeErr: syscall.ESRCH, wantProbe: true},
+		{name: "zombie-only process group", members: []processGroupMember{{state: "Z"}}},
+		{name: "mixed live and zombie group", members: []processGroupMember{{state: "Z"}, {state: "S"}}, wantErr: syscall.EPERM},
+		{name: "live unauthorized process group", members: []processGroupMember{{state: "S"}}, wantErr: syscall.EPERM},
+		{name: "hidden live unauthorized process group", probeErr: syscall.EPERM, wantProbe: true, wantErr: syscall.EPERM},
+		{name: "empty snapshot with existing process group", wantProbe: true, wantErr: syscall.EPERM},
+		{name: "failed process group inspection", inspectErr: inspectErr, probeErr: syscall.ESRCH, wantErr: syscall.EPERM},
+		{name: "failed existence probe", probeErr: syscall.EIO, wantProbe: true, wantErr: syscall.EPERM},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			var signals []syscall.Signal
+			inspectCalls := 0
+			signal := func(pid int, signal syscall.Signal) error {
+				if pid != -123 {
+					t.Fatalf("signal target = %d, want -123", pid)
+				}
+				signals = append(signals, signal)
+				switch signal {
+				case syscall.SIGKILL:
+					return syscall.EPERM
+				case 0:
+					if inspectCalls != 1 {
+						t.Fatalf("probe before group inspection")
+					}
+					return tt.probeErr
+				default:
+					t.Fatalf("signal = %v, want %v or 0", signal, syscall.SIGKILL)
+					return nil
+				}
+			}
+			inspect := func(processGroupID int) ([]processGroupMember, error) {
+				inspectCalls++
+				if len(signals) != 1 || signals[0] != syscall.SIGKILL {
+					t.Fatalf("inspection signals = %v, want initial SIGKILL", signals)
+				}
+				if processGroupID != 123 {
+					t.Fatalf("inspect process group = %d, want 123", processGroupID)
+				}
+				return tt.members, tt.inspectErr
+			}
+
+			err := cleanup(123, signal, inspect)
+			if !errors.Is(err, tt.wantErr) {
+				t.Fatalf("cleanup() error = %v, want %v", err, tt.wantErr)
+			}
+			if inspectCalls != 1 {
+				t.Fatalf("inspection calls = %d, want 1", inspectCalls)
+			}
+			wantSignals := 1
+			if tt.wantProbe {
+				wantSignals++
+			}
+			if len(signals) != wantSignals {
+				t.Fatalf("signal calls = %v, want %d calls", signals, wantSignals)
+			}
+			if tt.wantProbe && signals[1] != 0 {
+				t.Fatalf("second signal = %v, want 0", signals[1])
+			}
+		})
+	}
+}
+
 func TestCleanup(t *testing.T) {
 	tests := []struct {
 		name string

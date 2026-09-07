@@ -171,6 +171,67 @@ func waitForProcessExit(t *testing.T, pid int) {
 	}
 }
 
+func TestWaitAndCleanupPreservesFailures(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		exitCode   int
+		cleanupErr error
+	}{
+		{name: "successful exit and cleanup"},
+		{name: "successful exit with cleanup failure", cleanupErr: syscall.EPERM},
+		{name: "failed exit", exitCode: 9},
+		{name: "failed exit and cleanup", exitCode: 9, cleanupErr: syscall.EPERM},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			cmd := exec.CommandContext(t.Context(), "sh", "-c", "exit "+strconv.Itoa(tt.exitCode))
+			if err := cmd.Start(); err != nil {
+				t.Fatalf("Start() error = %v", err)
+			}
+			cleanupCalls := 0
+			waitErr := waitAndCleanupWith(cmd, cmd.Process.Pid, func(groupID int) error {
+				cleanupCalls++
+				if groupID != cmd.Process.Pid {
+					t.Errorf("cleanup group = %d, want %d", groupID, cmd.Process.Pid)
+				}
+				if cmd.ProcessState == nil || cmd.ProcessState.ExitCode() != tt.exitCode {
+					t.Errorf("process state at cleanup = %v, want exit status %d", cmd.ProcessState, tt.exitCode)
+				}
+				return tt.cleanupErr
+			})
+			if cleanupCalls != 1 {
+				t.Fatalf("cleanup calls = %d, want 1", cleanupCalls)
+			}
+			var exitErr *exec.ExitError
+			if errors.As(waitErr, &exitErr) != (tt.exitCode != 0) {
+				t.Errorf("wait error = %v, want exit error = %t", waitErr, tt.exitCode != 0)
+			}
+			if tt.cleanupErr != nil {
+				if !errors.Is(waitErr, tt.cleanupErr) {
+					t.Errorf("wait error = %v, want cleanup error %v", waitErr, tt.cleanupErr)
+				}
+				want := fmt.Sprintf("clean up claude process group %d after exit status %d", cmd.Process.Pid, tt.exitCode)
+				if waitErr == nil || !strings.Contains(waitErr.Error(), want) {
+					t.Errorf("wait error = %v, want diagnostic %q", waitErr, want)
+				}
+			}
+			state := turnState{sawResult: true, resultSubtype: "success"}
+			err := finalTurnError(t.Context(), state, waitErr, "")
+			wantFailure := tt.exitCode != 0 || tt.cleanupErr != nil
+			if errors.Is(err, ErrTurnFailed) != wantFailure {
+				t.Errorf("finalTurnError() = %v, want turn failure = %t", err, wantFailure)
+			}
+			if !wantFailure && err != nil {
+				t.Errorf("finalTurnError() = %v, want nil", err)
+			}
+		})
+	}
+}
+
 func processAlive(pid int) bool {
 	err := syscall.Kill(pid, 0)
 	return err == nil || errors.Is(err, syscall.EPERM)

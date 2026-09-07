@@ -4,12 +4,17 @@ import (
 	"context"
 	"log/slog"
 	"strings"
+	"sync/atomic"
 	"time"
+
+	"github.com/digitaldrywood/detent/internal/telemetry"
 )
 
 type refreshTiming struct {
+	progress     *atomic.Pointer[telemetry.RefreshProgress]
 	logger       *slog.Logger
 	projectID    string
+	message      string
 	manual       bool
 	startedAt    time.Time
 	phaseStarted time.Time
@@ -21,6 +26,7 @@ func newRefreshTiming(logger *slog.Logger, projectID string, manual bool) *refre
 	now := time.Now()
 	return &refreshTiming{
 		logger:       logger,
+		message:      "project refresh timing",
 		projectID:    strings.TrimSpace(projectID),
 		manual:       manual,
 		startedAt:    now,
@@ -34,9 +40,17 @@ func (t *refreshTiming) next(phase string) {
 		return
 	}
 	now := time.Now()
-	t.finishPhase(now)
+	if t.phase != strings.TrimSpace(phase) {
+		t.finishPhase(now)
+	}
 	t.phase = strings.TrimSpace(phase)
 	t.phaseStarted = now
+	if t.progress != nil {
+		t.progress.Store(&telemetry.RefreshProgress{Stage: t.phase, StartedAt: t.startedAt, StageStartedAt: now})
+	}
+	if t.logger != nil {
+		t.logger.Info("project refresh stage", "project_id", t.projectID, "stage", t.phase, "elapsed", now.Sub(t.startedAt))
+	}
 }
 
 func (t *refreshTiming) log(ctx context.Context, completed bool, state *State) time.Duration {
@@ -62,7 +76,7 @@ func (t *refreshTiming) log(ctx context.Context, completed bool, state *State) t
 		)
 	}
 	attrs = append(attrs, t.phases...)
-	t.logger.InfoContext(ctx, "project refresh timing", attrs...)
+	t.logger.InfoContext(ctx, t.message, attrs...)
 	return duration
 }
 

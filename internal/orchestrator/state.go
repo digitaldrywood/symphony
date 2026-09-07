@@ -56,6 +56,7 @@ type State struct {
 	DataSeq                  uint64
 	LastRefreshAt            time.Time
 	LastRefreshDuration      time.Duration
+	RefreshProgress          telemetry.RefreshProgress
 	NextRefreshAt            time.Time
 	LastRefreshError         string
 	LastRefreshErrorAt       time.Time
@@ -135,6 +136,7 @@ type StalenessWarning struct {
 }
 
 type Running struct {
+	progress                    *workerProgress
 	Policy                      policy.Descriptor
 	Issue                       connector.Issue
 	Attempt                     int
@@ -461,6 +463,7 @@ func (s State) clone() State {
 		DataSeq:                  s.DataSeq,
 		LastRefreshAt:            s.LastRefreshAt,
 		LastRefreshDuration:      s.LastRefreshDuration,
+		RefreshProgress:          s.RefreshProgress,
 		NextRefreshAt:            s.NextRefreshAt,
 		LastRefreshError:         s.LastRefreshError,
 		LastRefreshErrorAt:       s.LastRefreshErrorAt,
@@ -528,6 +531,7 @@ func (s State) clone() State {
 	}
 
 	for id, running := range s.Running {
+		running = running.withProgress()
 		running.Issue = cloneIssue(running.Issue)
 		running.LastMessageTruncation = runtimeoutput.CloneTruncation(running.LastMessageTruncation)
 		running.RecentEvents = cloneActivityEvents(running.RecentEvents)

@@ -1017,8 +1017,8 @@ func TestRunWithShutdownPublishesDrainStatusDuringBlockedConnectorRefresh(t *tes
 	for {
 		snapshot, ok := snapshotHub.Latest()
 		if ok && snapshot.Shutdown.Draining {
-			if snapshot.Shutdown.SessionsRemaining != 1 {
-				t.Fatalf("SessionsRemaining = %d, want 1", snapshot.Shutdown.SessionsRemaining)
+			if snapshot.Shutdown.SessionsRemaining != 0 {
+				t.Fatalf("SessionsRemaining = %d, want 0 from live initializing runtime", snapshot.Shutdown.SessionsRemaining)
 			}
 			break
 		}

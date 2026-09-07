@@ -693,23 +693,32 @@ const (
 	RefreshSourceProject    RefreshSourceName = "project"
 )
 
+type RefreshProgress struct {
+	Stage               string    `json:"stage"`
+	StartedAt           time.Time `json:"started_at"`
+	StageStartedAt      time.Time `json:"stage_started_at"`
+	ElapsedSeconds      int64     `json:"elapsed_seconds"`
+	StageElapsedSeconds int64     `json:"stage_elapsed_seconds"`
+}
+
 type Refresh struct {
-	PollIntervalSeconds     int64           `json:"poll_interval_seconds,omitempty"`
-	StaleAfterSeconds       int64           `json:"stale_after_seconds,omitempty"`
-	LastDurationSeconds     int64           `json:"last_duration_seconds,omitempty"`
-	ObservedSweepSeconds    int64           `json:"observed_sweep_seconds,omitempty"`
-	BehindBySeconds         int64           `json:"behind_by_seconds,omitempty"`
-	FailureThreshold        int             `json:"failure_threshold,omitempty"`
-	DataSeq                 uint64          `json:"data_seq,omitempty"`
-	Status                  RefreshStatus   `json:"status,omitempty"`
-	LastRefreshAt           *time.Time      `json:"last_refresh_at,omitempty"`
-	NextRefreshAt           *time.Time      `json:"next_refresh_at,omitempty"`
-	NextRefreshOverdue      bool            `json:"next_refresh_overdue"`
-	StalenessWindowExceeded bool            `json:"staleness_window_exceeded,omitempty"`
-	LastError               string          `json:"last_error,omitempty"`
-	LastErrorAt             *time.Time      `json:"last_error_at,omitempty"`
-	Sources                 []RefreshSource `json:"sources,omitempty"`
-	Manual                  *RefreshAttempt `json:"manual,omitempty"`
+	InFlight                *RefreshProgress `json:"in_flight,omitempty"`
+	PollIntervalSeconds     int64            `json:"poll_interval_seconds,omitempty"`
+	StaleAfterSeconds       int64            `json:"stale_after_seconds,omitempty"`
+	LastDurationSeconds     int64            `json:"last_duration_seconds,omitempty"`
+	ObservedSweepSeconds    int64            `json:"observed_sweep_seconds,omitempty"`
+	BehindBySeconds         int64            `json:"behind_by_seconds,omitempty"`
+	FailureThreshold        int              `json:"failure_threshold,omitempty"`
+	DataSeq                 uint64           `json:"data_seq,omitempty"`
+	Status                  RefreshStatus    `json:"status,omitempty"`
+	LastRefreshAt           *time.Time       `json:"last_refresh_at,omitempty"`
+	NextRefreshAt           *time.Time       `json:"next_refresh_at,omitempty"`
+	NextRefreshOverdue      bool             `json:"next_refresh_overdue"`
+	StalenessWindowExceeded bool             `json:"staleness_window_exceeded,omitempty"`
+	LastError               string           `json:"last_error,omitempty"`
+	LastErrorAt             *time.Time       `json:"last_error_at,omitempty"`
+	Sources                 []RefreshSource  `json:"sources,omitempty"`
+	Manual                  *RefreshAttempt  `json:"manual,omitempty"`
 }
 
 type RefreshFailureReason string
@@ -800,6 +809,12 @@ func (r Refresh) ReadinessStatus() RefreshStatus {
 }
 
 func (r Refresh) WithFreshness(now time.Time) Refresh {
+	if r.InFlight != nil {
+		progress := *r.InFlight
+		progress.ElapsedSeconds = max(0, int64(now.Sub(progress.StartedAt)/time.Second))
+		progress.StageElapsedSeconds = max(0, int64(now.Sub(progress.StageStartedAt)/time.Second))
+		r.InFlight = &progress
+	}
 	r.NextRefreshOverdue = r.NextRefreshAt != nil && !now.IsZero() && now.After(*r.NextRefreshAt)
 	r.BehindBySeconds = 0
 	if r.NextRefreshOverdue {

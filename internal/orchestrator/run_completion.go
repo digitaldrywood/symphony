@@ -36,59 +36,10 @@ func (o *Orchestrator) handleRunUpdate(state *State, event runUpdate) {
 	if !ok {
 		return
 	}
-	if event.usage.DispatchLoopStart != nil {
-		running.DispatchLoopStart = dispatchLoopStartRecordFromSnapshot(running, *event.usage.DispatchLoopStart)
+	if event.progress != nil && event.progress != running.progress {
+		return
 	}
-
-	if event.usage.SessionID != "" {
-		running.SessionID = event.usage.SessionID
-	}
-	if event.usage.DetentSessionID > 0 {
-		running.DetentSessionID = event.usage.DetentSessionID
-	}
-	if !event.usage.RuntimeIdentity.IsZero() {
-		running.RuntimeIdentity = running.RuntimeIdentity.Merge(event.usage.RuntimeIdentity)
-	}
-	if strings.TrimSpace(event.usage.WorkerGitHubActor.Login) != "" {
-		running.WorkerGitHubActor = event.usage.WorkerGitHubActor
-	}
-	if event.usage.TurnCount > 0 {
-		running.TurnCount = event.usage.TurnCount
-	}
-	if !event.usage.LastEventAt.IsZero() {
-		running.LastEventAt = event.usage.LastEventAt
-	}
-	if event.usage.LastEvent != "" {
-		running.LastEvent = event.usage.LastEvent
-	}
-	if event.usage.LastMessage != "" {
-		running.LastMessage = event.usage.LastMessage
-		running.LastMessageTruncation = runtimeoutput.CloneTruncation(event.usage.LastMessageTruncation)
-	}
-	if len(event.usage.RecentEvents) > 0 {
-		running.RecentEvents = cloneActivityEvents(event.usage.RecentEvents)
-	}
-	if event.usage.ProcessIdentity != "" {
-		running.ProcessIdentity = event.usage.ProcessIdentity
-	}
-	if event.usage.WorkerProcess.PID > 0 && !event.usage.WorkerProcess.StartedAt.IsZero() {
-		running.WorkerProcess = event.usage.WorkerProcess
-	}
-	if event.usage.WorkspacePath != "" {
-		running.WorkspacePath = event.usage.WorkspacePath
-	}
-	if event.usage.WorkProductPushed {
-		running.WorkProductPushed = true
-	}
-	if diffStatsPresent(event.usage.DiffStats) {
-		running.DiffStats = event.usage.DiffStats
-	}
-	if !event.usage.RSSObservedAt.IsZero() {
-		running.RSSBytes = event.usage.RSSBytes
-		running.RSSCeilingBytes = event.usage.RSSCeilingBytes
-		running.RSSObservedAt = event.usage.RSSObservedAt
-	}
-	running.Tokens = event.usage.Tokens
+	running = applyRunningUsage(running, event.usage).withProgress()
 	state.Running[event.issueID] = running
 	o.trackRunningHeartbeat(state, running, state.Claimed[event.issueID], o.clockNow())
 	if event.usage.RateLimits != nil {
@@ -104,7 +55,7 @@ func (o *Orchestrator) handleRunUpdate(state *State, event runUpdate) {
 		o.recordProjectFailureBreakerProgress(state, event.issueID, progressedAt)
 		o.advanceDispatchRecovery(state, event.issueID, progressedAt)
 	}
-	if o.workAttempts != nil && running.WorkAttemptID > 0 {
+	if event.progress == nil && o.workAttempts != nil && running.WorkAttemptID > 0 {
 		now := event.usage.LastEventAt
 		if now.IsZero() {
 			now = time.Now()
@@ -132,6 +83,8 @@ func (o *Orchestrator) handleRunResult(ctx context.Context, state *State, event 
 		}
 		return
 	}
+	running = running.withProgress()
+	state.Running[event.IssueID] = running
 	if !completionMatchesRunning(event, running) {
 		o.rejectWorkerCompletion(ctx, state, event, running, "worker generation or work-attempt lease no longer owns the item", nil)
 		return
@@ -2974,6 +2927,7 @@ func cancelRunning(state *State, issueID string) {
 
 func (o *Orchestrator) releaseRunningSlots(state *State) {
 	for issueID, running := range state.Running {
+		running.progress.close()
 		o.releaseGlobalDispatchSlot(running.globalSlot)
 		running.globalSlot = scheduler.Slot{}
 		state.Running[issueID] = running

@@ -43,6 +43,7 @@ type heartbeatSettings struct {
 }
 
 type heartbeatTarget struct {
+	progress             *workerProgress
 	issueID              string
 	claimOwner           string
 	workAttemptHeartbeat store.WorkAttemptHeartbeat
@@ -160,7 +161,7 @@ func (m *heartbeatManager) upsert(target heartbeatTarget) {
 	}
 	m.mu.Lock()
 	current, ok := m.targets[target.issueID]
-	if ok && current.workAttemptHeartbeat.AttemptID == target.workAttemptHeartbeat.AttemptID {
+	if ok && current.workAttemptHeartbeat.AttemptID == target.workAttemptHeartbeat.AttemptID && current.progress == target.progress {
 		target.sequence = current.sequence
 		target.nextDue = current.nextDue
 		target.inFlight = current.inFlight
@@ -189,6 +190,7 @@ func (m *heartbeatManager) remove(issueID string) {
 	delete(m.targets, strings.TrimSpace(issueID))
 	m.mu.Unlock()
 	m.notify()
+	target.progress.close()
 	if target.flightDone != nil {
 		<-target.flightDone
 	}
@@ -295,6 +297,11 @@ func (m *heartbeatManager) execute(ctx context.Context, target heartbeatTarget) 
 	defer cancel()
 	settings := m.settingsSnapshot()
 	result := heartbeatResult{issueID: target.issueID, sequence: target.sequence}
+	if target.progress != nil {
+		running := target.progress.latest.Load()
+		target.workerProcess = running.WorkerProcess
+		target.workspacePath = running.WorkspacePath
+	}
 	result.workerAlive, result.workerChecked, result.livenessError = heartbeatWorkerLiveness(target.workerProcess)
 	result.workspaceModifiedAt, result.workspaceAdvanced = heartbeatWorkspaceActivity(target.workspacePath, target.workspaceModifiedAt)
 	if result.workerChecked && !result.workerAlive && result.livenessError == nil {
@@ -302,14 +309,8 @@ func (m *heartbeatManager) execute(ctx context.Context, target heartbeatTarget) 
 		return
 	}
 	now := m.now().UTC()
-	heartbeat := target.workAttemptHeartbeat
-	heartbeat.HeartbeatAt = now
-	heartbeat.LeaseExpiresAt = now.Add(settings.leaseTTL)
-	result.heartbeat = heartbeat
-	if settings.workAttempts != nil && heartbeat.AttemptID > 0 {
-		result.workAttemptError = settings.workAttempts.RecordWorkAttemptHeartbeat(operationCtx, heartbeat)
-		result.workAttemptRenewed = result.workAttemptError == nil
-	}
+	result.heartbeat, result.workAttemptError = m.persistHeartbeat(operationCtx, target, settings, now)
+	result.workAttemptRenewed = result.workAttemptError == nil && settings.workAttempts != nil && result.heartbeat.AttemptID > 0
 	if settings.scheduling != nil {
 		result.claim, result.claimError = settings.scheduling.RenewClaim(operationCtx, target.issueID, now)
 		result.claimOwnerLost = errors.Is(result.claimError, ErrSchedulingClaimLost)
@@ -323,6 +324,31 @@ func (m *heartbeatManager) execute(ctx context.Context, target heartbeatTarget) 
 		result.claimRenewed = result.claimError == nil && !result.claimOwnerLost
 	}
 	m.finish(target, result)
+}
+
+func (m *heartbeatManager) persistHeartbeat(ctx context.Context, target heartbeatTarget, settings heartbeatSettings, now time.Time) (store.WorkAttemptHeartbeat, error) {
+	heartbeat := target.workAttemptHeartbeat
+	heartbeat.HeartbeatAt = now
+	heartbeat.LeaseExpiresAt = now.Add(settings.leaseTTL)
+	if target.progress != nil {
+		target.progress.mu.Lock()
+		defer target.progress.mu.Unlock()
+		if target.progress.closed {
+			return heartbeat, context.Canceled
+		}
+		now = m.now().UTC()
+		heartbeat.LeaseExpiresAt = now.Add(settings.leaseTTL)
+		heartbeat = target.progress.heartbeat(heartbeat, now)
+	}
+	if settings.workAttempts != nil && heartbeat.AttemptID > 0 {
+		if err := settings.workAttempts.RecordWorkAttemptHeartbeat(ctx, heartbeat); err != nil {
+			return heartbeat, err
+		}
+		if target.progress != nil {
+			target.progress.persisted.Store(&heartbeat)
+		}
+	}
+	return heartbeat, nil
 }
 
 func (m *heartbeatManager) settingsSnapshot() heartbeatSettings {
@@ -521,11 +547,13 @@ func (o *Orchestrator) trackRunningHeartbeat(state *State, running Running, clai
 	if o == nil || o.heartbeats == nil || strings.TrimSpace(running.Issue.ID) == "" {
 		return
 	}
+	running = running.withProgress()
 	owner := strings.TrimSpace(claimed.Owner)
 	if owner == "" {
 		owner = o.claimOwner()
 	}
 	o.heartbeats.upsert(heartbeatTarget{
+		progress:             running.progress,
 		issueID:              running.Issue.ID,
 		claimOwner:           owner,
 		workAttemptHeartbeat: o.runningWorkAttemptHeartbeat(state, running, now),

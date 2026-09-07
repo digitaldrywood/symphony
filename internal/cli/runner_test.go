@@ -616,7 +616,9 @@ func TestPublishSnapshotsPublishesToHub(t *testing.T) {
 	t.Parallel()
 
 	registry := projectpkg.NewRegistry()
-	mustSetProject(t, registry, startRefreshProject(t, "alpha"))
+	healthy := startRefreshProject(t, "alpha")
+	waitForProjectDataSeq(t, healthy, 1)
+	mustSetProject(t, registry, healthy)
 
 	snapshotHub := hub.New[telemetry.Snapshot]()
 	now := time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
@@ -1028,7 +1030,9 @@ func TestPublishSnapshotOnceDoesNotLetPausedProjectsHoldFleetReadiness(t *testin
 	t.Parallel()
 
 	registry := projectpkg.NewRegistry()
-	mustSetProject(t, registry, startRefreshProject(t, "alpha"))
+	healthy := startRefreshProject(t, "alpha")
+	waitForProjectDataSeq(t, healthy, 1)
+	mustSetProject(t, registry, healthy)
 
 	cfg := workflowconfig.Default()
 	cfg.Tracker.Kind = workflowconfig.TrackerMemory
@@ -1349,7 +1353,9 @@ func TestPublishSnapshotOncePausedProjectSuppressesStartupError(t *testing.T) {
 	}
 
 	registry := projectpkg.NewRegistry()
-	mustSetProject(t, registry, startRefreshProject(t, "alpha"))
+	healthy := startRefreshProject(t, "alpha")
+	waitForProjectDataSeq(t, healthy, 1)
+	mustSetProject(t, registry, healthy)
 	mustSetProject(t, registry, failedProject)
 	snapshotHub := hub.New[telemetry.Snapshot]()
 	now := time.Date(2026, 6, 23, 14, 30, 0, 0, time.UTC)
@@ -1520,6 +1526,7 @@ func TestPublishSnapshotOncePreservesPipeline(t *testing.T) {
 			t.Fatalf("Project.Stop() error = %v", err)
 		}
 	})
+	waitForProjectDataSeq(t, project, 1)
 	mustSetProject(t, registry, project)
 
 	snapshotHub := hub.New[telemetry.Snapshot]()

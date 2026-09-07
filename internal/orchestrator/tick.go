@@ -57,6 +57,8 @@ func (o *Orchestrator) tickWithManual(ctx context.Context, state *State, now tim
 	defer o.endGlobalProjectCycle()
 	completed := false
 	timing := newRefreshTiming(o.logger, o.cfg.Project.ID, manual != nil)
+	timing.progress = &o.refreshProgress
+	timing.next("preflight")
 	defer func() {
 		state.LastRefreshDuration = timing.log(ctx, completed, state)
 	}()
@@ -277,6 +279,7 @@ func (o *Orchestrator) tickWithManual(ctx context.Context, state *State, now tim
 	}
 	state.Pipeline = overlayIssueStateSnapshots(state.Pipeline, state.tickTransitions.pipeline)
 	if refreshOK {
+		timing.next("workspace_cleanup")
 		o.reapDueWorkspacesAfterRefresh(ctx, state, now)
 	}
 	completed = true

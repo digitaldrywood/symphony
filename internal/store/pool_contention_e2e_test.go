@@ -94,8 +94,21 @@ func TestPoolContentionTelemetryEndToEnd(t *testing.T) {
 
 	stateCtx, cancelState := context.WithTimeout(ctx, synchronizationWatchdog)
 	defer cancelState()
-	if _, err := orch.State(stateCtx); err != nil {
-		t.Fatalf("orchestrator State() error = %v", err)
+	stateTicker := time.NewTicker(time.Millisecond)
+	defer stateTicker.Stop()
+	for {
+		state, err := orch.State(stateCtx)
+		if err != nil {
+			t.Fatalf("orchestrator State() error = %v", err)
+		}
+		if state.DataSeq > 0 {
+			break
+		}
+		select {
+		case <-stateCtx.Done():
+			t.Fatal("initial scheduler decision did not complete")
+		case <-stateTicker.C:
+		}
 	}
 	decisions, err := runtimeStore.ListRecentSchedulerDecisions(
 		ctx,

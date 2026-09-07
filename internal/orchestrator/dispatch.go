@@ -768,6 +768,11 @@ func (o *Orchestrator) dispatchIssueWithAdmission(
 	delete(state.ReapedWorkspaces, issue.ID)
 	delete(state.Completed, issue.ID)
 
+	runningProgress := state.Running[issue.ID]
+	progress := newWorkerProgress(runningProgress, o.runningWorkAttemptHeartbeat(state, runningProgress, now), o.workAttempts, o.cfg.OutputTruncationMaxBytes)
+	runningProgress.progress = progress
+	state.Running[issue.ID] = runningProgress
+
 	reservation := reserveMergeCandidate(state, issue, now)
 	request := RunRequest{
 		Policy:              o.cfg.Policy,
@@ -783,7 +788,7 @@ func (o *Orchestrator) dispatchIssueWithAdmission(
 		StartedAt:           now,
 		WorkerHost:          workerHost,
 		SelectorContext:     o.selectorContext(),
-		OnUsageUpdate:       o.usageUpdateHandler(runCtx, issue.ID, startupTimer),
+		OnUsageUpdate:       o.usageUpdateHandler(runCtx, issue.ID, startupTimer, progress),
 		OnActivityUpdate:    o.activityUpdateHandler(runCtx, issue),
 		OnOverrideRejected:  o.agentOverrideRejectionHandler(runCtx, issue),
 		ProgressProbe:       o.sessionProgressProbe(issue),
@@ -1057,7 +1062,12 @@ func (o *Orchestrator) usageUpdateHandler(
 	ctx context.Context,
 	issueID string,
 	startupTimer mergeWorkerStartupTimer,
+	progresses ...*workerProgress,
 ) runpkg.UsageUpdateHandler {
+	var progress *workerProgress
+	if len(progresses) > 0 {
+		progress = progresses[0]
+	}
 	return func(update runpkg.UsageUpdate) error {
 		select {
 		case <-ctx.Done():
@@ -1067,7 +1077,12 @@ func (o *Orchestrator) usageUpdateHandler(
 		if startupTimer != nil {
 			startupTimer.Stop()
 		}
-		if update.DispatchLoopStart != nil {
+		if progress != nil {
+			if err := progress.observe(ctx, update); err != nil {
+				return err
+			}
+		}
+		if update.DispatchLoopStart != nil && progress == nil {
 			applied := make(chan struct{})
 			select {
 			case <-ctx.Done():
@@ -1081,17 +1096,17 @@ func (o *Orchestrator) usageUpdateHandler(
 				return nil
 			}
 		}
-		if strings.TrimSpace(update.WorkerGitHubActor.Login) != "" {
+		if strings.TrimSpace(update.WorkerGitHubActor.Login) != "" && progress == nil {
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
-			case o.runUpdates <- runUpdate{issueID: issueID, usage: update}:
+			case o.runUpdates <- runUpdate{issueID: issueID, usage: update, progress: progress}:
 				return nil
 			}
 		}
 
 		select {
-		case o.runUpdates <- runUpdate{issueID: issueID, usage: update}:
+		case o.runUpdates <- runUpdate{issueID: issueID, usage: update, progress: progress}:
 			return nil
 		default:
 			return nil

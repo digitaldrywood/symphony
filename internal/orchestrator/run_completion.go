@@ -2201,6 +2201,38 @@ func (o *Orchestrator) scheduleCITriggerLabel(ctx context.Context, issue connect
 		}
 		return false
 	}
+	if len(cfg.RequiredStatusChecks) > 0 {
+		hydrator, ok := o.connector.(connector.PullRequestHydrator)
+		if !ok {
+			if o.logger != nil {
+				o.logger.Info("ci_trigger_label_skipped", append(attrs, "reason", "hydration_unsupported")...)
+			}
+			return false
+		}
+		refreshed, err := hydrator.HydratePullRequest(ctx, issue)
+		if err != nil {
+			if o.logger != nil {
+				o.logger.Warn("ci_trigger_label_skipped", append(attrs, "reason", "pull_request_refresh_failed", "error", err)...)
+			}
+			return false
+		}
+		issue = refreshed
+		attrs = mergeWorkerLogAttrs(issue, "required_checks", strings.Join(checkNames, ","))
+		if pullRequestHydrationBlocksProgress(issue.PullRequest) {
+			if o.logger != nil {
+				o.logger.Info("ci_trigger_label_skipped", append(attrs, "reason", "pull_request_hydration_unavailable")...)
+			}
+			return false
+		}
+	}
+	checkStates, green := ciTriggerRequiredCheckStates(issue.PullRequest, cfg.RequiredStatusChecks)
+	attrs = append(attrs, "required_check_states", checkStates, "after_head_push", afterHeadPush, "force_reapply", forceReapply)
+	if green && !forceReapply {
+		if o.logger != nil {
+			o.logger.Info("ci_trigger_label_skipped", append(attrs, "reason", "required_checks_green")...)
+		}
+		return false
+	}
 	repository := pullRequestRepository(issue)
 	number := pullRequestNumber(issue)
 	headSHA := ""
@@ -2252,10 +2284,44 @@ func (o *Orchestrator) scheduleCITriggerLabel(ctx context.Context, issue connect
 	o.ciTriggerLabelHeads[key] = ciTriggerLabelHead{HeadSHA: headSHA, Pending: true}
 	o.ciTriggerLabelMu.Unlock()
 	if o.logger != nil {
-		o.logger.Info("ci_trigger_label_scheduled", append(attrs, "stagger", stagger, "attempt", attempt)...)
+		reason := "required_checks_not_green"
+		if forceReapply {
+			reason = "forced_reapply"
+		} else if afterHeadPush {
+			reason = "after_head_push"
+		}
+		o.logger.Info("ci_trigger_label_scheduled", append(attrs, "reason", reason, "stagger", stagger, "attempt", attempt)...)
 	}
 	go o.reapplyMergeWorkerCITriggerLabel(ctx, reapplier, key, headSHA, repository, number, label, stagger, attrs)
 	return true
+}
+
+func ciTriggerRequiredCheckStates(pr *connector.PullRequest, required []string) ([]connector.PullRequestCheck, bool) {
+	required = gate.NormalizeRequiredStatusChecks(required)
+	checks := make(map[string]connector.PullRequestCheck)
+	if pr != nil {
+		for _, check := range pr.Checks {
+			checks[strings.TrimSpace(check.Name)] = check
+		}
+		for _, check := range pr.RequiredCheckFailures {
+			checks[strings.TrimSpace(check.Name)] = check
+		}
+	}
+	states := make([]connector.PullRequestCheck, 0, len(required))
+	green := len(required) > 0
+	for _, name := range required {
+		check, ok := checks[name]
+		if !ok {
+			check = connector.PullRequestCheck{Name: name, Status: "missing", Conclusion: "missing"}
+		}
+		status := strings.ToLower(strings.TrimSpace(check.Status))
+		if !strings.EqualFold(strings.TrimSpace(check.Conclusion), "success") ||
+			(status != "success" && status != "completed") {
+			green = false
+		}
+		states = append(states, check)
+	}
+	return states, green
 }
 
 func (o *Orchestrator) commentObservedLaneTransition(

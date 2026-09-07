@@ -81,7 +81,13 @@ as the final CI trigger after the latest push. This preserves label ordering
 when a project uses additional CI lane labels. Merging workers also reapply it
 immediately after deterministic head-changing pushes and whenever current-head
 hydration reports required checks as missing, including after a rebase or
-another merge advances the base. Trigger events use a shared lock and persisted
+another merge advances the base. Before scheduling a trigger, Detent refreshes
+the current head's check-runs and commit statuses. When every configured required
+check has succeeded, it skips reapplication even after a restart or a reported
+push. Explicit forced reapplication still repairs CI label ordering. Failed or
+unavailable hydration defers the trigger; streamed no-op push output does not
+count as a head-changing push. Scheduling logs include the reason and current
+required-check states. Trigger events use a shared lock and persisted
 timestamp per repository and are spaced by
 `ci_trigger_label_stagger_seconds` (a positive value, default `15`) to avoid a
 self-hosted CI stampede. `detent doctor` warns when it finds a label-gated

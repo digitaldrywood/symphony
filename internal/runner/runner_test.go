@@ -526,6 +526,24 @@ func TestRunAgentTurnFailsForUnrecoveredDeliverableCommandError(t *testing.T) {
 			wantPullRequestHeadPushed: true,
 		},
 		{
+			name: "streamed no-op push does not change head",
+			updates: []AgentUpdate{
+				{Type: AgentUpdateToolStarted, ItemID: "push", Tool: "commandExecution", Delta: "git push origin HEAD"},
+				{Type: AgentUpdateToolOutput, ItemID: "push", Tool: "commandExecution", Delta: "Everything up-to-date"},
+				{Type: AgentUpdateToolCompleted, ItemID: "push", Tool: "commandExecution", Status: "completed"},
+				{Type: AgentUpdateTurnCompleted, Status: "completed"},
+			},
+		},
+		{
+			name: "streamed no-op combined push does not change head",
+			updates: []AgentUpdate{
+				{Type: AgentUpdateToolStarted, ItemID: "push", Tool: "commandExecution", Delta: "git push origin HEAD && detent ci-trigger-label --repository digitaldrywood/detent --pull-request 1212 --label ci:ready"},
+				{Type: AgentUpdateToolOutput, ItemID: "push", Tool: "commandExecution", Delta: "Everything up-to-date"},
+				{Type: AgentUpdateToolCompleted, ItemID: "push", Tool: "commandExecution", Status: "completed", Delta: "label reapplied"},
+				{Type: AgentUpdateTurnCompleted, Status: "completed"},
+			},
+		},
+		{
 			name: "CI trigger label after latest push records delivery",
 			updates: []AgentUpdate{
 				{Type: AgentUpdateToolStarted, ItemID: "push", Tool: "commandExecution", Delta: "git push -u origin HEAD"},

@@ -4216,7 +4216,7 @@ func (p *agentRunProgress) recordDeliverableToolCompletion(update AgentUpdate) {
 			delete(p.deliverableFailures, "push")
 			p.deliverableSuccesses["push"] = true
 			p.deliverableSuccesses["forge_write"] = true
-			if gitPushChanged(update, invocation.command) {
+			if gitPushChanged(update, invocation.command, invocation.output) {
 				p.successfulPushes++
 				p.ciTriggerLabelValid = false
 			}
@@ -4231,7 +4231,7 @@ func (p *agentRunProgress) recordDeliverableToolCompletion(update AgentUpdate) {
 			p.deliverableSuccesses["push"] = true
 			p.deliverableSuccesses["ci_trigger_label"] = true
 			p.deliverableSuccesses["forge_write"] = true
-			if gitPushChanged(update, invocation.command) {
+			if gitPushChanged(update, invocation.command, invocation.output) {
 				p.successfulPushes++
 			}
 			p.ciTriggerPushSequence = p.successfulPushes
@@ -4578,11 +4578,11 @@ func commandFlagValue(fields []string, flag string) (string, bool) {
 	return "", false
 }
 
-func gitPushChanged(update AgentUpdate, command string) bool {
+func gitPushChanged(update AgentUpdate, command string, streamedOutput string) bool {
 	if gitPushCommandCount(command) != 1 {
 		return true
 	}
-	output := strings.ToLower(strings.Join([]string{update.Delta, update.BackendErrorMessage, update.BackendErrorBody}, " "))
+	output := strings.ToLower(strings.Join([]string{streamedOutput, update.Delta, update.BackendErrorMessage, update.BackendErrorBody}, " "))
 	return !strings.Contains(output, "everything up-to-date") && !strings.Contains(output, "everything up to date")
 }
 

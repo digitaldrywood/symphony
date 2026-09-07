@@ -10,14 +10,19 @@ import (
 )
 
 type Override struct {
-	Model  string
-	Effort string
-	Code   RoleOverride
-	Rework RoleOverride
-	Merge  RoleOverride
+	Model         string
+	Effort        string
+	Code          RoleOverride
+	Rework        RoleOverride
+	Merge         RoleOverride
+	Plan          RoleOverride
+	Routine       RoleOverride
+	Validator     RoleOverride
+	SecurityAudit RoleOverride
 }
 
 type RoleOverride struct {
+	Model  string `yaml:"model"`
 	Effort string `yaml:"effort"`
 }
 
@@ -29,12 +34,16 @@ type RoleEffort struct {
 }
 
 type blockYAML struct {
-	Schema int          `yaml:"schema"`
-	Model  string       `yaml:"model"`
-	Effort string       `yaml:"effort"`
-	Code   RoleOverride `yaml:"code"`
-	Rework RoleOverride `yaml:"rework"`
-	Merge  RoleOverride `yaml:"merge"`
+	Schema        int          `yaml:"schema"`
+	Model         string       `yaml:"model"`
+	Effort        string       `yaml:"effort"`
+	Code          RoleOverride `yaml:"code"`
+	Rework        RoleOverride `yaml:"rework"`
+	Merge         RoleOverride `yaml:"merge"`
+	Plan          RoleOverride `yaml:"plan"`
+	Routine       RoleOverride `yaml:"routine"`
+	Validator     RoleOverride `yaml:"validator"`
+	SecurityAudit RoleOverride `yaml:"security_audit"`
 }
 
 func FromIssueBody(body string) (Override, bool, error) {
@@ -60,15 +69,20 @@ func FromIssueBody(body string) (Override, bool, error) {
 	}
 
 	return Override{
-		Model:  strings.TrimSpace(raw.Model),
-		Effort: strings.TrimSpace(raw.Effort),
-		Code:   normalizeRoleOverride(raw.Code),
-		Rework: normalizeRoleOverride(raw.Rework),
-		Merge:  normalizeRoleOverride(raw.Merge),
+		Model:         strings.TrimSpace(raw.Model),
+		Effort:        strings.TrimSpace(raw.Effort),
+		Code:          normalizeRoleOverride(raw.Code),
+		Rework:        normalizeRoleOverride(raw.Rework),
+		Merge:         normalizeRoleOverride(raw.Merge),
+		Plan:          normalizeRoleOverride(raw.Plan),
+		Routine:       normalizeRoleOverride(raw.Routine),
+		Validator:     normalizeRoleOverride(raw.Validator),
+		SecurityAudit: normalizeRoleOverride(raw.SecurityAudit),
 	}, true, nil
 }
 
 func normalizeRoleOverride(override RoleOverride) RoleOverride {
+	override.Model = strings.TrimSpace(override.Model)
 	override.Effort = strings.TrimSpace(override.Effort)
 	return override
 }
@@ -84,9 +98,53 @@ func (o Override) EffortForRole(role string) (string, string) {
 		return o.Code.Effort, "code.effort"
 	case "merge":
 		return o.Merge.Effort, "merge.effort"
+	case "plan":
+		if o.Plan.Effort != "" {
+			return o.Plan.Effort, "plan.effort"
+		}
+	case "routine":
+		if o.Routine.Effort != "" {
+			return o.Routine.Effort, "routine.effort"
+		}
+	case "validator":
+		if o.Validator.Effort != "" {
+			return o.Validator.Effort, "validator.effort"
+		}
+	case "security_audit":
+		if o.SecurityAudit.Effort != "" {
+			return o.SecurityAudit.Effort, "security_audit.effort"
+		}
 	default:
 		return "", ""
 	}
+	return "", ""
+}
+
+func (o Override) ModelForRole(role string) (string, string) {
+	var model string
+	switch strings.ToLower(strings.TrimSpace(role)) {
+	case "code":
+		model = o.Code.Model
+	case "rework":
+		model = o.Rework.Model
+		if model == "" && o.Code.Model != "" {
+			return o.Code.Model, "code.model"
+		}
+	case "merge":
+		model = o.Merge.Model
+	case "plan":
+		model = o.Plan.Model
+	case "routine":
+		model = o.Routine.Model
+	case "validator":
+		model = o.Validator.Model
+	case "security_audit":
+		model = o.SecurityAudit.Model
+	}
+	if model != "" {
+		return model, role + ".model"
+	}
+	return o.Model, "model"
 }
 
 func (o Override) RoleEfforts() []RoleEffort {

@@ -599,3 +599,222 @@ The dashboard and `/api/v1/state` surface each instance identity, authorization
 scope, owner, lease renewal time, lease expiry, and selected model usage, which
 lets operators verify that scoped instances are not contending for the same
 work.
+
+
+## Instance agent defaults and Sol-first selection
+
+Enable the recommended preset once in the instance's `global.yaml`. Existing
+projects and future registrations inherit it without editing their definitions:
+
+```yaml
+global:
+  agents:
+    model_selection:
+      preset: sol_first
+```
+
+This is opt-in. Existing pinned models remain pinned. The preset sets normal
+work to `gpt-5.6-sol` at medium effort; complex work to `gpt-6-astra` at medium;
+and very complex work to Astra at high. It never automatically assigns max.
+Explicit issue effort, including low, xhigh, and max, is retained when supported.
+A provider default changing to Astra does not affect enabled automatic selection.
+
+Host backend and route defaults use the same schema as project `agents`. For
+example, share a Claude design selector alongside each project's Codex default:
+
+```yaml
+global:
+  agents:
+    backends:
+      - id: design
+        kind: claude_code
+        command: /opt/detent/bin/claude-wrapper
+    routes:
+      - name: design
+        backend: design
+        model: sonnet
+        selector:
+          labels:
+            include: [design]
+    model_selection:
+      preset: sol_first
+```
+
+The absolute wrapper command is supported, as is `command: claude`. Authenticate
+Claude Code on the host using its ambient authentication before enabling the
+route. This configuration neither copies credentials nor changes subscription
+billing. The preset's `backend_kinds: [codex]` excludes Claude. The selector's
+explicit `sonnet` remains authoritative for design work.
+
+Backends merge by ID and routes by name. Project entries replace an inherited
+entry as a whole; omitted entries inherit. Project selectors are evaluated in
+project order before inherited selectors in instance order. A project default
+route takes precedence over an instance default for the same role, even when
+named differently. Legacy projects retain their implicit Codex backend and
+default route. Inherited entries require names/IDs. Referenced disabled or missing
+backends make the effective configuration invalid.
+
+A project can opt out of a selector without copying the instance configuration:
+
+```yaml
+agents:
+  routes:
+    - name: design
+      disabled: true
+```
+
+Use `disabled: true` on a backend ID to remove that inherited backend too, and
+remove/disable any routes referencing it. `agents.backends: []` clears inherited
+backends and restores the legacy project Codex backend; `agents.routes: []`
+clears inherited routes and restores the implicit project default route. Disabling
+the named `default` route explicitly suppresses that implicit route.
+
+To migrate repeated `detent.local.yaml` overlays, copy the common backend and
+named selector to `global.agents`, verify with `detent doctor`, then remove each
+redundant project entry. Keep per-project defaults and deliberate deviations.
+During onboarding, create the `design` label in each repository that will use the
+selector; issue labels are not created by loading configuration. Projects with
+pinned models must remove those pins to use automatic selection.
+
+### Policy overrides and clearing
+
+Every policy field inherits independently: preset, enable flag, normal/complex
+models, eligible backend kinds, default level, level model/effort defaults, stage
+model/effort/complexity defaults, ordered rules, unavailable behavior, and fallback
+order. The same `agents.model_selection` schema works in a project's
+`detent.yaml` or `detent.local.yaml`:
+
+```yaml
+agents:
+  model_selection:
+    complex_model: gpt-6-astra
+    levels:
+      very_complex:
+        effort: high
+    stages:
+      validator:
+        model: normal
+        effort: medium
+    unavailable: fallback
+    fallback_order: [normal]
+```
+
+Omission inherits. `enabled: false` disables automatic selection for that project.
+`preset: ""` removes the inherited preset; a fully custom enabled policy must then
+provide normal/complex models, a default level, level defaults, and unavailable
+behavior. `normal` and `complex` in level/stage models and fallback entries refer
+to the configured normal/complex model; any other nonempty string is a literal
+backend model ID. No model catalog choice is inferred from cost or provider order.
+
+`levels` and `stages` merge by name and then by individual field. Explicit `{}`
+clears the corresponding map. Clearing all levels requires disabling the policy
+or supplying a replacement default level. Empty stage model/effort/level strings
+remove that stage override and use the selected level's defaults. Missing stages
+or `issue_complexity: false` do not consume issue-wide complexity signals.
+
+`backend_kinds: []` makes no backend eligible. `fallback_order: []` permits no
+fallback. `rules: []` clears all complexity rules. Nonempty rule lists merge by
+rule name: replacement retains its order, new names append, and `disabled: true`
+disables a named inherited rule. A replacement rule is a complete rule, not a
+field patch. The first matching enabled rule wins. To reorder rules, clear them
+at the instance and supply a complete project list (or use a custom empty preset).
+YAML null is omission, not a clearing operation.
+
+Pricing uses the existing external pricing-file format. Set
+`global.budget.pricing_path: /absolute/path/models.yaml` for an instance default;
+project `budget.pricing_path` overrides it independently. An explicit empty
+project path selects the embedded table. Other budget fields, limits, and
+subscription enforcement are unchanged. Use absolute instance pricing paths so
+projects do not interpret the same relative path from different working directories.
+
+### Complexity and independent precedence
+
+The preset recognizes these deterministic signals; it does not inspect prose or
+make a classification-model call:
+
+| Signal | Automatic model | Default effort |
+| --- | --- | --- |
+| Missing metadata, simple/basic work, or generic `enhancement` alone | Sol | medium |
+| `complexity:complex` for substantive feature/implementation work | Astra | medium |
+| `complexity:very-complex` for subsystems, difficult architecture, state, concurrency, or recovery | Astra | high |
+| Explicit applicable issue xhigh/max, with model omitted | Astra | explicit effort retained |
+
+Priority, entering Rework, waiting for CI, provider errors, and host/backend
+effort defaults are not complexity signals in the preset. Label substantive work
+intentionally; a trivial enhancement needs no complexity label. Code, plan, and
+rework consume issue-wide signals. Routine, merge, validator, and security-audit
+stage defaults suppress issue-wide complexity. A role-specific effort signal or a
+rule with an explicit `roles` list can select complexity for just that stage.
+For example, a custom rule can match issue fields without upgrading every stage:
+
+```yaml
+agents:
+  model_selection:
+    rules:
+      - name: complex-validator
+        roles: [validator]
+        level: complex
+        selector:
+          fields:
+            - name: Validation complexity
+              value: complex
+```
+
+The `detent-agent` block supports model and effort independently for code, rework,
+plan, merge, routine, and validator. Rework falls back to code for
+each omitted role-specific field. The model precedence for normal/validator
+execution is role-specific issue body, issue-wide body, explicit stage model
+(`gate.validator.model` for validators), selected route fixed model, route model
+field, connector issue model, applicable default-route model, then automatic
+selection. Within routing, existing role/default precedence is preserved.
+Effort precedence is role-specific issue body, issue-wide body, project
+`agent.effort`, backend effort, automatic stage effort, then automatic level effort.
+The independent security auditor retains its trusted gate model and does not
+consume issue-body model or effort overrides; its unpinned defaults use the
+configured `security_audit` policy stage.
+A model-only override still receives an effort default; an effort-only override
+still receives an automatic model. Explicit values are never clamped by defaults.
+
+With the policy enabled on an eligible backend, invalid explicit model/effort
+values are reported and dispatch fails; they are never replaced by automatic
+fallback. Policy-disabled and excluded backends retain the existing explicit
+catalog rejection behavior. If an automatic model is missing or retired,
+`unavailable: fallback` tries `fallback_order` in order; the preset tries Sol.
+`unavailable: fail` refuses fallback. No available configured model or a failed
+catalog lookup stops dispatch with an actionable error. It never inherits an
+arbitrary provider default, including during capacity failures.
+
+`detent doctor` shows the effective policy and per-setting instance/project/preset
+sources, plus backend/route provenance without commands or environment values.
+Session runtime identity and session diagnostics record the policy, matched rule
+or default reason, requested automatic model, actual requested/runtime models,
+effort, source fields, and fallback reason. Runtime updates preserve the decision.
+Policy reload affects new dispatches; active snapshots and explicit resumed
+sessions retain their established identity. Missing resume backends require
+restoring that backend or starting fresh. Legacy sessions without stored full
+identity retain legacy recovery checks. Invalid reload retains the last valid
+agent configuration. Hub-approved execution continues to require its approved
+effective policy; inheritance does not authorize unapproved policy changes.
+
+### Pricing provenance
+
+Verified September 7, 2026 against the official [API pricing table](https://developers.openai.com/api/docs/pricing):
+
+| Embedded model | Input USD / 1M | Cached input USD / 1M | Output USD / 1M |
+| --- | ---: | ---: | ---: |
+| gpt-5.6-sol | 4.00 | 0.40 | 20.00 |
+| gpt-5.6 (Sol alias) | 4.00 | 0.40 | 20.00 |
+| gpt-6-astra | 10.00 | 1.00 | 50.00 |
+
+[Sol's model documentation](https://developers.openai.com/api/docs/models/gpt-5.6-sol)
+confirms the alias and promotional pricing through at least November 21, 2026.
+These are standard short-context API estimates, not verified bills or
+subscription invoices. Astra is 2.5 times Sol's token rates for the same token
+mix; task cost also depends on consumption, caching, and retries. Fast mode,
+long-context rates, cache-write premiums, Batch/Flex, and account billing can
+change the estimate. Detent does not separately model cache-write premiums.
+The [subscription credit table](https://learn.chatgpt.com/docs/pricing) uses
+credits, not USD; its published standard Sol/Astra rates are 100/10/500 and
+250/25/1250 per million input/cached/output tokens. Fast-mode multipliers differ
+between billing surfaces; do not apply a universal API-to-credit multiplier.
+External pricing files retain their existing override behavior.

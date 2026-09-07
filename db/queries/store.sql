@@ -67,8 +67,9 @@ INSERT INTO codex_sessions (
   provider_session_id,
   resumed_from_session_id,
   orphan_recovery_outcome,
-  orphan_recovery_fallback_reason
-) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  orphan_recovery_fallback_reason,
+  runtime_identity_json
+) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 RETURNING *;
 
 -- name: BackfillSessionProjectID :execrows
@@ -125,7 +126,8 @@ SET agent_backend_id = COALESCE(sqlc.narg(agent_backend_id), agent_backend_id),
     reasoning_effort_provenance = sqlc.narg(reasoning_effort_provenance),
     service_tier = sqlc.narg(service_tier),
     service_tier_provenance = sqlc.narg(service_tier_provenance),
-    identity_observed_at = sqlc.narg(identity_observed_at)
+    identity_observed_at = sqlc.narg(identity_observed_at),
+    runtime_identity_json = sqlc.narg(runtime_identity_json)
 WHERE id = sqlc.arg(id);
 
 -- name: UpdateCodexSessionProviderIdentity :execrows
@@ -195,6 +197,7 @@ SELECT
   CAST(COALESCE(s.agent_backend_id, '') AS TEXT) AS agent_backend_id,
   CAST(COALESCE(s.agent_backend_kind, '') AS TEXT) AS agent_backend_kind,
   CAST(COALESCE(s.agent_role, '') AS TEXT) AS agent_role,
+  CAST(COALESCE(s.runtime_identity_json, '') AS TEXT) AS runtime_identity_json,
   CAST(COALESCE(w.worker_type, '') AS TEXT) AS worker_type,
   CAST(COALESCE(w.worker_host, '') AS TEXT) AS worker_host,
   CAST(COALESCE(w.lane, '') AS TEXT) AS lane,
@@ -227,6 +230,7 @@ SELECT
   CAST(COALESCE(s.agent_backend_id, '') AS TEXT) AS agent_backend_id,
   CAST(COALESCE(s.agent_backend_kind, '') AS TEXT) AS agent_backend_kind,
   CAST(COALESCE(s.agent_role, '') AS TEXT) AS agent_role,
+  CAST(COALESCE(s.runtime_identity_json, '') AS TEXT) AS runtime_identity_json,
   CAST(s.completed_at AS TEXT) AS completed_at
 FROM codex_sessions AS s
 JOIN work_attempts AS w ON w.id = s.work_attempt_id
@@ -274,6 +278,7 @@ SELECT
   CAST(COALESCE(agent_backend_id, '') AS TEXT) AS agent_backend_id,
   CAST(COALESCE(agent_backend_kind, '') AS TEXT) AS agent_backend_kind,
   CAST(COALESCE(agent_role, '') AS TEXT) AS agent_role,
+  CAST(COALESCE(runtime_identity_json, '') AS TEXT) AS runtime_identity_json,
   CAST(completed_at AS TEXT) AS completed_at
 FROM codex_sessions
 WHERE completed_at IS NOT NULL

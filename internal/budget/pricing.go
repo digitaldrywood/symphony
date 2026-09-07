@@ -30,6 +30,16 @@ type PricingTable map[string]ModelPricing
 // when models are added or updated. Under subscription auth, computed USD is
 // notional but still used for budget pacing.
 func DefaultPricingTable() PricingTable {
+	sol := ModelPricing{
+		USDPerInputToken:       0.000004,
+		USDPerCachedInputToken: 0.0000004,
+		USDPerOutputToken:      0.000020,
+	}
+	astra := ModelPricing{
+		USDPerInputToken:       0.000010,
+		USDPerCachedInputToken: 0.000001,
+		USDPerOutputToken:      0.000050,
+	}
 	gpt55 := ModelPricing{
 		USDPerInputToken:       0.000005,
 		USDPerCachedInputToken: 0.0000005,
@@ -57,6 +67,9 @@ func DefaultPricingTable() PricingTable {
 	}
 
 	return PricingTable{
+		"gpt-5.6-sol":               sol,
+		"gpt-5.6":                   sol,
+		"gpt-6-astra":               astra,
 		defaultPricingFallbackModel: gpt55,
 		"gpt-5.5":                   gpt55,
 		"gpt-5.4": {

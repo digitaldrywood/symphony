@@ -202,6 +202,7 @@ type CodexSession struct {
 	WorkerReapReason             sql.NullString `json:"worker_reap_reason"`
 	WorkerCleanupRoot            sql.NullString `json:"worker_cleanup_root"`
 	WorkerCleanupPath            sql.NullString `json:"worker_cleanup_path"`
+	RuntimeIdentityJson          sql.NullString `json:"runtime_identity_json"`
 }
 
 type DetentRun struct {

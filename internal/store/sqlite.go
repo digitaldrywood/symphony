@@ -215,7 +215,12 @@ func (s *sqliteStore) StartSession(ctx context.Context, attrs SessionStart) (int
 		RequestedModel: agentidentity.NewValue(requestedModel, agentidentity.ProvenanceConfigured),
 	})
 
+	identityJSON, err := marshalRuntimeIdentity(identity)
+	if err != nil {
+		return 0, err
+	}
 	session, err := s.queries.CreateCodexSession(ctx, sqlc.CreateCodexSessionParams{
+		RuntimeIdentityJson:          nullString(identityJSON),
 		RunID:                        nullPositiveInt64(attrs.RunID),
 		ProjectID:                    nullString(attrs.ProjectID),
 		WorkAttemptID:                nullPositiveInt64(attrs.WorkAttemptID),
@@ -368,7 +373,12 @@ func (s *sqliteStore) UpdateSessionIdentity(ctx context.Context, sessionID int64
 		return ErrNotFound
 	}
 	identity = identity.Normalize()
+	identityJSON, err := marshalRuntimeIdentity(identity)
+	if err != nil {
+		return err
+	}
 	rows, err := s.queries.UpdateCodexSessionIdentity(ctx, sqlc.UpdateCodexSessionIdentityParams{
+		RuntimeIdentityJson:       nullString(identityJSON),
 		AgentBackendID:            nullString(identity.BackendID),
 		AgentBackendKind:          nullString(identity.BackendKind),
 		AgentRole:                 nullString(identity.Role),
@@ -462,7 +472,12 @@ func (s *sqliteStore) LatestCompletedAgentResumeState(ctx context.Context, attrs
 	if err != nil {
 		return AgentResumeState{}, err
 	}
+	runtimeIdentity, err := unmarshalRuntimeIdentity(row.RuntimeIdentityJson)
+	if err != nil {
+		return AgentResumeState{}, err
+	}
 	return AgentResumeState{
+		RuntimeIdentity:   runtimeIdentity,
 		DetentSessionID:   row.ID,
 		ProviderThreadID:  strings.TrimSpace(row.ProviderThreadID),
 		ProviderSessionID: strings.TrimSpace(row.ProviderSessionID),
@@ -500,7 +515,12 @@ func (s *sqliteStore) LatestIssueAgentResumeState(ctx context.Context, identity 
 	if err != nil {
 		return AgentResumeState{}, err
 	}
+	runtimeIdentity, err := unmarshalRuntimeIdentity(row.RuntimeIdentityJson)
+	if err != nil {
+		return AgentResumeState{}, err
+	}
 	return AgentResumeState{
+		RuntimeIdentity:   runtimeIdentity,
 		DetentSessionID:   row.ID,
 		ProviderThreadID:  strings.TrimSpace(row.ProviderThreadID),
 		ProviderSessionID: strings.TrimSpace(row.ProviderSessionID),
@@ -528,8 +548,13 @@ func (s *sqliteStore) ListOrphanedAgentSessions(ctx context.Context, projectID s
 		if err != nil {
 			return nil, err
 		}
+		runtimeIdentity, err := unmarshalRuntimeIdentity(row.RuntimeIdentityJson)
+		if err != nil {
+			return nil, err
+		}
 		orphans = append(orphans, OrphanedAgentSession{
 			ResumeState: AgentResumeState{
+				RuntimeIdentity:   runtimeIdentity,
 				DetentSessionID:   row.ID,
 				ProviderThreadID:  strings.TrimSpace(row.ProviderThreadID),
 				ProviderSessionID: strings.TrimSpace(row.ProviderSessionID),

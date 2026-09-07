@@ -10,6 +10,9 @@ Detent has two configuration layers:
 This page is the single reference for both configuration layers. Project
 configuration is documented below after the host-wide settings.
 
+For instance backend/route inheritance and the opt-in `sol_first` model-selection
+preset, see [Instance agent defaults](multi-project.md#instance-agent-defaults-and-sol-first-selection).
+
 ## Repository policy with Hub execution
 
 Connecting a project to Hub preserves its repository definition. The customer
@@ -860,6 +863,7 @@ only to resettable budget pacing and never clears a per-issue hard hold.
 | `agents` | `object` | `see child fields` | No | None |
 | `agents.backends` | `list<object>` | `[]` | No | None |
 | `agents.backends[].command` | `string` | `none` | Conditional | is required |
+| `agents.backends[].disabled` | `boolean` | `false when configured` | No | None |
 | `agents.backends[].id` | `string` | `none` | Conditional | is required |
 | `agents.backends[].kind` | `string` | `none` | Conditional | is required |
 | `agents.backends[].options` | `mapping` | `see child fields` | No | None |
@@ -884,9 +888,47 @@ only to resettable budget pacing and never clears a per-issue hard hold.
 | `agents.backends[].options.turn_timeout_ms` | `integer` | `Codex: 3600000; Claude Code: 0` | No | must be greater than or equal to 0 |
 | `agents.backends[].protocol` | `string` | `none` | No | must be app-server for codex<br>must be headless for claude_code |
 | `agents.backends[].provider` | `string` | `none` | No | must be a sanitized label containing only letters, numbers, dots, underscores, or hyphens |
+| `agents.model_selection` | `object` | `see child fields` | No | None |
+| `agents.model_selection.backend_kinds` | `list<string>` | `none` | No | None |
+| `agents.model_selection.complex_model` | `string` | `none` | Conditional | is required when enabled |
+| `agents.model_selection.default_level` | `string` | `none` | Conditional | is required when enabled<br>must reference a configured level |
+| `agents.model_selection.enabled` | `boolean` | `none` | No | None |
+| `agents.model_selection.fallback_order` | `list<string>` | `none` | No | None |
+| `agents.model_selection.levels` | `mapping<string, mapping>` | `{}` | No | None |
+| `agents.model_selection.levels.<name>` | `object` | `backend-dependent` | No | None |
+| `agents.model_selection.levels.<name>.effort` | `string` | `none for Claude Code` | No | None |
+| `agents.model_selection.levels.<name>.model` | `string` | `backend-dependent` | No | None |
+| `agents.model_selection.normal_model` | `string` | `none` | Conditional | is required when enabled |
+| `agents.model_selection.preset` | `string` | `none` | No | must be sol_first or empty |
+| `agents.model_selection.rules` | `list<object>` | `none` | No | None |
+| `agents.model_selection.rules[].disabled` | `boolean` | `none` | No | None |
+| `agents.model_selection.rules[].efforts` | `list<string>` | `none` | No | None |
+| `agents.model_selection.rules[].level` | `string` | `none` | No | None |
+| `agents.model_selection.rules[].name` | `string` | `none` | No | None |
+| `agents.model_selection.rules[].roles` | `list<string>` | `none` | No | None |
+| `agents.model_selection.rules[].selector` | `object` | `none` | No | None |
+| `agents.model_selection.rules[].selector.and` | `list<mapping>` | `none` | No | None |
+| `agents.model_selection.rules[].selector.assignee_in` | `list<string>` | `none` | No | None |
+| `agents.model_selection.rules[].selector.author_in` | `list<string>` | `none` | No | None |
+| `agents.model_selection.rules[].selector.fields` | `list<object>` | `none` | No | None |
+| `agents.model_selection.rules[].selector.fields[].name` | `string` | `none` | No | None |
+| `agents.model_selection.rules[].selector.fields[].value` | `string` | `none` | No | None |
+| `agents.model_selection.rules[].selector.labels` | `object` | `none` | No | None |
+| `agents.model_selection.rules[].selector.labels.exclude` | `list<string>` | `none` | No | None |
+| `agents.model_selection.rules[].selector.labels.include` | `list<string>` | `none` | No | None |
+| `agents.model_selection.rules[].selector.or` | `list<mapping>` | `none` | No | None |
+| `agents.model_selection.rules[].selector.priority_in` | `list<integer>` | `none` | No | None |
+| `agents.model_selection.stages` | `mapping<string, mapping>` | `{}` | No | None |
+| `agents.model_selection.stages.<name>` | `object` | `backend-dependent` | No | None |
+| `agents.model_selection.stages.<name>.effort` | `string` | `none for Claude Code` | No | None |
+| `agents.model_selection.stages.<name>.issue_complexity` | `boolean` | `backend-dependent` | No | None |
+| `agents.model_selection.stages.<name>.level` | `string` | `backend-dependent` | No | None |
+| `agents.model_selection.stages.<name>.model` | `string` | `backend-dependent` | No | None |
+| `agents.model_selection.unavailable` | `string` | `none` | No | must be fallback or fail |
 | `agents.routes` | `list<object>` | `[]` | No | None |
 | `agents.routes[].backend` | `string` | `none` | Conditional | is required<br>must reference a configured backend |
 | `agents.routes[].default` | `boolean` | `false when configured` | No | None |
+| `agents.routes[].disabled` | `boolean` | `false when configured` | No | None |
 | `agents.routes[].model` | `string` | `none` | No | None |
 | `agents.routes[].model_field` | `string` | `none` | No | None |
 | `agents.routes[].name` | `string` | `none` | No | None |

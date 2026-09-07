@@ -32,16 +32,24 @@ type workflowGitRefSource struct {
 }
 
 type gitRefWorkflowWatcher struct {
-	source   workflowGitRefSource
-	interval time.Duration
-	logger   *slog.Logger
+	currentProject func() globalconfig.Project
+	agents         workflowconfig.Agents
+	budget         workflowconfig.AgentBudgetDefaults
+	source         workflowGitRefSource
+	interval       time.Duration
+	logger         *slog.Logger
 }
 
 func LoadWorkflow(cfg globalconfig.Project) (workflowconfig.Workflow, error) {
 	return LoadWorkflowContext(context.Background(), cfg)
 }
 
-func LoadWorkflowContext(ctx context.Context, cfg globalconfig.Project) (workflowconfig.Workflow, error) {
+func LoadWorkflowContext(ctx context.Context, cfg globalconfig.Project) (workflow workflowconfig.Workflow, err error) {
+	defer func() {
+		if err == nil {
+			workflow.Config = workflow.Config.WithAgentDefaults(cfg.GlobalAgents, cfg.GlobalBudget)
+		}
+	}()
 	if strings.TrimSpace(cfg.WorkflowRef) == "" {
 		workflowPath, err := plainWorkflowPath(cfg.Workflow)
 		if err != nil {
@@ -57,7 +65,7 @@ func LoadWorkflowContext(ctx context.Context, cfg globalconfig.Project) (workflo
 	if err != nil {
 		return workflowconfig.Workflow{}, err
 	}
-	workflow, _, err := source.load(ctx)
+	workflow, _, err = source.load(ctx)
 	return workflow, err
 }
 
@@ -299,6 +307,8 @@ func newGitRefWorkflowWatcher(cfg globalconfig.Project, interval time.Duration, 
 		logger = slog.Default()
 	}
 	return &gitRefWorkflowWatcher{
+		agents:   cfg.GlobalAgents,
+		budget:   cfg.GlobalBudget,
 		source:   source,
 		interval: interval,
 		logger:   logger,
@@ -313,6 +323,12 @@ func (w *gitRefWorkflowWatcher) Watch(ctx context.Context) (<-chan configwatcher
 	localWatcher, err := configwatcher.NewFile(w.source.localPath(), func(string) (workflowconfig.Workflow, error) {
 		workflow, _, err := w.source.load(ctx)
 		if err == nil {
+			agents, budget := w.agents, w.budget
+			if w.currentProject != nil {
+				project := w.currentProject()
+				agents, budget = project.GlobalAgents, project.GlobalBudget
+			}
+			workflow.Config = workflow.Config.WithAgentDefaults(agents, budget)
 			err = workflow.Config.Validate()
 		}
 		return workflow, err

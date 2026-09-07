@@ -509,3 +509,20 @@ REST telemetry distinguishes `total_requests`, `conditional_requests`,
 `not_modified_requests`, and `billable_requests`. Endpoint contributors expose
 the same breakdown, and the REST rate-limit card's cycle cost uses billable
 requests rather than free `304` checks.
+
+
+## Optional fleet model preset
+
+To make existing and newly onboarded projects use Sol for ordinary work and
+Astra for explicitly complex work, configure `global.agents.model_selection.preset:
+sol_first` in the instance configuration. This defaults omitted effort to medium
+(or high for very complex work) and preserves explicit issue model/effort fields.
+Create `complexity:complex` and `complexity:very-complex` repository labels for
+operators who want those signals, plus `design` if using an inherited Claude
+selector. Generic `enhancement` does not select Astra. Projects inherit each
+omitted setting; `agents.model_selection.enabled: false` opts out.
+
+See the [fleet activation and inheritance examples](multi-project.md#instance-agent-defaults-and-sol-first-selection)
+for full precedence, custom rules, fallback, ambient Claude authentication,
+project opt-out, and pricing limitations. Run `detent doctor` to inspect effective
+settings before dispatching new work.

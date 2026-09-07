@@ -13,12 +13,15 @@ type ProviderCapacityResolver interface {
 func (r *Runner) DispatchCapacity(ctx context.Context, req RunRequest) (providercapacity.Requirement, error) {
 	workflow, runtime, _, _ := r.runtimeSnapshot()
 	role := runRole(req.Mode, req.Issue)
-	selection, backend, _, err := runtime.selectBackendForRole(req.Issue, selectorContext(req.SelectorContext, workflow), runtime.effectiveRunRole(role))
+	selection, backend, backendConfig, err := runtime.selectRequestBackend(req, selectorContext(req.SelectorContext, workflow), role)
 	if err != nil {
 		return providercapacity.Requirement{}, err
 	}
-	effort, field := workflow.Config.Agent.Effort.Resolve(role)
-	override := resolveAgentOverride(ctx, req.Issue, "", selection.Model, role, agentEffortCandidate{Field: field, Effort: effort}, backend)
+	baseModel := effectiveModel("", selection.Model, runtime.defaultModelForRole(role))
+	override := resolveRequestAgentSelection(ctx, req, "", baseModel, role, workflow.Config, backendConfig, backend)
+	if override.Err != nil {
+		return providercapacity.Requirement{}, override.Err
+	}
 	model := effectiveModel("", override.Model, runtime.defaultModelForRole(role))
 	if model == "" {
 		model = "provider_default"

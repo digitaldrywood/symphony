@@ -131,6 +131,8 @@ type Manager struct {
 func ManagerConfigFromGlobal(cfg globalconfig.Config) ManagerConfig {
 	projects := append([]globalconfig.Project(nil), cfg.Projects...)
 	for index := range projects {
+		projects[index].GlobalAgents = cfg.Global.Agents
+		projects[index].GlobalBudget = cfg.Global.Budget
 		projects[index].GlobalKnowledge = cfg.Global.Knowledge
 		projects[index].GlobalRateWindowPacing = cfg.Global.RateWindowPacing
 		projects[index].GlobalMemory = cfg.Global.Memory
@@ -1460,6 +1462,8 @@ func sameProjectConfigExceptLiveFields(left globalconfig.Project, right globalco
 	left.GlobalMemory.PollIntervalMS = right.GlobalMemory.PollIntervalMS
 	left.GlobalIO = right.GlobalIO
 	left.GlobalCPU = right.GlobalCPU
+	left.GlobalAgents = right.GlobalAgents
+	left.GlobalBudget = right.GlobalBudget
 	return reflect.DeepEqual(left, right)
 }
 

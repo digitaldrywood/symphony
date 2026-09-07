@@ -56,6 +56,7 @@ func (v Value) Normalize() Value {
 }
 
 type Identity struct {
+	Selection       Selection  `json:"selection,omitzero"`
 	BackendID       string     `json:"backend_id,omitempty"`
 	BackendKind     string     `json:"backend_kind,omitempty"`
 	Route           string     `json:"route,omitempty"`
@@ -66,6 +67,19 @@ type Identity struct {
 	ReasoningEffort Value      `json:"reasoning_effort,omitzero"`
 	ServiceTier     Value      `json:"service_tier,omitzero"`
 	ObservedAt      *time.Time `json:"observed_at,omitempty"`
+}
+
+type Selection struct {
+	Policy         string `json:"policy,omitempty"`
+	PolicySource   string `json:"policy_source,omitempty"`
+	Reason         string `json:"reason,omitempty"`
+	Level          string `json:"level,omitempty"`
+	RequestedModel string `json:"requested_model,omitempty"`
+	ModelSource    string `json:"model_source,omitempty"`
+	EffortSource   string `json:"effort_source,omitempty"`
+	FallbackReason string `json:"fallback_reason,omitempty"`
+	BackendSource  string `json:"backend_source,omitempty"`
+	RouteSource    string `json:"route_source,omitempty"`
 }
 
 func Configured(backendID string, backendKind string, route string, role string, requestedModel string, provider string, effort string, serviceTier string, observedAt time.Time) Identity {
@@ -102,7 +116,7 @@ func RuntimeUpdate(model string, provider string, effort string, serviceTier str
 
 func (i Identity) IsZero() bool {
 	i = i.Normalize()
-	return i.BackendID == "" &&
+	return i.Selection == (Selection{}) && i.BackendID == "" &&
 		i.BackendKind == "" &&
 		i.Route == "" &&
 		i.Role == "" &&
@@ -134,6 +148,9 @@ func (i Identity) Normalize() Identity {
 func (i Identity) Merge(update Identity) Identity {
 	out := i.Normalize()
 	update = update.Normalize()
+	if update.Selection != (Selection{}) {
+		out.Selection = update.Selection
+	}
 	if update.BackendID != "" {
 		out.BackendID = update.BackendID
 	}

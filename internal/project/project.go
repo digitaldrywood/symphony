@@ -255,6 +255,7 @@ func New(cfg Config, deps Dependencies) (*Project, error) {
 	}
 
 	workflow := normalizeWorkflow(cfg.Workflow)
+	workflow.Config = workflow.Config.WithAgentDefaults(cfg.Project.GlobalAgents, cfg.Project.GlobalBudget)
 	if err := configureProjectPolicy(context.Background(), cfg.Project, &workflow, deps.Scheduling); err != nil {
 		return nil, projectDefinitionError{err: err}
 	}
@@ -461,7 +462,6 @@ func New(cfg Config, deps Dependencies) (*Project, error) {
 
 	watcherProject := cfg.Project
 	watcherProject.ID = string(id)
-	watcherFactory := resolveWorkflowWatcherFactory(deps, watcherProject, deps.GitHubToken, logger)
 	workflowPath := workflowSourceDisplayPath(cfg.Project)
 	workflowModifiedAt := workflowFileModifiedAt(cfg.Project)
 
@@ -494,7 +494,6 @@ func New(cfg Config, deps Dependencies) (*Project, error) {
 		retroProduct:              retroProductConnector,
 		events:                    projectEvents,
 		logger:                    logger,
-		watcher:                   watcherFactory,
 		workflowReconcileInterval: deps.WorkflowReconcileInterval,
 		workflowSource: WorkflowSourceStatus{
 			Path:       workflowPath,
@@ -505,6 +504,7 @@ func New(cfg Config, deps Dependencies) (*Project, error) {
 			LoadedAt:   time.Now().UTC(),
 		},
 	}
+	project.watcher = resolveWorkflowWatcherFactory(deps, watcherProject, deps.GitHubToken, logger, project.Config)
 	retainScheduleOwner = true
 	return project, nil
 }
@@ -558,9 +558,14 @@ func (p *Project) updateLiveConfig(ctx context.Context, cfg globalconfig.Project
 
 	p.mu.Lock()
 	workflow := p.workflow
+	workflow.Config = workflow.Config.WithAgentDefaults(cfg.GlobalAgents, cfg.GlobalBudget)
+	if err := workflow.Config.Validate(); err != nil {
+		p.mu.Unlock()
+		return fmt.Errorf("validate inherited agent configuration: %w", err)
+	}
 	workflow.Config.ActiveHours = EffectiveActiveHours(cfg, p.workflowActiveHours)
 	workflow.Config.Agent.RateWindowPacing = effectiveRateWindowPacing(cfg, workflow.Config)
-	if workflow.Config.Policy.ID != "" && (!reflect.DeepEqual(workflow.Config.ActiveHours, p.workflow.Config.ActiveHours) || workflow.Config.Agent.RateWindowPacing != p.workflow.Config.Agent.RateWindowPacing) {
+	if workflow.Config.Policy.ID != "" && (!reflect.DeepEqual(workflow.Config.ActiveHours, p.workflow.Config.ActiveHours) || workflow.Config.Agent.RateWindowPacing != p.workflow.Config.Agent.RateWindowPacing || !reflect.DeepEqual(workflow.Config.Agents, p.workflow.Config.Agents) || workflow.Config.Budget.PricingPath != p.workflow.Config.Budget.PricingPath) {
 		p.mu.Unlock()
 		return errors.New("policy_mismatch: host execution overrides changed; approve the effective descriptor and restart Detent before applying them")
 	}
@@ -568,8 +573,13 @@ func (p *Project) updateLiveConfig(ctx context.Context, cfg globalconfig.Project
 	projectOrchestrator := p.orchestrator
 	running := p.done != nil
 	projectAdmission := p.admission
+	projectRunner := p.runner
 	p.mu.Unlock()
 
+	applyRunner, err := prepareRunnerWorkflow(projectRunner, workflow)
+	if err != nil {
+		return fmt.Errorf("prepare inherited agent configuration: %w", err)
+	}
 	if projectOrchestrator != nil && running {
 		if err := projectOrchestrator.UpdateConfig(ctx, runtimeConfig); err != nil {
 			return fmt.Errorf("update project live config: %w", err)
@@ -578,6 +588,7 @@ func (p *Project) updateLiveConfig(ctx context.Context, cfg globalconfig.Project
 	if projectAdmission != nil {
 		projectAdmission.UpdateProjectCandidate(runtimeConfig.Project)
 	}
+	applyRunner()
 
 	p.mu.Lock()
 	p.cfg = cfg
@@ -1454,6 +1465,7 @@ func (p *Project) handleWorkflowUpdate(ctx context.Context, update configwatcher
 	previousPolicy := p.workflow.Config.Policy
 	p.mu.Unlock()
 	workflow := normalizeWorkflow(update.Workflow)
+	workflow.Config = workflow.Config.WithAgentDefaults(projectConfig.GlobalAgents, projectConfig.GlobalBudget)
 	if err := configureProjectPolicy(ctx, projectConfig, &workflow, scheduling); err != nil {
 		return p.workflowReloadError("repository policy reload rejected", update.Path, err)
 	}
@@ -1533,6 +1545,10 @@ func (p *Project) handleWorkflowUpdate(ctx context.Context, update configwatcher
 		}
 	}
 
+	applyRunner, err := prepareRunnerWorkflow(runner, workflow)
+	if err != nil {
+		return p.workflowReloadError("prepare agent configuration rejected", update.Path, err)
+	}
 	runtimeConfig := projectOrchestratorConfig(projectConfig, workflow.Config)
 	if projectOrchestrator != nil && projectRunning {
 		if err := projectOrchestrator.UpdateRuntime(ctx, orchestrator.RuntimeUpdate{
@@ -1547,9 +1563,7 @@ func (p *Project) handleWorkflowUpdate(ctx context.Context, update configwatcher
 			return p.workflowReloadError("apply workflow reload failed", update.Path, err)
 		}
 	}
-	if updater, ok := runner.(workflowUpdater); ok {
-		updater.UpdateWorkflow(workflow)
-	}
+	applyRunner()
 	if projectIntake != nil {
 		projectIntake.Apply(preparedIntake)
 	}
@@ -2132,6 +2146,19 @@ type workflowUpdater interface {
 	UpdateWorkflow(workflowconfig.Workflow)
 }
 
+func prepareRunnerWorkflow(value orchestrator.Runner, workflow workflowconfig.Workflow) (func(), error) {
+	if updater, ok := value.(interface {
+		PrepareWorkflowUpdate(workflowconfig.Workflow) (func(), error)
+	}); ok {
+		return updater.PrepareWorkflowUpdate(workflow)
+	}
+	return func() {
+		if updater, ok := value.(workflowUpdater); ok {
+			updater.UpdateWorkflow(workflow)
+		}
+	}, nil
+}
+
 type schedulerFactory func(workflowconfig.Config) (scheduler.Scheduler, error)
 
 func resolveConnectorFactory(deps Dependencies) ConnectorFactory {
@@ -2303,23 +2330,31 @@ func resolveWorkflowWatcherFactory(
 	project globalconfig.Project,
 	githubToken string,
 	logger *slog.Logger,
+	currentProject func() globalconfig.Project,
 ) WorkflowWatcherFactory {
 	if deps.WorkflowWatcherFactory != nil {
 		return deps.WorkflowWatcherFactory
 	}
 	if strings.TrimSpace(project.WorkflowRef) != "" {
 		return func(string) (WorkflowWatcher, error) {
-			return newGitRefWorkflowWatcher(project, 0, logger)
+			watcher, err := newGitRefWorkflowWatcher(project, 0, logger)
+			if err != nil {
+				return nil, err
+			}
+			watcher.currentProject = currentProject
+			return watcher, nil
 		}
 	}
 	return func(path string) (WorkflowWatcher, error) {
 		return configwatcher.New(path,
 			configwatcher.WithLoader(func(path string) (workflowconfig.Workflow, error) {
+				project := currentProject()
 				workflow, err := workflowconfig.LoadWorkflow(path)
 				if err != nil {
 					return workflow, err
 				}
 				workflow = normalizeWorkflow(workflow)
+				workflow.Config = workflow.Config.WithAgentDefaults(project.GlobalAgents, project.GlobalBudget)
 				workflow.Config = workflowConfigWithProjectIdentity(project, workflow.Config)
 				workflow.Config = workflowConfigWithGitHubToken(workflow.Config, githubToken)
 				return workflow, nil

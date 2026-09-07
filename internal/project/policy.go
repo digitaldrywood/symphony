@@ -15,6 +15,7 @@ type policyChecker interface {
 }
 
 func ResolvePolicy(cfg globalconfig.Project, workflow workflowconfig.Workflow) (policy.Descriptor, error) {
+	workflow.Config = workflow.Config.WithAgentDefaults(cfg.GlobalAgents, cfg.GlobalBudget)
 	workflow.Config = workflowConfigWithProjectIdentity(cfg, workflow.Config)
 	return workflowconfig.ResolvePolicy(workflow)
 }

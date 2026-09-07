@@ -1561,8 +1561,8 @@ func TestHandleRunResultRefreshesNewPullRequestBeforeCITrigger(t *testing.T) {
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for new-PR trigger-label reapplication")
 	}
-	if tracker.hydrations != 1 {
-		t.Fatalf("hydrations = %d, want 1", tracker.hydrations)
+	if tracker.hydrations != 2 {
+		t.Fatalf("hydrations = %d, want 2", tracker.hydrations)
 	}
 }
 
@@ -1647,8 +1647,8 @@ func TestHandleRunResultRefreshesStalePullRequestAfterHydrationFailure(t *testin
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for refreshed-head trigger-label reapplication")
 	}
-	if tracker.hydrations != 2 {
-		t.Fatalf("hydrations = %d, want completion hydration plus push refresh attempt", tracker.hydrations)
+	if tracker.hydrations != 3 {
+		t.Fatalf("hydrations = %d, want completion hydration, push refresh, and trigger refresh", tracker.hydrations)
 	}
 }
 

@@ -110,8 +110,30 @@ type ChangeReview struct {
 
 type ReviewChange struct {
 	Mutation
-	Decision string `json:"decision"`
-	Body     string `json:"body"`
+	Decision          string              `json:"decision"`
+	Body              string              `json:"body"`
+	ExpectedVersionID string              `json:"expected_version_id,omitempty"`
+	Bundle            *ChangeReviewBundle `json:"bundle,omitempty"`
+}
+
+type ChangeReviewBundle struct {
+	ArtifactID string `json:"artifact_id"`
+	Revision   int64  `json:"revision"`
+	SHA256     string `json:"sha256"`
+	HeadSHA    string `json:"head_sha"`
+}
+
+type ViewChangeFile struct {
+	Mutation
+	Bundle     ChangeReviewBundle `json:"bundle"`
+	FileSHA256 string             `json:"file_sha256"`
+	Viewed     bool               `json:"viewed"`
+}
+
+type ChangeViewedFile struct {
+	ManifestSHA256 string `json:"manifest_sha256"`
+	FileSHA256     string `json:"file_sha256"`
+	Viewed         bool   `json:"viewed"`
 }
 
 type ChangeCheckResult struct {

@@ -1,0 +1,29 @@
+.review-surface button:disabled { opacity: .5; cursor: default; }
+.review-surface :focus-visible { outline: 2px solid var(--color-accent); outline-offset: 2px; }
+.review-files { display: grid; grid-template-columns: minmax(10rem, 14rem) minmax(0, 1fr); gap: 12px; min-width: 0; }
+[data-review-files] { display: flex; flex-direction: column; gap: 4px; max-height: 34rem; overflow: auto; }
+[data-review-files] button { text-align: left; overflow-wrap: anywhere; padding: 8px; border: 1px solid var(--color-line); border-radius: 4px; color: var(--color-sec); font-size: 12px; }
+[data-review-files] button[aria-current=true] { color: var(--color-accent); background: var(--color-elev); }
+[data-review-diff] { min-width: 0; max-height: 34rem; overflow: auto; color: var(--color-text); font: 12px/1.5 var(--font-mono); }
+.d2h-file-header { padding: 8px; background: var(--color-elev); overflow-wrap: anywhere; }
+.d2h-file-collapse, .d2h-file-switch, .d2h-tag { display: none; }
+.d2h-diff-table { border-collapse: collapse; width: 100%; }
+.d2h-diff-table td { vertical-align: top; border: 1px solid var(--color-line); }
+.d2h-code-linenumber, .d2h-code-side-linenumber { min-width: 3rem; color: var(--color-sec); text-align: right; padding: 0 4px; user-select: none; }
+.line-num1, .line-num2 { display: inline-block; min-width: 2.5em; }
+.d2h-code-line, .d2h-code-side-line { display: flex; white-space: normal; padding: 0 8px; }
+.d2h-code-line-ctn { white-space: pre; }
+.d2h-code-line-prefix { margin-right: 8px; white-space: pre; user-select: none; }
+.d2h-ins { background: color-mix(in srgb, var(--color-ok) 13%, transparent); }
+.d2h-del { background: color-mix(in srgb, var(--color-err) 13%, transparent); }
+.d2h-info { color: var(--color-sec); background: var(--color-elev); }
+.d2h-files-diff { display: flex; min-width: 0; }
+.d2h-file-side-diff { width: 50%; overflow-x: auto; }
+.hljs-keyword, .hljs-selector-tag, .hljs-type { color: var(--color-info); }
+.hljs-string, .hljs-literal, .hljs-number { color: var(--color-ok); }
+.hljs-title, .hljs-attr { color: var(--color-warn); }
+.hljs-comment { color: var(--color-sec); }
+@media (max-width: 700px) {
+  .review-files { grid-template-columns: minmax(0, 1fr); }
+  [data-review-files] { max-height: 12rem; }
+}

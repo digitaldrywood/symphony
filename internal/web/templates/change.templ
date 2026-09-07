@@ -31,6 +31,7 @@ templ ChangeContent(data ChangePageData) {
 				<p class="whitespace-pre-wrap break-words text-sm text-text [overflow-wrap:anywhere]">{ detail.Change.Body }</p>
 			}
 		</header>
+		@ChangeFilesReview(data)
 		<div class="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_18rem]">
 			<div class="flex min-w-0 flex-col gap-4">
 				<section class="flex min-w-0 flex-col gap-3 rounded-card border border-line bg-surface p-4 text-xs" aria-label="Current version review">

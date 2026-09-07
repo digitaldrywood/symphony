@@ -1,10 +1,12 @@
 package templates
 
 import (
+	"encoding/json"
 	"net/url"
 	"strings"
 
 	"github.com/digitaldrywood/detent/internal/artifact"
+	"github.com/digitaldrywood/detent/internal/changerequest"
 	"github.com/digitaldrywood/detent/internal/tracker"
 )
 
@@ -20,6 +22,36 @@ type ChangePageData struct {
 	Detail            *tracker.ChangeDetail
 	Loading           bool
 	Error             string
+}
+
+func (data ChangePageData) ReviewBundles() []artifact.Reference {
+	version, ok := data.Version()
+	if !ok {
+		return nil
+	}
+	var refs []artifact.Reference
+	for _, ref := range data.Artifacts {
+		if changerequest.ReviewBundleMatches(version, ref) {
+			refs = append(refs, ref)
+		}
+	}
+	return refs
+}
+
+func (data ChangePageData) ReviewConfig() string {
+	version, ok := data.Version()
+	if !ok || data.Detail == nil {
+		return "{}"
+	}
+	encoded, err := json.Marshal(struct {
+		Version tracker.ChangeVersion `json:"version"`
+		Change  tracker.ChangeRequest `json:"change"`
+		Bundles []artifact.Reference  `json:"bundles"`
+	}{version, data.Detail.Change, data.ReviewBundles()})
+	if err != nil {
+		return "{}"
+	}
+	return string(encoded)
 }
 
 func NativeIssuePath(projectID string, item tracker.NativeWorkItemID) string {

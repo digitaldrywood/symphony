@@ -77,7 +77,7 @@ func CaptureGit(ctx context.Context, directory, base, head string, contextLines 
 		return result, ErrInvalid
 	}
 	result.Capture = Capture{Base: baseSHA, Head: headSHA, MergeBase: mergeSHA, ContextLines: contextLines, FileContext: "changed_files"}
-	diff, err := gitRead(ctx, directory, MaxTextBytes, "diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--unified="+strconv.Itoa(contextLines), mergeSHA, headSHA, "--")
+	diff, err := gitRead(ctx, directory, MaxTextBytes, "diff", "--no-ext-diff", "--no-textconv", "--find-renames", "-l1000", "--unified="+strconv.Itoa(contextLines), mergeSHA, headSHA, "--")
 	if err != nil {
 		return result, err
 	}
@@ -115,7 +115,7 @@ func CaptureGit(ctx context.Context, directory, base, head string, contextLines 
 				return result, err
 			}
 			if !utf8.Valid(data) || bytes.ContainsRune(data, 0) {
-				return result, ErrUnsupported
+				continue
 			}
 			total += len(data)
 			if total > MaxArtifactBytes-MaxManifestBytes || len(result.Parts) >= MaxObjects {

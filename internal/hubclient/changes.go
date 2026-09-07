@@ -84,6 +84,26 @@ func (c *NativeClient) ReviewChange(ctx context.Context, item tracker.NativeWork
 	return result, err
 }
 
+func (c *NativeClient) ChangeViewedFiles(ctx context.Context, item tracker.NativeWorkItemID, id, version string) ([]tracker.ChangeViewedFile, error) {
+	var result []tracker.ChangeViewedFile
+	path, err := changePath(item, id, version)
+	if err != nil || id == "" || version == "" {
+		return nil, errors.New("valid Change Request and version identities are required")
+	}
+	err = c.client.request(ctx, http.MethodGet, c.base()+path+"/viewed-files", nil, &result)
+	return result, err
+}
+
+func (c *NativeClient) ViewChangeFile(ctx context.Context, item tracker.NativeWorkItemID, id, version string, request tracker.ViewChangeFile) (tracker.ChangeViewedFile, error) {
+	var result tracker.ChangeViewedFile
+	path, err := changePath(item, id, version)
+	if err != nil || id == "" || version == "" {
+		return result, errors.New("valid Change Request and version identities are required")
+	}
+	err = c.client.request(ctx, http.MethodPost, c.base()+path+"/viewed-files", request, &result)
+	return result, err
+}
+
 func (c *NativeClient) SubmitChangeCheck(ctx context.Context, item tracker.NativeWorkItemID, id, version string, request tracker.SubmitChangeCheck) (tracker.ChangeCheck, error) {
 	var result tracker.ChangeCheck
 	path, err := changePath(item, id, version)

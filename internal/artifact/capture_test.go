@@ -44,7 +44,7 @@ func TestCaptureGitChangedFileContext(t *testing.T) {
 		unsupported bool
 	}{
 		{"text", []byte("complete head context\nnew line\n"), 5, false},
-		{"binary", []byte{0, 1, 2}, 0, true},
+		{"binary", []byte{0, 1, 2}, 4, false},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			dir := t.TempDir()
@@ -80,12 +80,18 @@ func TestCaptureGitChangedFileContext(t *testing.T) {
 			if bundle.Capture.Base != base || bundle.Capture.Head != head || bundle.Capture.MergeBase != base || bundle.Capture.WorkingTree || len(bundle.Parts) != test.wantParts {
 				t.Fatalf("capture: %#v", bundle.Capture)
 			}
+			if test.name == "binary" && !bytes.Contains(bundle.Parts[0].Data, []byte("Binary files")) {
+				t.Fatal("binary change disappeared from the patch")
+			}
 			for _, p := range bundle.Parts {
 				if p.SHA256 != Digest(p.Data) || p.Path == "unchanged.txt" {
 					t.Fatal("bad context", p.Path)
 				}
 				if p.Path == "changed.txt" && p.Side == "head" && !bytes.Equal(p.Data, test.contents) {
 					t.Fatal("head truncated")
+				}
+				if bytes.ContainsRune(p.Data, 0) {
+					t.Fatal("binary body entered text bundle")
 				}
 			}
 			if err := os.WriteFile(filepath.Join(dir, "changed.txt"), []byte("uncommitted"), 0o600); err != nil {
@@ -101,6 +107,27 @@ func TestCaptureGitChangedFileContext(t *testing.T) {
 				}
 			}
 		})
+	}
+}
+
+func TestCaptureGitRename(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	captureGitCommand(t, dir, "init", "-b", "main")
+	if err := os.WriteFile(filepath.Join(dir, "old.go"), []byte("package example\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	captureGitCommand(t, dir, "add", ".")
+	captureGitCommand(t, dir, "-c", "commit.gpgsign=false", "commit", "-m", "base")
+	base := captureGitCommand(t, dir, "rev-parse", "HEAD")
+	captureGitCommand(t, dir, "mv", "old.go", "new.go")
+	captureGitCommand(t, dir, "-c", "commit.gpgsign=false", "commit", "-m", "rename")
+	bundle, err := CaptureGit(t.Context(), dir, base, "HEAD", 3)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(bundle.Parts) != 3 || !bytes.Contains(bundle.Parts[0].Data, []byte("rename from old.go\nrename to new.go")) {
+		t.Fatal("rename identity or changed-file context lost")
 	}
 }
 

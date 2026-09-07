@@ -53,6 +53,12 @@ func (s State) Snapshot(now time.Time) telemetry.Snapshot {
 		NextRefreshAt:       timePointer(s.NextRefreshAt),
 		Sources:             sources,
 	}
+	if s.RefreshProgress.Stage != "" {
+		progress := s.RefreshProgress
+		progress.ElapsedSeconds = max(0, int64(now.Sub(progress.StartedAt)/time.Second))
+		progress.StageElapsedSeconds = max(0, int64(now.Sub(progress.StageStartedAt)/time.Second))
+		refresh.InFlight = &progress
+	}
 	if !s.ManualRefresh.IsZero() {
 		manual := cloneRefreshAttempt(s.ManualRefresh)
 		refresh.Manual = &manual

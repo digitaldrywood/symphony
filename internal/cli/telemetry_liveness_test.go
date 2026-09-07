@@ -10,6 +10,7 @@ import (
 	"net/http/httptest"
 	"path/filepath"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"testing/synctest"
@@ -82,7 +83,7 @@ func TestTelemetryPublicationSurvivesStalledSourceAfterRestart(t *testing.T) {
 						t.Fatalf("startup retained prior shutdown state: %#v", initial.Shutdown)
 					}
 					server := newTelemetryWebServer(t, snapshots, registry)
-					events := httptest.NewRecorder()
+					events := &telemetryEventRecorder{ResponseRecorder: httptest.NewRecorder()}
 					eventsDone := make(chan struct{})
 					go func() {
 						defer close(eventsDone)
@@ -93,9 +94,9 @@ func TestTelemetryPublicationSurvivesStalledSourceAfterRestart(t *testing.T) {
 						<-eventsDone
 					}()
 					synctest.Wait()
-					frames := strings.Count(events.Body.String(), "event: snapshot\n")
-					if events.Code != http.StatusOK || frames != 1 {
-						t.Fatalf("startup SSE status = %d, snapshot frames = %d", events.Code, frames)
+					frames := strings.Count(events.body(), "event: snapshot\n")
+					if events.status() != http.StatusOK || frames != 1 {
+						t.Fatalf("startup SSE status = %d, snapshot frames = %d", events.status(), frames)
 					}
 					model, err := tui.NewModel(ctx, snapshots)
 					if err != nil {
@@ -145,12 +146,12 @@ func TestTelemetryPublicationSurvivesStalledSourceAfterRestart(t *testing.T) {
 						if !health.GeneratedAt.Equal(current.GeneratedAt) || health.AgeSeconds > 1 {
 							t.Fatalf("health freshness = %#v, snapshot generated at %v", health, current.GeneratedAt)
 						}
-						if got := strings.Count(events.Body.String(), "event: snapshot\n"); got <= frames {
+						if got := strings.Count(events.body(), "event: snapshot\n"); got <= frames {
 							t.Fatalf("SSE froze at %d snapshot frames", got)
 						} else {
 							frames = got
 						}
-						if !strings.Contains(events.Body.String(), "beta active worker") || !strings.Contains(events.Body.String(), "gamma active worker") {
+						if !strings.Contains(events.body(), "beta active worker") || !strings.Contains(events.body(), "gamma active worker") {
 							t.Fatal("SSE did not include current running workers")
 						}
 						if source == "lifetime_totals" && (current.LifetimeTotals.Available || !strings.Contains(current.LifetimeTotals.DegradedReason, "deadline")) {
@@ -158,8 +159,11 @@ func TestTelemetryPublicationSurvivesStalledSourceAfterRestart(t *testing.T) {
 						}
 						if source == "project_state" {
 							alpha := current.Projects[0]
-							if alpha.Runtime.Source != telemetry.SnapshotSourceUnknown || !strings.Contains(alpha.Refresh.LastError, "deadline") {
-								t.Fatalf("stalled project = %#v, want unknown with deadline diagnostic", alpha)
+							if alpha.Runtime.Source != telemetry.SnapshotSourceLive || !alpha.Refresh.Initializing() || alpha.Refresh.LastRefreshAt != nil || alpha.Refresh.InFlight == nil || alpha.Refresh.InFlight.Stage != "tracker_fetch" {
+								t.Fatalf("stalled project = %#v, want live runtime and initializing tracker with stage diagnostic", alpha)
+							}
+							if !cached && alpha.Tracker.Source != telemetry.SnapshotSourceUnknown {
+								t.Fatal("uninitialized tracker presented as fresh")
 							}
 							if cached && alpha.Tracker.Source != telemetry.SnapshotSourceCached {
 								t.Fatal("stalled project lost cached tracker provenance")
@@ -324,4 +328,43 @@ func (stalledTelemetryConnector) FetchCandidateIssues(ctx context.Context) ([]co
 func (stalledTelemetryConnector) FetchIssuesByStates(ctx context.Context, _ []string) ([]connector.Issue, error) {
 	<-ctx.Done()
 	return nil, ctx.Err()
+}
+
+type telemetryEventRecorder struct {
+	*httptest.ResponseRecorder
+	mu sync.Mutex
+}
+
+func (r *telemetryEventRecorder) Write(data []byte) (int, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.ResponseRecorder.Write(data)
+}
+
+func (r *telemetryEventRecorder) WriteString(data string) (int, error) {
+	return r.Write([]byte(data))
+}
+
+func (r *telemetryEventRecorder) WriteHeader(status int) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.ResponseRecorder.WriteHeader(status)
+}
+
+func (r *telemetryEventRecorder) Flush() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.ResponseRecorder.Flush()
+}
+
+func (r *telemetryEventRecorder) body() string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.Body.String()
+}
+
+func (r *telemetryEventRecorder) status() int {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return r.Code
 }

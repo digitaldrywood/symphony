@@ -332,6 +332,10 @@ type Orchestrator struct {
 	ciTriggerLabelMu        sync.Mutex
 	ciTriggerLabelHeads     map[string]ciTriggerLabelHead
 	stateRequests           chan stateRequest
+	refreshSignalMu         sync.Mutex
+	refreshStarted          chan struct{}
+	initialStateReady       chan struct{}
+	initialStatePublished   sync.Once
 	drainRequests           chan drainRequest
 	forceRequests           chan forceRequest
 	recoveryRequests        chan workAttemptRecoveryRequest
@@ -360,12 +364,14 @@ type Orchestrator struct {
 	latestState             atomic.Pointer[State]
 	latestRuntimeState      atomic.Pointer[runtimeState]
 	refreshInProgress       atomic.Bool
+	refreshProgress         atomic.Pointer[telemetry.RefreshProgress]
 	tickWatchdog            *tickWatchdog
 }
 
 type runtimeState struct {
-	Running map[string]Running
-	Claimed map[string]Claimed
+	WorkAttempts []telemetry.WorkAttempt
+	Running      map[string]Running
+	Claimed      map[string]Claimed
 }
 
 type validatorStageResult struct {
@@ -405,9 +411,10 @@ type configUpdateRequest struct {
 }
 
 type runUpdate struct {
-	issueID string
-	usage   runpkg.UsageUpdate
-	applied chan struct{}
+	progress *workerProgress
+	issueID  string
+	usage    runpkg.UsageUpdate
+	applied  chan struct{}
 }
 
 type capacityClearRequest struct {
@@ -696,6 +703,8 @@ func New(cfg Config, deps Dependencies) (*Orchestrator, error) {
 		dispatchGateSamples:     map[dispatchGateSampleKey]time.Time{},
 		ciTriggerLabelHeads:     map[string]ciTriggerLabelHead{},
 		stateRequests:           make(chan stateRequest),
+		refreshStarted:          make(chan struct{}),
+		initialStateReady:       make(chan struct{}),
 		drainRequests:           make(chan drainRequest),
 		forceRequests:           make(chan forceRequest),
 		recoveryRequests:        make(chan workAttemptRecoveryRequest),
@@ -772,9 +781,17 @@ func (o *Orchestrator) Run(ctx context.Context) error {
 	defer o.validatorWG.Wait()
 	defer o.securityAuditWG.Wait()
 	defer o.releaseRunningSlots(&state)
+	o.startTick(&state, time.Now())
+	o.publishState(&state)
+	recoveryTiming := newRefreshTiming(o.logger, o.cfg.Project.ID, false)
+	recoveryTiming.message = "project startup recovery timing"
+	recoveryTiming.progress = &o.refreshProgress
+	recoveryTiming.next("recovery")
 	o.recoverDurableWorkAttempts(ctx, &state, time.Now())
-	if len(state.Running) > 0 {
-		o.publishState(&state)
+	recoveryTiming.log(ctx, ctx.Err() == nil, &state)
+	o.publishState(&state)
+	if err := ctx.Err(); err != nil {
+		return err
 	}
 	initialTickAt := time.Now()
 	o.startTick(&state, initialTickAt)
@@ -788,26 +805,31 @@ func (o *Orchestrator) Run(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case now := <-ticker.C:
+			state.syncWorkerProgress()
 			o.startTick(&state, now)
 			o.tick(ctx, &state, now)
 			o.finishTick(&state)
 			resetTicker(ticker, state.PollInterval)
 		case request := <-o.refreshes:
+			state.syncWorkerProgress()
 			o.startTick(&state, time.Now())
 			o.tickManual(ctx, &state, request)
 			o.finishTick(&state)
 			resetTicker(ticker, state.PollInterval)
 		case request := <-o.reconciles:
+			state.syncWorkerProgress()
 			o.startTick(&state, time.Now())
 			o.reconcileTarget(ctx, &state, request)
 			o.finishTick(&state)
 			resetTicker(ticker, state.PollInterval)
 		case request := <-o.capacityClearRequests:
+			state.syncWorkerProgress()
 			cleared := o.clearBackendCapacity(&state, request.scope, request.at)
 			if request.reply != nil {
 				request.reply <- capacityClearReply{cleared: cleared}
 			}
 		case request := <-o.credentialChanges:
+			state.syncWorkerProgress()
 			scheduled := o.scheduleBackendCredentialProbe(&state, request.scope, request.at)
 			request.reply <- scheduled
 			if scheduled {
@@ -817,10 +839,13 @@ func (o *Orchestrator) Run(ctx context.Context) error {
 				resetTicker(ticker, state.PollInterval)
 			}
 		case request := <-o.trackerClearRequests:
+			state.syncWorkerProgress()
 			request.reply <- trackerClearReply{cleared: o.clearTrackerAvailability(&state, request.at)}
 		case request := <-o.forgeClearRequests:
+			state.syncWorkerProgress()
 			request.reply <- forgeClearReply{cleared: o.clearForgeAvailability(&state, request.host, request.at)}
 		case request := <-o.failureCanaryRequests:
+			state.syncWorkerProgress()
 			result := o.requestProjectFailureBreakerCanary(&state, request.at)
 			request.reply <- result
 			if result.Requested {
@@ -830,35 +855,47 @@ func (o *Orchestrator) Run(ctx context.Context) error {
 				resetTicker(ticker, state.PollInterval)
 			}
 		case request := <-o.stopRequests:
+			state.syncWorkerProgress()
 			o.handleStopRunRequest(ctx, &state, request)
 		case request := <-o.modelPermitRequests:
+			state.syncWorkerProgress()
 			request.reply <- o.handleModelPermitRequest(&state, request.issueID)
 		case result := <-o.runResults:
+			state.syncWorkerProgress()
 			o.handleRunResult(ctx, &state, result)
 		case update := <-o.runUpdates:
+			state.syncWorkerProgress()
 			o.handleRunUpdate(&state, update)
 			if update.applied != nil {
 				close(update.applied)
 			}
 		case result := <-heartbeatResults:
+			state.syncWorkerProgress()
 			o.handleHeartbeatResult(&state, result)
 		case event := <-o.validatorCapacityEvents:
+			state.syncWorkerProgress()
 			o.handleValidatorCapacityEvent(&state, event)
 		case request := <-o.drainRequests:
+			state.syncWorkerProgress()
 			o.startDrain(&state, request.at)
 			request.reply <- struct{}{}
 		case request := <-o.forceRequests:
+			state.syncWorkerProgress()
 			request.reply <- o.forceQuit(request.ctx, &state, request.at)
 		case request := <-o.recoveryRequests:
+			state.syncWorkerProgress()
 			response, err := o.handleWorkAttemptRecovery(ctx, &state, request.request, request.at)
 			request.reply <- workAttemptRecoveryReply{response: response, err: err}
 		case request := <-o.operatorMoves:
+			state.syncWorkerProgress()
 			request.reply <- o.handleOperatorMove(&state, request.request, request.at)
 		case update := <-o.configUpdates:
+			state.syncWorkerProgress()
 			o.applyRuntimeUpdate(&state, update.update, ticker)
 			o.finishTick(&state)
 			update.reply <- struct{}{}
 		case request := <-o.stateRequests:
+			state.syncWorkerProgress()
 			request.reply <- state.clone()
 		}
 		o.publishState(&state)
@@ -876,7 +913,14 @@ func (o *Orchestrator) startTick(state *State, at time.Time) {
 	if o == nil {
 		return
 	}
+	state.syncWorkerProgress()
 	o.refreshInProgress.Store(true)
+	o.refreshSignalMu.Lock()
+	if o.refreshStarted != nil {
+		close(o.refreshStarted)
+	}
+	o.refreshStarted = make(chan struct{})
+	o.refreshSignalMu.Unlock()
 	if o.tickWatchdog == nil || state == nil {
 		return
 	}
@@ -891,6 +935,8 @@ func (o *Orchestrator) finishTick(state *State) {
 	if o == nil {
 		return
 	}
+	o.publishState(state)
+	o.refreshProgress.Store(nil)
 	o.refreshInProgress.Store(false)
 	if o.tickWatchdog == nil || state == nil {
 		return
@@ -1052,42 +1098,70 @@ func (o *Orchestrator) State(ctx context.Context) (State, error) {
 		return State{}, ErrStopped
 	default:
 	}
-	if latest := o.latestState.Load(); latest != nil && o.refreshInProgress.Load() {
-		state := latest.clone()
-		if runtime := o.latestRuntimeState.Load(); runtime != nil {
-			state.Running = cloneRunning(runtime.Running)
-			state.Claimed = cloneClaimed(runtime.Claimed)
+	if o.latestState.Load() == nil {
+		select {
+		case <-ctx.Done():
+			return State{}, ctx.Err()
+		case <-o.done:
+			return State{}, ErrStopped
+		case <-o.initialStateReady:
 		}
-		pool := o.dispatchPoolSnapshot()
-		state.PoolName = pool.Name
-		state.PoolCapacity = pool.Capacity
-		state.PoolAvailable = pool.Available
-		state.PoolDraining = pool.Draining
-		return state, nil
 	}
-
+	o.refreshSignalMu.Lock()
+	refreshStarted := o.refreshStarted
+	o.refreshSignalMu.Unlock()
+	if o.refreshInProgress.Load() {
+		return o.publishedState(), nil
+	}
 	request := stateRequest{reply: make(chan State, 1)}
 	select {
 	case <-ctx.Done():
 		return State{}, ctx.Err()
 	case <-o.done:
 		return State{}, ErrStopped
+	case <-refreshStarted:
+		return o.publishedState(), nil
 	case o.stateRequests <- request:
 	}
-
 	select {
 	case <-ctx.Done():
 		return State{}, ctx.Err()
 	case <-o.done:
 		return State{}, ErrStopped
+	case <-refreshStarted:
+		return o.publishedState(), nil
 	case state := <-request.reply:
-		pool := o.dispatchPoolSnapshot()
-		state.PoolName = pool.Name
-		state.PoolCapacity = pool.Capacity
-		state.PoolAvailable = pool.Available
-		state.PoolDraining = pool.Draining
-		return state, nil
+		return o.observableState(state), nil
 	}
+}
+
+func (o *Orchestrator) publishedState() State {
+	state := o.latestState.Load().clone()
+	if runtime := o.latestRuntimeState.Load(); runtime != nil {
+		state.Running = cloneRunning(runtime.Running)
+		state.Claimed = cloneClaimed(runtime.Claimed)
+		state.WorkAttempts = cloneTelemetryWorkAttempts(runtime.WorkAttempts)
+	}
+	return o.observableState(state)
+}
+
+func (o *Orchestrator) observableState(state State) State {
+	pool := o.dispatchPoolSnapshot()
+	state.PoolName = pool.Name
+	state.PoolCapacity = pool.Capacity
+	state.PoolAvailable = pool.Available
+	state.PoolDraining = pool.Draining
+	if progress := o.refreshProgress.Load(); progress != nil {
+		state.RefreshProgress = *progress
+	}
+	for _, running := range state.Running {
+		if running.progress != nil {
+			if heartbeat := running.progress.persisted.Load(); heartbeat != nil {
+				o.applyWorkAttemptHeartbeatSnapshot(&state, running.WorkAttemptID, *heartbeat, running.LastMessageTruncation)
+			}
+		}
+	}
+	return state
 }
 
 func (o *Orchestrator) publishState(state *State) {
@@ -1096,9 +1170,13 @@ func (o *Orchestrator) publishState(state *State) {
 	}
 	cloned := state.clone()
 	o.latestState.Store(&cloned)
+	if o.initialStateReady != nil {
+		o.initialStatePublished.Do(func() { close(o.initialStateReady) })
+	}
 	o.latestRuntimeState.Store(&runtimeState{
-		Running: cloned.Running,
-		Claimed: cloned.Claimed,
+		WorkAttempts: cloned.WorkAttempts,
+		Running:      cloned.Running,
+		Claimed:      cloned.Claimed,
 	})
 }
 
@@ -1107,8 +1185,9 @@ func (o *Orchestrator) publishRuntimeState(state *State) {
 		return
 	}
 	o.latestRuntimeState.Store(&runtimeState{
-		Running: cloneRunning(state.Running),
-		Claimed: cloneClaimed(state.Claimed),
+		WorkAttempts: cloneTelemetryWorkAttempts(state.WorkAttempts),
+		Running:      cloneRunning(state.Running),
+		Claimed:      cloneClaimed(state.Claimed),
 	})
 }
 

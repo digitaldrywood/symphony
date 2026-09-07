@@ -6,6 +6,7 @@ import (
 	"reflect"
 	"slices"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/digitaldrywood/detent/internal/agentidentity"
@@ -17,6 +18,65 @@ import (
 	"github.com/digitaldrywood/detent/internal/store"
 	"github.com/digitaldrywood/detent/internal/telemetry"
 )
+
+func TestStateReadersCrossStartupAndRefreshBoundaries(t *testing.T) {
+	for _, starting := range []bool{false, true} {
+		name := "refresh starts with reader waiting"
+		if starting {
+			name = "reader precedes initial publication"
+		}
+		t.Run(name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				state := newState(normalizeConfig(Config{}))
+				orch := &Orchestrator{done: make(chan struct{}), initialStateReady: make(chan struct{}), refreshStarted: make(chan struct{}), stateRequests: make(chan stateRequest)}
+				if !starting {
+					orch.publishState(&state)
+				}
+				done := make(chan error, 1)
+				go func() {
+					_, err := orch.State(t.Context())
+					done <- err
+				}()
+				synctest.Wait()
+				orch.startTick(&state, time.Now())
+				orch.publishState(&state)
+				if err := <-done; err != nil {
+					t.Fatal(err)
+				}
+			})
+		})
+	}
+}
+
+func TestRefreshProgressPreservesTrackerFreshness(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name string
+		age  time.Duration
+		want telemetry.RefreshStatus
+	}{
+		{name: "initializing", want: telemetry.RefreshStatusInitializing},
+		{name: "recent tracker data", age: time.Second, want: telemetry.RefreshStatusReady},
+		{name: "stale tracker data", age: time.Hour, want: telemetry.RefreshStatusDegraded},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			now := time.Now()
+			state := newState(normalizeConfig(Config{PollInterval: time.Minute}))
+			if tt.age > 0 {
+				state.LastRefreshAt = now.Add(-tt.age)
+			}
+			state.RefreshProgress = telemetry.RefreshProgress{Stage: "tracker_fetch", StartedAt: now.Add(-10 * time.Second), StageStartedAt: now.Add(-5 * time.Second)}
+			refresh := state.Snapshot(now).Refresh.WithFreshness(now)
+			if refresh.ReadinessStatus() != tt.want || refresh.InFlight == nil || refresh.InFlight.ElapsedSeconds != 10 || refresh.InFlight.StageElapsedSeconds != 5 {
+				t.Fatalf("refresh = %#v, want %s with progress", refresh, tt.want)
+			}
+			later := refresh.WithFreshness(now.Add(time.Second))
+			if later.InFlight.ElapsedSeconds != 11 || refresh.InFlight.ElapsedSeconds != 10 {
+				t.Fatal("freshness update failed to advance duration on an independent copy")
+			}
+		})
+	}
+}
 
 func TestStatePreservesPublishedRunningAttemptsDuringRefresh(t *testing.T) {
 	t.Parallel()

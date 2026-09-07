@@ -379,7 +379,7 @@ templ workViewScript() {
 				document.querySelectorAll("[data-work-view-panel]").forEach(function (panel) {
 					panel.hidden = panel.dataset.workViewPanel !== state.mode;
 				});
-				document.querySelectorAll("[data-work-view]").forEach(function (button) {
+				document.querySelectorAll("button[data-work-view]").forEach(function (button) {
 					var active = button.dataset.workView === state.mode;
 					button.setAttribute("aria-pressed", active ? "true" : "false");
 					button.classList.toggle("bg-elev", active);
@@ -497,7 +497,7 @@ templ workViewScript() {
 					applyState(false);
 					return;
 				}
-				var view = event.target.closest("[data-work-view]");
+				var view = event.target.closest("button[data-work-view]");
 				if (view) {
 					var focused = document.activeElement && document.activeElement.closest ? document.activeElement.closest("[data-work-item]") : null;
 					if (focused) state.focus = focused.dataset.workKey || state.focus;

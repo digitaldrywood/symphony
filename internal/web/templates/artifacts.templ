@@ -1,0 +1,33 @@
+package templates
+
+import "strconv"
+
+templ ArtifactAccess(data ChangePageData) {
+	<section class="flex min-w-0 flex-col gap-3 rounded-card border border-line bg-surface p-4" aria-label="Durable artifacts" data-artifact-viewer>
+		<h2 class="text-xs font-semibold text-text">Artifacts</h2>
+		if data.ArtifactError != "" {
+			<p class="text-xs text-sec" role="status">{ data.ArtifactError }</p>
+		} else if len(data.Artifacts) == 0 {
+			<p class="text-xs text-sec">Local-only or uploading: no verified durable artifact is published. Unuploaded content is unavailable when its runner is lost.</p>
+		} else {
+			<label class="flex flex-col gap-1 text-xs text-sec">Project access token
+				<input type="password" name="artifact_member_token" autocomplete="off" class="min-w-0 rounded-chip border border-line bg-elev px-2 py-1 text-text"/>
+			</label>
+			<p class="text-xs text-sec">Use your current project credential. Access is checked for each download; the token is kept only in this page.</p>
+			for _, ref := range data.Artifacts {
+				<form class="flex min-w-0 flex-col gap-2 rounded-chip bg-elev p-2 text-xs" data-artifact-form action={ NativeIssuePath(data.ProjectID,data.IssueID)+"/artifacts/"+ref.ArtifactID+"/access" } method="post">
+					<input type="hidden" name="form_token" value={ data.ArtifactFormToken }/>
+					<input type="hidden" name="revision" value={ strconv.FormatInt(ref.Revision,10) }/>
+					<span class="text-text">{ ref.Kind+" · "+ref.State+" · "+ref.Availability }</span>
+					<span class="break-all text-sec">{ ref.ArtifactID }</span>
+					<span class="text-sec">{ strconv.FormatInt(ref.Bytes,10)+" bytes · expires "+ref.ExpiresAt.Format("2006-01-02 15:04 UTC") }</span>
+					<button type="submit" class="w-fit rounded-chip border border-line px-2 py-1 text-accent" disabled?={ ref.Availability=="expired" }>Read artifact</button>
+					<p role="status" data-artifact-status class="text-sec"></p>
+					<div data-artifact-objects class="flex min-w-0 flex-col gap-2"></div>
+					<pre data-artifact-text class="max-h-96 max-w-full overflow-auto whitespace-pre-wrap break-words text-xs text-text"></pre>
+				</form>
+			}
+		}
+		<script src="/static/js/artifacts.js" defer></script>
+	</section>
+}

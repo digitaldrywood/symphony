@@ -1,6 +1,7 @@
 package global
 
 import (
+	"encoding/hex"
 	"fmt"
 	"net/url"
 	"path/filepath"
@@ -16,6 +17,8 @@ const (
 )
 
 type HubClient struct {
+	ArtifactServiceID        string            `yaml:"artifact_service_id,omitempty"`
+	ArtifactBytes            int64             `yaml:"artifact_bytes,omitempty"`
 	ProviderCapacityFile     string            `yaml:"provider_capacity_file,omitempty"`
 	OrganizationID           string            `yaml:"organization_id,omitempty"`
 	NativeProjects           map[string]string `yaml:"native_projects,omitempty"`
@@ -31,6 +34,9 @@ type HubClient struct {
 }
 
 func (c HubClient) IsZero() bool {
+	if c.ArtifactServiceID != "" || c.ArtifactBytes != 0 {
+		return false
+	}
 	return strings.TrimSpace(c.ProviderCapacityFile) == "" && strings.TrimSpace(c.IdentityFile) == "" && strings.TrimSpace(c.OrganizationID) == "" && len(c.NativeProjects) == 0 && strings.TrimSpace(c.URL) == "" && strings.TrimSpace(c.TokenEnvironment) == "" &&
 		strings.TrimSpace(c.MachineID) == "" && strings.TrimSpace(c.DisplayName) == "" && c.Capacity == 0 &&
 		c.HeartbeatIntervalSeconds == 0 && c.LeaseTTLSeconds == 0 && c.RequestTimeoutMS == 0
@@ -83,6 +89,11 @@ func (c HubClient) Validate() []string {
 		return nil
 	}
 	var problems []string
+	serviceID := strings.TrimPrefix(c.ArtifactServiceID, "service_")
+	_, idErr := hex.DecodeString(serviceID)
+	if c.ArtifactServiceID != "" && (!strings.HasPrefix(c.ArtifactServiceID, "service_") || len(serviceID) != 32 || strings.ToLower(serviceID) != serviceID || idErr != nil || c.ArtifactBytes <= 1<<20 || c.ArtifactBytes > 256<<20) || c.ArtifactServiceID == "" && c.ArtifactBytes != 0 {
+		problems = append(problems, "client.artifact_service_id requires an opaque service ID and finite artifact_bytes greater than 1048576 and at most 268435456")
+	}
 	if c.ProviderCapacityFile != "" && (!filepath.IsAbs(c.ProviderCapacityFile) || c.IdentityFile == "") {
 		problems = append(problems, "client.provider_capacity_file requires an absolute report path and an enrolled identity_file")
 	}

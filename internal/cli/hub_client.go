@@ -53,10 +53,12 @@ func newHubScheduling(cfg globalconfig.Config, version string) (orchestrator.Sch
 	}
 	version = firstNonBlankString(version, "dev")
 	client, err := hubclient.New(hubclient.Config{
-		URL:          clientConfig.URL,
-		IdentityFile: clientConfig.IdentityFile,
-		TokenSource:  func() string { return os.Getenv(clientConfig.TokenEnvironment) },
-		HTTPClient:   &http.Client{Timeout: clientConfig.RequestTimeout()},
+		ArtifactServiceID: clientConfig.ArtifactServiceID,
+		ArtifactBytes:     clientConfig.ArtifactBytes,
+		URL:               clientConfig.URL,
+		IdentityFile:      clientConfig.IdentityFile,
+		TokenSource:       func() string { return os.Getenv(clientConfig.TokenEnvironment) },
+		HTTPClient:        &http.Client{Timeout: clientConfig.RequestTimeout()},
 	})
 	if err != nil {
 		return nil, err

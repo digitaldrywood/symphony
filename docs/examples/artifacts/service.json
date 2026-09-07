@@ -1,0 +1,31 @@
+{
+  "service_id": "service_11111111111111111111111111111111",
+  "organization_id": "org_11111111111111111111111111111111",
+  "mode": "customer",
+  "hosted_opt_in": false,
+  "database_path": "/var/lib/detent-artifacts/catalog.db",
+  "hub_origin": "https://hub.example.com",
+  "publish_token_env": "DETENT_ARTIFACT_PUBLISHER_TOKEN",
+  "allowed_origins": ["https://detent.example.com"],
+  "policy": {
+    "id": "operator-example-v1",
+    "limits": {
+      "retained_bytes": 1073741824,
+      "reserved_bytes": 268435456,
+      "artifact_bytes": 67108864,
+      "upload_bytes": 16777216,
+      "retention_seconds": 604800
+    },
+    "abandoned_upload_seconds": 86400,
+    "deletion_record_seconds": 1209600,
+    "backup_seconds": 604800
+  },
+  "storage": {
+    "kind": "s3",
+    "endpoint": "https://nyc3.digitaloceanspaces.com",
+    "region": "us-east-1",
+    "bucket": "replace-with-private-bucket",
+    "path_style": false,
+    "require_versioning": false
+  }
+}

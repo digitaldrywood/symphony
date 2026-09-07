@@ -66,6 +66,7 @@ templ ChangeContent(data ChangePageData) {
 					}
 				</section>
 				<section class="flex min-w-0 flex-col gap-3" aria-label="Discussion">
+					@ArtifactAccess(data)
 					<h2 class="text-xs font-semibold text-text">Discussion</h2>
 					if len(detail.Discussion) == 0 {
 						<p class="rounded-card border border-line bg-surface p-4 text-sm text-sec">No discussion yet.</p>
@@ -225,6 +226,7 @@ templ NativeRunPage(data ChangePageData, attempt tracker.NativeAttempt, changes 
 					}
 				</section>
 				@IssueChangeLinks(data.ProjectID, changes, "")
+				@ArtifactAccess(data)
 			</div>
 		</main>
 	}

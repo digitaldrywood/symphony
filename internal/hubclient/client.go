@@ -27,18 +27,22 @@ var (
 )
 
 type Config struct {
-	URL          string
-	IdentityFile string
-	TokenSource  func() string
-	HTTPClient   *http.Client
+	ArtifactServiceID string
+	ArtifactBytes     int64
+	URL               string
+	IdentityFile      string
+	TokenSource       func() string
+	HTTPClient        *http.Client
 }
 
 type Client struct {
-	nativeLeases sync.Map
-	runner       *runnerCredentialSource
-	baseURL      *url.URL
-	tokenSource  func() string
-	httpClient   *http.Client
+	artifactServiceID string
+	artifactBytes     int64
+	nativeLeases      sync.Map
+	runner            *runnerCredentialSource
+	baseURL           *url.URL
+	tokenSource       func() string
+	httpClient        *http.Client
 }
 
 type Machine struct {
@@ -113,7 +117,7 @@ func New(config Config) (*Client, error) {
 		httpClient = http.DefaultClient
 	}
 	baseURL.Path = strings.TrimRight(baseURL.Path, "/")
-	client := &Client{baseURL: baseURL, tokenSource: config.TokenSource, httpClient: httpClient}
+	client := &Client{baseURL: baseURL, tokenSource: config.TokenSource, httpClient: httpClient, artifactServiceID: config.ArtifactServiceID, artifactBytes: config.ArtifactBytes}
 	if config.IdentityFile != "" {
 		file, err := runnerauth.Load(config.IdentityFile)
 		if err != nil {

@@ -4,18 +4,22 @@ import (
 	"net/url"
 	"strings"
 
+	"github.com/digitaldrywood/detent/internal/artifact"
 	"github.com/digitaldrywood/detent/internal/tracker"
 )
 
 type ChangePageData struct {
-	Dashboard DashboardData
-	ProjectID string
-	IssueID   tracker.NativeWorkItemID
-	ChangeID  string
-	VersionID string
-	Detail    *tracker.ChangeDetail
-	Loading   bool
-	Error     string
+	Artifacts         []artifact.Reference
+	ArtifactError     string
+	ArtifactFormToken string
+	Dashboard         DashboardData
+	ProjectID         string
+	IssueID           tracker.NativeWorkItemID
+	ChangeID          string
+	VersionID         string
+	Detail            *tracker.ChangeDetail
+	Loading           bool
+	Error             string
 }
 
 func NativeIssuePath(projectID string, item tracker.NativeWorkItemID) string {

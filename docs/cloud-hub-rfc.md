@@ -31,7 +31,7 @@ implementation without silently resolving the product choices in this table.
 | Decision | Status and recommended direction | Decision owner/follow-up |
 | --- | --- | --- |
 | Billing boundary and teams | Recommend organization billing with teams inside organizations; nested teams, inherited access, and exact role hierarchy remain unresolved | Human product review; [#2193](https://github.com/digitaldrywood/detent/issues/2193), [#2195](https://github.com/digitaldrywood/detent/issues/2195) |
-| Artifact deployment | Recommend customer storage plus an independently available gateway; mandatory gateway/bucket setup is not approved | Artifact design review; [#2189](https://github.com/digitaldrywood/detent/issues/2189) |
+| Artifact deployment | Approved September 7: optional local-only operation, customer-managed storage, and explicit opt-in hosted storage through a portable service and configurable S3 adapter. DigitalOcean Spaces is the initial hosted provider | [#2190](https://github.com/digitaldrywood/detent/issues/2190); [artifact contract](artifact-access-contract.md) |
 | Hosted tenant allocation | Dedicated Hub processes/files simplify isolation but have baseline cost; pooled organization hosting requires pervasive scope enforcement. No allocation model is selected | Human architecture/cost review; #2193, [#2199](https://github.com/digitaldrywood/detent/issues/2199) |
 | Pilot access | Recommend invitation-controlled pilot with configurable grants; eligibility and invitations remain operator decisions | #2194, #2195, #2199 |
 | Prices and free allowances | No approved prices, permanent free quantities, unlimited tier, or marginal-cost promise. Measure baseline and marginal cost before public commitments | #2195, [#2196](https://github.com/digitaldrywood/detent/issues/2196), #2199 |
@@ -115,7 +115,8 @@ is useful but is not proof that arbitrary user text contains no sensitive data.
 Cloud does not automatically clone repositories or collect raw source, diffs,
 transcripts, screenshots, video, provider keys, or storage credentials. A user
 deliberately quoting code in a review comment creates collaboration data. A
-future hosted-artifact option would change custody and requires separate approval.
+separately opted-in hosted artifact mode changes custody under the September 7
+approval; ordinary Hub metadata still excludes raw artifact content.
 Cloud-controlled browser code and dispatch are trust surfaces; encryption and
 customer storage do not prove the Cloud operator can never access customer code.
 
@@ -494,17 +495,29 @@ states and are not review-ready. A runner crash after durable upload but before
 Hub publication requires idempotent manifest reconciliation; a claimed completion
 without verified durable objects must not become available.
 
-The [artifact access contract](artifact-access-contract.md) from #2189 compares
-customer bucket plus gateway, an existing authenticated artifact service, and an
-optional hosted path. It proposes the first adapter, browser issuer trust/key
-rotation, audience/expiry, CORS, revocation bounds, and upload lifecycle while
-preserving unresolved deployment, cost, and retention decisions. Review that
-contract before #2190. Browser content access must not require Hub to hold
-storage credentials or the runner to sign
-downloads. A presigned URL is reusable until expiry, not inherently one-time.
-Gateway outages, missing objects, revoked membership, expired retention, partial
-uploads and corrupted digests produce distinct recoverable or terminal states.
-Authorized artifact responses must not enter shared caches or Hub request logs.
+The [artifact access contract](artifact-access-contract.md) records the approved
+September 7 direction and supersedes the earlier AWS-specific proposal. Optional
+local-only operation needs no durable-storage setup. Customer-managed artifacts
+and separately opted-in hosted artifacts use the same configurable S3-compatible
+boundary, initially targeting AWS S3, Tigris and DigitalOcean Spaces. Spaces is
+the confirmed initial hosted provider; the earlier Dropbox reference was a typo.
+The adapter verifies required capabilities and rejects unsupported behavior.
+API Gateway, Lambda and DynamoDB are not mandatory. The portable single-owner
+SQLite artifact service/catalog remains available independently of runners.
+
+Routine staff access remains metadata-only. Exceptional content access requires
+scoped, audited WorkOS support impersonation under #2193; no blanket staff download
+bypass is permitted. Hosted storage consumes the payment-independent #2195
+allowance boundary for organization bytes, concurrent reservations, artifact/upload
+limits and retention. Exact prices and limits remain operator configuration.
+Downgrades do not silently delete existing artifacts. No automatic customer-to-hosted
+migration or fallback is permitted.
+
+Downloads go directly through the selected artifact service with a short-lived
+opaque grant and current Hub authorization on every request. Storage credentials
+remain with that service. Missing objects, revoked access, retention expiry,
+incomplete uploads, corrupt content and outages have distinct outcomes. Content
+and credentials must not enter ordinary Hub metadata or request logs.
 
 A Change Request links native issues and runs to immutable versions identified by
 repository, base/head/merge-base commits, policy identity, and manifest digest.

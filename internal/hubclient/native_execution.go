@@ -16,6 +16,7 @@ import (
 )
 
 type nativeExecution struct {
+	artifacts nativeArtifacts
 	scheduler *Scheduler
 	claim     nativeClaim
 	mu        sync.Mutex

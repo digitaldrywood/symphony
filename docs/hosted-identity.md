@@ -127,8 +127,20 @@ Hosted pages reuse the shell without mounting process-wide dashboards, caches,
 search, operator tools or streams. `/projects/:project/events` checks membership,
 session and project permission for each counter frame and closes on revocation.
 Content API reads, run events, attempt artifact references and changes use native
-organization/project scope. No new artifact bearer-capability issuer is added;
-future artifact delivery must preserve the separate artifact access contract.
+organization/project scope. Artifact read grants use the existing artifact
+service contract and permit viewers with an explicit project read grant. Each
+hosted grant binds to the originating session and expires within one minute or
+the earlier provider-session/retention deadline. The artifact service rechecks
+that session, current membership, project permission and support authorization
+before each download authorization; logout, expiry or revocation invalidates
+outstanding grants. Support download authorization preserves both identities
+and the reason in the content-free audit trail.
+
+A provisioned artifact service uses its separately issued native-only worker
+token, explicitly bound to that service and project. In hosted mode this token
+can only publish receipts and authorize reads for that binding; it cannot list
+issues, read artifact references, obtain browser grants or administer services.
+Routine staff and instance-admin bearer tokens receive no such exception.
 
 ## Support access
 

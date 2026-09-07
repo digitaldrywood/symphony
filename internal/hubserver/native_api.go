@@ -132,7 +132,8 @@ func (s *Service) requireNativeScope(roles ...apiScope) echo.MiddlewareFunc {
 				return s.nativeAPIError(c, nativeNotFound())
 			}
 			scope := nativeScope{organization: tracker.OrganizationID(c.Param("organization")), project: tracker.ProjectID(c.Param("project")), credential: credential}
-			if err := s.requireHostedProject(c.Request().Context(), s.database.db, scope, !hostedReadRequest(c)); err != nil {
+			write := !hostedReadRequest(c) && !artifactReadGrantRequest(c)
+			if err := s.requireHostedProject(c.Request().Context(), s.database.db, scope, write); err != nil {
 				return s.nativeAPIError(c, err)
 			}
 			if err := s.database.authorizeNativeProject(c.Request().Context(), scope); err != nil {

@@ -90,23 +90,26 @@ func (s *Service) hostedCredential(c echo.Context) (apiCredential, int, error) {
 	if err != nil {
 		return apiCredential{}, http.StatusUnauthorized, auth.ErrInvalidSession
 	}
+	return s.hostedSessionCredential(c.Request().Context(), session, hash)
+}
+
+func (s *Service) hostedSessionCredential(ctx context.Context, session auth.Session, hash string) (apiCredential, int, error) {
 	if hostedEmailListed(s.config.Hosted.StaffEmails, session.Email) && session.Identity.SupportActor == "" {
 		return apiCredential{}, http.StatusForbidden, auth.ErrHostedIdentity
 	}
-	providerID, err := s.hostedProviderOrganization(c.Request().Context())
+	providerID, err := s.hostedProviderOrganization(ctx)
 	if err != nil || providerID == "" || session.Identity.OrganizationID != providerID {
 		return apiCredential{}, http.StatusForbidden, auth.ErrHostedIdentity
 	}
-	membership, err := s.hostedMembership(c.Request().Context(), session.Identity)
+	membership, err := s.hostedMembership(ctx, session.Identity)
 	if err != nil {
 		return apiCredential{}, http.StatusForbidden, err
 	}
 	credential := apiCredential{Scope: apiScopeOperator, NativeOnly: true, Hosted: session.Identity, SessionHash: hash, HostedRole: membership.Role.Slug}
-	err = s.database.db.QueryRowContext(c.Request().Context(), "SELECT m.principal_id,t.token_hash FROM hosted_members m JOIN api_tokens t ON t.id = m.principal_id WHERE m.user_id = ? AND m.membership_id = ? AND m.active = 1", session.Identity.Subject, membership.ID).Scan(&credential.ID, &credential.Hash)
+	err = s.database.db.QueryRowContext(ctx, "SELECT m.principal_id,t.token_hash FROM hosted_members m JOIN api_tokens t ON t.id = m.principal_id WHERE m.user_id = ? AND m.membership_id = ? AND m.active = 1 AND t.revoked_at IS NULL", session.Identity.Subject, membership.ID).Scan(&credential.ID, &credential.Hash)
 	if err != nil {
 		return apiCredential{}, http.StatusForbidden, auth.ErrHostedIdentity
 	}
-	c.Set("hosted_session", session)
 	return credential, http.StatusOK, nil
 }
 

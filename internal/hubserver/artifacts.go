@@ -10,6 +10,7 @@ import (
 
 	"github.com/digitaldrywood/detent/internal/apikey"
 	"github.com/digitaldrywood/detent/internal/artifact"
+	"github.com/digitaldrywood/detent/internal/auth"
 	"github.com/digitaldrywood/detent/internal/tracker"
 )
 
@@ -22,6 +23,22 @@ func (s *Service) registerArtifactRoutes(e *echo.Echo) {
 	e.POST(nativeBase+"/work-items/:item/artifact-authority", s.authorizeArtifactUpload, s.requireNativeScope(apiScopeWorker))
 	e.GET(nativeBase+"/work-items/:item/artifacts", s.artifactReferences, read)
 	e.POST(nativeBase+"/work-items/:item/artifacts/:artifact/access", s.artifactReadGrant, read)
+}
+
+func artifactReadGrantRequest(c echo.Context) bool {
+	return c.Request().Method == http.MethodPost && c.Path() == nativeBase+"/work-items/:item/artifacts/:artifact/access"
+}
+
+func (s *Service) hostedArtifactPublisher(c echo.Context, credential apiCredential) bool {
+	if !credential.NativeOnly || credential.Scope != apiScopeWorker || c.Request().Method != http.MethodPost {
+		return false
+	}
+	if c.Path() != nativeBase+"/artifact-services/:service/receipts" && c.Path() != nativeBase+"/artifact-services/:service/authorize" {
+		return false
+	}
+	var count int
+	err := s.database.db.QueryRowContext(c.Request().Context(), "SELECT count(*) FROM artifact_services WHERE organization_id=? AND project_id=? AND id=? AND publisher_token_id=?", c.Param("organization"), c.Param("project"), c.Param("service"), credential.ID).Scan(&count)
+	return err == nil && count == 1
 }
 
 func (s *Service) bindArtifactService(c echo.Context) error {
@@ -223,6 +240,9 @@ func (s *Service) artifactReadGrant(c echo.Context) error {
 	}
 	now := s.config.now().UTC()
 	expires := minTime(now.Add(time.Minute), ref.ExpiresAt)
+	if scope.credential.Hosted != nil {
+		expires = minTime(expires, scope.credential.Hosted.ExpiresAt)
+	}
 	if !now.Before(expires) {
 		return c.JSON(http.StatusGone, apiErrorResponse{Code: "expired", Message: "Artifact retention has expired"})
 	}
@@ -245,7 +265,7 @@ func (s *Service) artifactReadGrant(c echo.Context) error {
 	if _, err := tx.ExecContext(ctx, "DELETE FROM artifact_grants WHERE expires_at<=?", now.Unix()); err != nil {
 		return s.nativeAPIError(c, err)
 	}
-	if _, err := tx.ExecContext(ctx, "INSERT INTO artifact_grants(token_hash,principal_id,organization_id,project_id,service_id,artifact_id,revision,expires_at) VALUES(?,?,?,?,?,?,?,?)", apikey.HashToken(token), scope.credential.ID, scope.organization, scope.project, ref.ServiceID, ref.ArtifactID, ref.Revision, expires.Unix()); err != nil {
+	if _, err := tx.ExecContext(ctx, "INSERT INTO artifact_grants(token_hash,principal_id,organization_id,project_id,service_id,artifact_id,revision,expires_at,hosted_session_hash) VALUES(?,?,?,?,?,?,?,?,?)", apikey.HashToken(token), scope.credential.ID, scope.organization, scope.project, ref.ServiceID, ref.ArtifactID, ref.Revision, expires.Unix(), scope.credential.SessionHash); err != nil {
 		return s.nativeAPIError(c, err)
 	}
 	if err := tx.Commit(); err != nil {
@@ -273,12 +293,35 @@ func (s *Service) authorizeArtifactRead(c echo.Context) error {
 		return s.nativeAPIError(c, nativeNotFound())
 	}
 	scope := nativeRequestScope(c)
-	var created string
+	var created, principal, sessionHash string
 	var expires *string
 	var deadline int64
-	err := s.database.db.QueryRowContext(c.Request().Context(), "SELECT t.created_at,t.expires_at,a.expires_at FROM artifact_grants a JOIN api_tokens t ON t.id=a.principal_id JOIN token_grants g ON g.token_id=t.id AND g.organization_id=a.organization_id AND g.project_id=a.project_id WHERE a.token_hash=? AND a.organization_id=? AND a.project_id=? AND a.service_id=? AND a.artifact_id=? AND a.revision=? AND t.revoked_at IS NULL", apikey.HashToken(r.Token), scope.organization, scope.project, c.Param("service"), r.ArtifactID, r.Revision).Scan(&created, &expires, &deadline)
+	err := s.database.db.QueryRowContext(c.Request().Context(), "SELECT t.created_at,t.expires_at,a.expires_at,a.principal_id,a.hosted_session_hash FROM artifact_grants a JOIN api_tokens t ON t.id=a.principal_id JOIN token_grants g ON g.token_id=t.id AND g.organization_id=a.organization_id AND g.project_id=a.project_id WHERE a.token_hash=? AND a.organization_id=? AND a.project_id=? AND a.service_id=? AND a.artifact_id=? AND a.revision=? AND t.revoked_at IS NULL", apikey.HashToken(r.Token), scope.organization, scope.project, c.Param("service"), r.ArtifactID, r.Revision).Scan(&created, &expires, &deadline, &principal, &sessionHash)
 	if err != nil || s.config.now().Unix() >= deadline || expires != nil && !runnerTimeValid(s.config.now(), created, *expires) {
 		return s.nativeAPIError(c, nativeNotFound())
 	}
+	if s.config.Hosted != nil {
+		if err := s.authorizeHostedArtifactRead(c, principal, sessionHash); err != nil {
+			return s.nativeAPIError(c, nativeNotFound())
+		}
+	}
 	return c.NoContent(http.StatusNoContent)
+}
+
+func (s *Service) authorizeHostedArtifactRead(c echo.Context, principal, sessionHash string) error {
+	ctx := c.Request().Context()
+	session, err := s.WebSession(ctx, sessionHash, s.config.now())
+	if err != nil {
+		return err
+	}
+	credential, _, err := s.hostedSessionCredential(ctx, session, sessionHash)
+	if err != nil || credential.ID != principal {
+		return auth.ErrHostedIdentity
+	}
+	scope := nativeRequestScope(c)
+	scope.credential = credential
+	if err := s.requireHostedProject(ctx, s.database.db, scope, false); err != nil {
+		return err
+	}
+	return s.hostedAudit(ctx, session.Identity, "action", c.Request().Method+" "+c.Path(), string(scope.project), 0)
 }

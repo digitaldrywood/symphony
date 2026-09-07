@@ -483,8 +483,12 @@ Content-bearing native responses remain customer-only and are authorized before
 idempotency replay, pagination or rendering. Hosted pages do not attach the local
 instance dashboard, its process-wide caches, searches, SSE or operator tools.
 The tenant activity stream emits only project-scoped counters and rechecks active
-session/membership/grants before every frame. Future artifact capabilities must
-use this current principal boundary and preserve the artifact revocation contract.
+session/membership/grants before every frame. Artifact read grants bind to the
+originating hosted session, including support impersonation. The artifact
+authorizer rechecks session, membership and project read permission at redemption;
+grants expire within one minute or the earlier session/retention deadline. The
+bound artifact publisher has access only to service-scoped receipts and read
+authorization. Viewer read grants do not grant project write permission.
 
 Customer-content support requires a privileged WorkOS impersonation session.
 Ordinary staff membership never authorizes customer content. Detent requires an

@@ -77,6 +77,8 @@ CREATE TABLE hosted_audit (
 CREATE INDEX hosted_sessions_expiry_idx ON hosted_sessions(expires_at);
 CREATE INDEX hosted_audit_session_idx ON hosted_audit(session_id, id);
 
+ALTER TABLE artifact_grants ADD COLUMN hosted_session_hash TEXT NOT NULL DEFAULT '';
+
 -- +goose StatementBegin
 CREATE TRIGGER hosted_tenant_binding_insert BEFORE INSERT ON hosted_tenant
 WHEN EXISTS (SELECT 1 FROM hosted_tenant)

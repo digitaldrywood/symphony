@@ -5,6 +5,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -218,6 +219,37 @@ func TestNativeRunnerPublishesOnlyAfterRecovery(t *testing.T) {
 			}
 			if !blocked && (!execution.started || execution.finish == "" || execution.checkpoint == nil) {
 				t.Fatalf("native run omitted lifecycle: %#v", execution)
+			}
+		})
+	}
+}
+
+type artifactExecutionProbe struct {
+	testExecution
+	failure   error
+	finalized bool
+}
+
+func (*artifactExecutionProbe) PrepareArtifacts(context.Context, string) error { return nil }
+func (*artifactExecutionProbe) ArtifactLog(context.Context, string) error      { return nil }
+func (e *artifactExecutionProbe) FinalizeArtifacts(context.Context, string) error {
+	e.finalized = true
+	return e.failure
+}
+
+func TestArtifactsFinalizeBeforeWorkspaceCleanup(t *testing.T) {
+	t.Parallel()
+	for _, failed := range []bool{false, true} {
+		t.Run(strconv.FormatBool(failed), func(t *testing.T) {
+			backend := &retainedExecutionWorkspace{fakeWorkspaceBackend: &fakeWorkspaceBackend{recoveryStates: []workspace.RecoveryState{{HeadSHA: "head"}}}}
+			execution := &artifactExecutionProbe{}
+			if failed {
+				execution.failure = errors.New("upload unavailable")
+			}
+			r := &Runner{workspace: backend, logger: slog.New(slog.NewTextHandler(io.Discard, nil)), afterRunTimeout: time.Second}
+			err := r.afterExecution(t.Context(), RunRequest{Execution: execution, Issue: connector.Issue{ID: "work"}}, backend, workspace.Info{}, workspace.Issue{})
+			if !execution.finalized || backend.afterRun == failed || (err != nil) != failed {
+				t.Fatal("cleanup preceded durable finalization", err, backend.afterRun)
 			}
 		})
 	}

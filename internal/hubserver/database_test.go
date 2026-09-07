@@ -57,6 +57,9 @@ func TestOpenCreatesHubSchemaAndConfiguresSQLite(t *testing.T) {
 	}
 
 	wantTables := []string{
+		"artifact_services",
+		"artifact_references",
+		"artifact_grants",
 		"change_evidence",
 		"change_issue_links",
 		"change_requests",

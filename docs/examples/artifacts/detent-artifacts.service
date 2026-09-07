@@ -1,0 +1,24 @@
+[Unit]
+Description=Detent independent artifact service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=detent-artifacts
+Group=detent-artifacts
+StateDirectory=detent-artifacts
+StateDirectoryMode=0700
+UMask=0077
+EnvironmentFile=/etc/detent-artifacts/credentials.env
+ExecStart=/usr/local/bin/detent artifacts --artifact-config /etc/detent-artifacts/service.json serve --listen 127.0.0.1:7788
+Restart=on-failure
+RestartSec=10
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+TimeoutStopSec=45
+
+[Install]
+WantedBy=multi-user.target

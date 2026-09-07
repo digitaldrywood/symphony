@@ -51,6 +51,7 @@ func (s *Server) changeDetail(c echo.Context) error {
 		}
 	} else {
 		data.Detail = &detail
+		s.loadArtifacts(c, &data)
 	}
 	return render(c, templates.ChangeContent(data))
 }
@@ -72,6 +73,14 @@ func (s *Server) nativeRunDetail(c echo.Context) error {
 		if err != nil {
 			return echo.NewHTTPError(http.StatusBadGateway, "Linked changes could not be loaded").SetInternal(err)
 		}
+		s.loadArtifacts(c, &data)
+		filtered := data.Artifacts[:0]
+		for _, ref := range data.Artifacts {
+			if ref.AttemptID == attempt.AttemptID {
+				filtered = append(filtered, ref)
+			}
+		}
+		data.Artifacts = filtered
 		return render(c, templates.NativeRunPage(data, attempt, changes))
 	}
 	return echo.NewHTTPError(http.StatusNotFound, "Run not found")

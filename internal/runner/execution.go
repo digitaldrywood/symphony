@@ -24,6 +24,12 @@ type Execution interface {
 	Recovery() tracker.NativeRecovery
 }
 
+type ArtifactExecution interface {
+	PrepareArtifacts(context.Context, string) error
+	ArtifactLog(context.Context, string) error
+	FinalizeArtifacts(context.Context, string) error
+}
+
 func (r *Runner) Run(ctx context.Context, req RunRequest) (RunResult, error) {
 	if req.Execution == nil {
 		return r.run(ctx, req)
@@ -71,6 +77,11 @@ func executionCheckpoint(state *workspace.RecoveryState) tracker.NativeCheckpoin
 }
 
 func (r *Runner) afterExecution(ctx context.Context, req RunRequest, backend workspace.Backend, info workspace.Info, issue workspace.Issue) error {
+	if artifacts, ok := req.Execution.(ArtifactExecution); ok {
+		if err := artifacts.FinalizeArtifacts(ctx, info.Path); err != nil {
+			return err
+		}
+	}
 	if req.Execution == nil {
 		afterCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), r.afterRunTimeout)
 		defer cancel()

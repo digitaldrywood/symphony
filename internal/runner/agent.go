@@ -1120,6 +1120,11 @@ func (r *Runner) runAgentTurn(
 			workerProcessObserved = true
 		}
 		r.logAgentUpdate(runRequest, detentSessionID, update)
+		if artifacts, ok := runRequest.Execution.(ArtifactExecution); ok && update.Delta != "" {
+			if err := artifacts.ArtifactLog(updateCtx, update.Delta); err != nil {
+				r.logger.Warn("artifact log upload deferred", "issue_id", runRequest.Issue.ID)
+			}
+		}
 		if err := r.persistSessionWorkerProcess(updateCtx, detentSessionID, update, info.Path, filepath.Join(info.Path, ".detent", "tmp")); err != nil {
 			return err
 		}
@@ -1627,6 +1632,11 @@ func (r *Runner) run(ctx context.Context, req RunRequest) (RunResult, error) {
 	if req.Execution != nil {
 		if err := req.Execution.Start(ctx, executionIdentity); err != nil {
 			return RunResult{}, err
+		}
+		if artifacts, ok := req.Execution.(ArtifactExecution); ok {
+			if err := artifacts.PrepareArtifacts(ctx, info.Path); err != nil {
+				return RunResult{}, err
+			}
 		}
 		checkpoint := executionCheckpoint(recoveryState)
 		checkpoint.WorktreeState = "unknown"

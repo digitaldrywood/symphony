@@ -51,6 +51,13 @@ func TestHubRunnerIdentityConfiguration(t *testing.T) {
 		valid  bool
 	}{
 		{"enrolled identity", func(*HubClient) {}, true},
+		{"durable artifacts", func(c *HubClient) {
+			c.ArtifactServiceID = "service_" + strings.Repeat("a", 32)
+			c.ArtifactBytes = 4 << 20
+		}, true},
+		{"artifact budget missing", func(c *HubClient) { c.ArtifactServiceID = "service_" + strings.Repeat("a", 32) }, false},
+		{"artifact service malformed", func(c *HubClient) { c.ArtifactServiceID = "service_bad"; c.ArtifactBytes = 4 << 20 }, false},
+		{"artifact budget only", func(c *HubClient) { c.ArtifactBytes = 4 << 20 }, false},
 		{"relative path", func(c *HubClient) { c.IdentityFile = "identity.json" }, false},
 		{"ambiguous token source", func(c *HubClient) { c.TokenEnvironment = "LEGACY_TOKEN" }, false},
 		{"no projects", func(c *HubClient) { c.NativeProjects = nil }, false},

@@ -38,6 +38,46 @@ test.afterAll(async () => {
   await runtime?.stop();
 });
 
+for (const mode of ["board", "list"]) {
+  test(`${mode} Clear filters resets every filter and both representations`, async ({ page }) => {
+    await openWorkScenario(page, scenarios.healthy, desktopViewport, `?view=${mode}&project=dogfood`);
+    const originalKeys = await unhiddenKeys(page, "board");
+    await page.locator("[data-work-search-input]").fill("no matching issue");
+    await page.locator("[data-work-filters] summary").click();
+    for (const name of ["state", "readiness", "priority", "sync"]) {
+      await page.locator(`[data-work-filter="${name}"]`).first().check();
+    }
+    await expect(page.locator("[data-work-result-count]")).toHaveText("0 issues");
+    await page.getByRole("button", { name: "Clear filters", exact: true }).click();
+    await expect(page.locator("[data-work-search-input]")).toHaveValue("");
+    await expect(page.locator("[data-work-filter]:checked")).toHaveCount(0);
+    await expect(page.locator("[data-work-filter-count]")).toBeHidden();
+    for (const name of ["q", "state", "readiness", "priority", "project", "sync", "page"]) {
+      expect(new URL(page.url()).searchParams.has(name)).toBeFalsy();
+    }
+    expect(await unhiddenKeys(page, "board")).toEqual(originalKeys);
+    expect(await unhiddenKeys(page, "list")).toEqual(originalKeys);
+    await expect(page.locator("[data-work-result-count]")).toHaveText(`${originalKeys.length} issues`);
+    await expect(page.locator("[data-work-list-summary]")).toHaveText(`${originalKeys.length} issues`);
+    await expect(page.locator("html")).toHaveAttribute("data-work-view", mode);
+    await expect(page.locator("html")).not.toHaveAttribute("aria-pressed");
+    await expect(page.locator(`button[data-work-view="${mode}"]`)).toHaveAttribute("aria-pressed", "true");
+  });
+}
+
+test("bulk Clear and issue clicks reach their handlers", async ({ page }) => {
+  await openWorkScenario(page, scenarios.healthy, desktopViewport, "?view=list");
+  const row = page.locator('[data-work-representation="list"]:not([hidden])').first();
+  await row.locator("[data-work-bulk-checkbox]").check();
+  await expect(page.locator("[data-work-bulk-count]")).toHaveText("1 selected");
+  await page.locator("[data-work-bulk-clear]").click();
+  await expect(page.locator("[data-work-bulk-checkbox]:checked")).toHaveCount(0);
+  await expect(page.locator("[data-work-bulk-bar]")).toBeHidden();
+  await row.locator("[data-board-card-title]").click();
+  await expect(page.locator("[data-detail-sheet]")).toBeVisible();
+  expect(new URL(page.url()).searchParams.get("issue")).toBe(await row.getAttribute("data-work-identity"));
+});
+
 test("Board keeps queued and running work visible beyond the List page", async ({ page }) => {
   await openWorkScenario(page, scenarios.healthy, desktopViewport);
   await page.evaluate(() => {
@@ -109,7 +149,7 @@ test("Board keeps queued and running work visible beyond the List page", async (
   await expect(pages).toBeHidden();
   expect(new URL(page.url()).searchParams.get("page")).toBe("2");
 
-  await page.locator('[data-work-view="list"]').click();
+  await page.locator('button[data-work-view="list"]').click();
   await expect(pages).toBeVisible();
   await expect(page.locator("[data-work-page-summary]")).toHaveText("Page 2 of 3");
   expect(await unhiddenKeys(page, "list")).toHaveLength(50);
@@ -118,7 +158,7 @@ test("Board keeps queued and running work visible beyond the List page", async (
   expect(await unhiddenKeys(page, "list")).toHaveLength(22);
   await expect(page.locator("[data-work-list-summary]")).toHaveText("22 issues");
   await expect(page.getByRole("button", { name: "Next work page" })).toBeDisabled();
-  await page.locator('[data-work-view="board"]').click();
+  await page.locator('button[data-work-view="board"]').click();
   await expect(boardCards).toHaveCount(122);
   await expect(pages).toBeHidden();
   expect(new URL(page.url()).searchParams.get("page")).toBe("3");
@@ -145,8 +185,16 @@ test("Board keeps queued and running work visible beyond the List page", async (
   await expect(running).toBeVisible();
   await expect(pages).toBeHidden();
 
-  await page.locator('[data-work-view="list"]').click();
+  await page.locator('button[data-work-view="list"]').click();
   await expect(page.locator("[data-work-page-summary]")).toHaveText("Page 3 of 3");
+  await page.locator("[data-work-filters] summary").click();
+  await page.getByRole("button", { name: "Clear filters", exact: true }).click();
+  await expect(page.locator("[data-work-page-summary]")).toHaveText("Page 1 of 3");
+  expect(new URL(page.url()).searchParams.has("page")).toBeFalsy();
+  await expect(page.locator("[data-work-search-input]")).toHaveValue("");
+  await expect(boardCards).toHaveCount(122);
+  expect(await unhiddenKeys(page, "list")).toHaveLength(50);
+  await page.locator("[data-work-filters] summary").click();
   await page.locator("[data-work-sort]").selectOption("state");
   await expect(page.locator("[data-work-page-summary]")).toHaveText("Page 1 of 3");
   const states = await page.locator('[data-work-representation="list"]:not([hidden])').evaluateAll((items) => items.map((item) => item.dataset.workState));
@@ -154,7 +202,7 @@ test("Board keeps queued and running work visible beyond the List page", async (
   await page.locator("[data-work-search-input]").fill("pagination fixture 121");
   expect(await unhiddenKeys(page, "list")).toEqual(["pagination-121"]);
   await expect(page.locator("[data-work-page-summary]")).toHaveText("Page 1 of 1");
-  await page.locator('[data-work-view="board"]').click();
+  await page.locator('button[data-work-view="board"]').click();
   await expect(running).toBeVisible();
   await expect(todo).toBeHidden();
   await expect(page.locator('[data-board-lane="todo"] [data-work-filter-empty]')).toBeVisible();
@@ -193,7 +241,7 @@ test("Board and List share query, selection, detail, and density state", async (
     await unhiddenKeys(page, "list"),
   );
 
-  await page.locator('[data-work-view="list"]').click();
+  await page.locator('button[data-work-view="list"]').click();
   await expect(page.locator('[data-work-view-panel="list"]')).toBeVisible();
   await expect(page.locator('[data-work-view-panel="board"]')).toBeHidden();
   expect(new URL(page.url()).searchParams.get("view")).toBe("list");
@@ -234,10 +282,10 @@ test("Board and List share query, selection, detail, and density state", async (
   const firstRow = page.locator('[data-work-representation="list"]:not([hidden])').first();
   await firstRow.focus();
   const focusedKey = await firstRow.getAttribute("data-work-key");
-  await page.locator('[data-work-view="board"]').click();
+  await page.locator('button[data-work-view="board"]').click();
   await expect(page.locator(`[data-work-representation="board"][data-work-key="${focusedKey}"]`)).toBeFocused();
 
-  await page.locator('[data-work-view="list"]').click();
+  await page.locator('button[data-work-view="list"]').click();
   await page.locator('[data-density-choice="compact"]').click();
   await expectRowHeight(page, 36);
   await page.locator('[data-density-choice="cozy"]').click();
@@ -291,9 +339,9 @@ test("List stays contained and keyboard position survives a tablet view switch",
     left: element.scrollLeft,
     top: element.scrollTop,
   }));
-  await page.locator('[data-work-view="board"]').click();
+  await page.locator('button[data-work-view="board"]').click();
   await expect(page.locator(`[data-work-representation="board"][data-work-key="${focusedKey}"]`)).toBeFocused();
-  await page.locator('[data-work-view="list"]').click();
+  await page.locator('button[data-work-view="list"]').click();
   await expect(page.locator(`[data-work-representation="list"][data-work-key="${focusedKey}"]`)).toBeFocused();
   expect(await listScroll.evaluate((element) => element.scrollLeft)).toBe(
     before.left,

@@ -116,22 +116,33 @@ func (o *Orchestrator) consecutiveRetryCycleCount(
 	cause string,
 	at time.Time,
 ) (int, telemetry.WorkAttempt, bool) {
-	attempts, ok := o.recentIssueTerminalAttempts(ctx, state, issue, consecutiveRetryCycleLimit, at)
-	if !ok {
-		return 0, telemetry.WorkAttempt{}, false
-	}
-	count := 0
-	latest := telemetry.WorkAttempt{}
-	for _, attempt := range attempts {
-		if !retryCycleAttemptMatches(attempt, cause) {
-			break
+	for limit := consecutiveRetryCycleLimit; ; limit *= 2 {
+		attempts, ok := o.recentIssueTerminalAttempts(ctx, state, issue, limit, at)
+		if !ok {
+			return 0, telemetry.WorkAttempt{}, false
 		}
-		if count == 0 {
-			latest = attempt
+		count := 0
+		latest := telemetry.WorkAttempt{}
+		for _, attempt := range attempts {
+			if strings.TrimSpace(attempt.ErrorClass) == "service_restart" &&
+				terminalAttemptRetryableFailure(attempt) && !workAttemptHasPushedProduct(attempt) {
+				continue
+			}
+			if !retryCycleAttemptMatches(attempt, cause) {
+				return count, latest, true
+			}
+			if count == 0 {
+				latest = attempt
+			}
+			count++
+			if count >= consecutiveRetryCycleLimit {
+				return count, latest, true
+			}
 		}
-		count++
+		if len(attempts) < limit {
+			return count, latest, true
+		}
 	}
-	return count, latest, true
 }
 
 func (o *Orchestrator) recentIssueTerminalAttempts(
@@ -209,6 +220,7 @@ func retryCycleAttemptMatches(attempt telemetry.WorkAttempt, cause string) bool 
 			strings.EqualFold(strings.TrimSpace(attempt.TerminalState), string(store.WorkAttemptTerminalFailure))
 	case terminalAttemptRetryLimitCause:
 		return strings.TrimSpace(attempt.ErrorClass) != workAttemptErrorWorkspace &&
+			strings.TrimSpace(attempt.ErrorClass) != "service_restart" &&
 			terminalAttemptRetryableFailure(attempt) &&
 			!workAttemptHasPushedProduct(attempt)
 	default:

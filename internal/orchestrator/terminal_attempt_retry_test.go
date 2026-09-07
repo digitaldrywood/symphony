@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -140,6 +142,7 @@ func TestTerminalAttemptRetryableFailureExcludesBackendCapacity(t *testing.T) {
 		errorClass    string
 		wantRetryable bool
 	}{
+		{name: "service restart remains resumable", terminal: store.WorkAttemptTerminalAbandoned, errorClass: "service_restart", wantRetryable: true},
 		{name: "ordinary failure", terminal: store.WorkAttemptTerminalFailure, errorClass: workAttemptErrorRunner, wantRetryable: true},
 		{name: "provider capacity", terminal: store.WorkAttemptTerminalCapacity, errorClass: backendcapacity.ErrorClass},
 	}
@@ -826,6 +829,10 @@ func TestRetryCycleAttemptMatches(t *testing.T) {
 		cause        string
 		wantMatching bool
 	}{
+		{name: "service restart does not count", cause: terminalAttemptRetryLimitCause, mutate: func(attempt *telemetry.WorkAttempt) {
+			attempt.ErrorClass = "service_restart"
+			attempt.TerminalState = string(store.WorkAttemptTerminalAbandoned)
+		}},
 		{name: "failure", cause: terminalAttemptRetryLimitCause, wantMatching: true},
 		{name: "timed out", cause: terminalAttemptRetryLimitCause, wantMatching: true, mutate: func(attempt *telemetry.WorkAttempt) {
 			attempt.TerminalState = string(store.WorkAttemptTerminalTimedOut)
@@ -1160,4 +1167,172 @@ func (s *terminalRetryWorkAttemptStore) ListRecentSchedulerDecisions(context.Con
 
 func terminalRetryMetadataPushed(raw string) bool {
 	return workAttemptMetadataHasPushedProduct(raw)
+}
+
+func TestConsecutiveRetryCycleCountAcrossServiceRestarts(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		sequence   string
+		cause      string
+		wantCount  int
+		wantLatest int64
+	}{
+		{name: "restarts alone", sequence: "RRR"},
+		{name: "restart after failure", sequence: "FR", wantCount: 1, wantLatest: 1},
+		{name: "failure after restart", sequence: "RF", wantCount: 1, wantLatest: 2},
+		{name: "failures straddle restarts", sequence: "FRFRF", wantCount: 3, wantLatest: 5},
+		{name: "restart at existing limit", sequence: "FFFR", wantCount: 3, wantLatest: 3},
+		{name: "restart history beyond snapshot window", sequence: "FF" + strings.Repeat("R", 60) + "F", wantCount: 3, wantLatest: 63},
+		{name: "success resets across restart", sequence: "FFRSRF", wantCount: 1, wantLatest: 6},
+		{name: "pushed restart resets", sequence: "FFRPRF", wantCount: 1, wantLatest: 6},
+		{name: "linked PR restart resets", sequence: "FFRLRF", wantCount: 1, wantLatest: 6},
+		{name: "workspace failures straddle restarts", sequence: "WRWRW", cause: workspacePreparationRetryLimitCause, wantCount: 3, wantLatest: 5},
+		{name: "workspace failure resets terminal", sequence: "FFRWRF", wantCount: 1, wantLatest: 6},
+		{name: "implementation resets workspace", sequence: "WWRFRW", cause: workspacePreparationRetryLimitCause, wantCount: 1, wantLatest: 6},
+	}
+	for _, tt := range tests {
+		for _, durable := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/durable=%t", tt.name, durable), func(t *testing.T) {
+				t.Parallel()
+				now := time.Date(2026, 9, 7, 17, 0, 0, 0, time.UTC)
+				issue := terminalRetryTestIssue("restart-history")
+				cfg := normalizeConfig(Config{Project: scheduler.ProjectCandidate{ID: "detent"}})
+				o := &Orchestrator{cfg: cfg}
+				state := newState(cfg)
+				if durable {
+					o.workAttempts = openWorkAttemptRecoveryStore(t, t.Context())
+				}
+				for index, kind := range tt.sequence {
+					at := now.Add(time.Duration(index) * time.Minute)
+					attempt := store.WorkAttempt{
+						ID: int64(index + 1), ProjectID: "detent", IssueID: issue.ID,
+						Identifier: issue.Identifier, Status: store.WorkAttemptStatusTerminal,
+						TerminalState: store.WorkAttemptTerminalFailure, ErrorClass: workAttemptErrorRunner,
+						CompletedAt: at,
+					}
+					switch kind {
+					case 'R', 'P', 'L':
+						attempt.TerminalState = store.WorkAttemptTerminalAbandoned
+						attempt.ErrorClass = "service_restart"
+						if kind == 'P' {
+							attempt.WorkerMetadataJSON = `{"work_product_pushed":true}`
+						}
+						if kind == 'L' {
+							pr := int64(42)
+							attempt.PRNumber = &pr
+						}
+					case 'S':
+						attempt.TerminalState = store.WorkAttemptTerminalSuccess
+					case 'W':
+						attempt.ErrorClass = workAttemptErrorWorkspace
+					}
+					if durable {
+						id, err := o.workAttempts.StartWorkAttempt(t.Context(), store.WorkAttemptStart{
+							ProjectID: "detent", IssueID: issue.ID, Identifier: issue.Identifier,
+							WorkerType: "implement", StartedAt: at.Add(-time.Second), LeaseExpiresAt: at.Add(time.Minute),
+							PRNumber: attempt.PRNumber,
+						})
+						if err != nil {
+							t.Fatal(err)
+						}
+						attempt.ID = id
+						if err := o.workAttempts.CompleteWorkAttempt(t.Context(), store.WorkAttemptCompletion{
+							AttemptID: id, CompletedAt: at, TerminalState: attempt.TerminalState,
+							ErrorClass: attempt.ErrorClass, WorkerMetadataJSON: attempt.WorkerMetadataJSON,
+						}); err != nil {
+							t.Fatal(err)
+						}
+					}
+					if !durable || index == len(tt.sequence)-1 {
+						state.WorkAttempts = append(state.WorkAttempts, telemetryWorkAttempt(attempt, at))
+					}
+				}
+				cause := tt.cause
+				if cause == "" {
+					cause = terminalAttemptRetryLimitCause
+				}
+				count, latest, known := o.consecutiveRetryCycleCount(t.Context(), &state, issue, cause, now)
+				if !known || count != tt.wantCount || latest.AttemptID != tt.wantLatest {
+					t.Fatalf("count/latest/known = %d/%d/%t, want %d/%d/true", count, latest.AttemptID, known, tt.wantCount, tt.wantLatest)
+				}
+			})
+		}
+	}
+}
+
+func TestServiceRestartsRecoverRetainedWorkAndDispatch(t *testing.T) {
+	t.Parallel()
+
+	for _, restarts := range []int{3, 6} {
+		t.Run(fmt.Sprintf("%d restarts", restarts), func(t *testing.T) {
+			t.Parallel()
+			ctx := t.Context()
+			runtimeStore := openWorkAttemptRecoveryStore(t, ctx)
+			workspacePath := t.TempDir()
+			retainedPath := filepath.Join(workspacePath, "implementation.go")
+			retainedWork := []byte("package implementation\n")
+			if err := os.WriteFile(retainedPath, retainedWork, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			metadata, err := json.Marshal(map[string]any{"workspace_path": workspacePath, "work_product_pushed": false})
+			if err != nil {
+				t.Fatal(err)
+			}
+			issue := terminalRetryTestIssue("restart-retained-work")
+			tracker := &terminalRetryConnector{issues: map[string]connector.Issue{issue.ID: cloneIssue(issue)}}
+			cfg := normalizeConfig(Config{
+				Project: scheduler.ProjectCandidate{ID: "detent"}, MaxConcurrentAgents: 1,
+				ActiveStates: []string{"Todo", "In Progress"}, TerminalStates: []string{"Done"},
+			})
+			now := time.Now().UTC()
+			var o *Orchestrator
+			var state State
+			for index := range restarts {
+				at := now.Add(time.Duration(index) * time.Minute)
+				issue.State = "In Progress"
+				tracker.issues[issue.ID] = cloneIssue(issue)
+				id, err := runtimeStore.StartWorkAttempt(ctx, store.WorkAttemptStart{
+					ProjectID: "detent", IssueID: issue.ID, Identifier: issue.Identifier,
+					WorkerType: "implement", StartedAt: at, LeaseExpiresAt: at.Add(time.Hour),
+					WorkerMetadataJSON: string(metadata),
+				})
+				if err != nil {
+					t.Fatal(err)
+				}
+				o = &Orchestrator{cfg: cfg, connector: tracker, workAttempts: runtimeStore}
+				state = newState(cfg)
+				o.recoverDurableWorkAttempts(ctx, &state, at.Add(time.Second))
+				recovered, err := runtimeStore.WorkAttempt(ctx, id)
+				if err != nil {
+					t.Fatal(err)
+				}
+				if recovered.ErrorClass != "service_restart" || recovered.Phase != "recovered" || recovered.ErrorMessage != "work attempt reclaimed after scheduler restart" || recovered.WorkerMetadataJSON != string(metadata) {
+					t.Fatalf("recovered attempt = %#v, want restart with retained workspace metadata", recovered)
+				}
+				transitions := o.reconcileTerminalAttemptRetryStates(ctx, &state, []connector.Issue{issue}, at.Add(time.Second))
+				if len(transitions) != 1 || transitions[0].State != "Todo" {
+					t.Fatalf("restart %d transitions = %#v, want Todo", index+1, transitions)
+				}
+				issue = transitions[0]
+				if _, blocked := state.Blocked[issue.ID]; blocked || len(tracker.comments) != 0 {
+					t.Fatal("service restart parked issue or reported failure limit")
+				}
+			}
+			runner := newWorkerHostRunner()
+			o.supervisor = newTestSupervisor(t, runner, cfg)
+			o.runResults = make(chan runpkg.Completion, 1)
+			o.dispatchReadyIssues(ctx, &state, []connector.Issue{issue}, now.Add(time.Duration(restarts)*time.Minute))
+			request := receiveWorkerHostRunRequest(t, runner.started)
+			if request.Issue.ID != issue.ID || request.WorkAttemptID <= int64(restarts) {
+				t.Fatalf("dispatched request = %#v, want new attempt for recovered issue", request)
+			}
+			retained, err := os.ReadFile(retainedPath)
+			if err != nil || string(retained) != string(retainedWork) {
+				t.Fatalf("retained work = %q, error = %v", retained, err)
+			}
+			state.Running[issue.ID].cancel()
+		})
+	}
 }

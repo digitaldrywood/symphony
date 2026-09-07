@@ -68,7 +68,7 @@ templ workToolbar(data DashboardData, view boardView) {
 			<button type="button" class="border-l border-line px-3 text-xs font-medium text-sec" data-work-view="list" aria-pressed="false">List</button>
 		</div>
 
-        <nav aria-label="Work pages" class="flex items-center gap-2 text-xs text-sec">
+        <nav aria-label="Work pages" class="flex items-center gap-2 text-xs text-sec" data-work-list-only hidden>
             <button type="button" data-work-page-step="-1" aria-label="Previous work page" class="rounded-card border border-line px-2 py-2 disabled:opacity-50">Previous</button>
             <span data-work-page-summary aria-live="polite">Page 1</span>
             <button type="button" data-work-page-step="1" aria-label="Next work page" class="rounded-card border border-line px-2 py-2 disabled:opacity-50">Next</button>
@@ -349,7 +349,7 @@ templ workViewScript() {
 					var count = lane.querySelector("[data-work-lane-count]");
 					if (count) count.textContent = filtersActive() ? visible + "/" + cards.length : count.dataset.workLaneLabel;
 					var empty = lane.querySelector("[data-work-filter-empty]");
-					if (empty) empty.hidden = visible > 0 || cards.length === 0;
+					if (empty) empty.hidden = !filtersActive() || visible > 0 || cards.length === 0;
 				});
 			}
 			function applyBulk() {
@@ -387,6 +387,7 @@ templ workViewScript() {
 					button.classList.toggle("text-sec", !active);
 				});
 				document.querySelectorAll("[data-work-board-only]").forEach(function (node) { node.hidden = state.mode !== "board"; });
+				document.querySelectorAll("[data-work-list-only]").forEach(function (node) { node.hidden = state.mode !== "list"; });
 				var search = document.querySelector("[data-work-search-input]");
 				if (search && search.value !== state.q) search.value = state.q;
 				var sort = document.querySelector("[data-work-sort]");
@@ -407,7 +408,9 @@ templ workViewScript() {
                 var pages = Math.max(1, Math.ceil(rows.length / 50));
                 state.page = Math.min(state.page, pages);
                 var pageKeys = new Set(rows.slice((state.page - 1) * 50, state.page * 50).map(function (row) { return row.dataset.workKey; }));
-                document.querySelectorAll("[data-work-item]").forEach(function (item) { item.hidden = !pageKeys.has(item.dataset.workKey); });
+                document.querySelectorAll("[data-work-item]").forEach(function (item) {
+					item.hidden = item.dataset.workRepresentation === "list" ? !pageKeys.has(item.dataset.workKey) : !matches(item);
+				});
                 document.querySelectorAll("[data-work-page-step]").forEach(function (button) { button.disabled = Number(button.dataset.workPageStep) < 0 ? state.page <= 1 : state.page >= pages; });
                 var pageSummary = document.querySelector("[data-work-page-summary]");
                 if (pageSummary) pageSummary.textContent = "Page " + state.page + " of " + pages;

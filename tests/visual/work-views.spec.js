@@ -38,38 +38,136 @@ test.afterAll(async () => {
   await runtime?.stop();
 });
 
-test("Board and List share pagination after filtering and refresh", async ({ page }) => {
+test("Board keeps queued and running work visible beyond the List page", async ({ page }) => {
   await openWorkScenario(page, scenarios.healthy, desktopViewport);
   await page.evaluate(() => {
-    const templates = ["board", "list"].map((representation) => document.querySelector(`[data-work-representation="${representation}"]`));
-    templates.forEach((template) => {
-      for (let index = 0; index < 120; index += 1) {
-        const row = template.cloneNode(true);
-        row.id = `${template.id}-page-${index}`;
-        row.dataset.workKey = `pagination-${index}`;
-        row.dataset.workIdentity = `pagination-${index}`;
-        row.dataset.workSearch = `pagination fixture ${index}`;
-        template.parentNode.appendChild(row);
-      }
+    const templates = Object.fromEntries(["backlog", "todo", "rework"].map((state) => [state,
+      ["board", "list"].map((representation) => document.querySelector(
+        `[data-work-representation="${representation}"][${state === "rework" ? 'data-work-readiness="running"' : `data-work-state="${state}"`}]`,
+      )),
+    ]));
+    document.querySelectorAll("[data-work-item]").forEach((item) => item.remove());
+    for (let index = 0; index < 122; index += 1) {
+      const state = index < 120 ? "backlog" : index === 120 ? "todo" : "rework";
+      templates[state].forEach((template) => {
+        const item = template.cloneNode(true);
+        item.id = `${template.id}-pagination-${index}`;
+        item.dataset.workKey = `pagination-${index}`;
+        item.dataset.workIdentity = `pagination-${index}`;
+        item.dataset.workSearch = `pagination fixture ${index}`;
+        item.dataset.workState = state;
+        item.dataset.workReadiness = index === 121 ? "running" : index === 120 ? "ready" : "waiting";
+        item.dataset.workPriorityRank = "5";
+        const parent = template.dataset.workRepresentation === "board"
+          ? document.querySelector(`[data-board-lane="${state}"] [data-kanban-card-container]`)
+          : document.querySelector("[data-work-list-body]");
+        parent.appendChild(item);
+      });
+    }
+    document.querySelectorAll("[data-board-lane]").forEach((lane) => {
+      const count = lane.querySelectorAll("[data-work-item]").length;
+      lane.dataset.boardLaneCardCount = String(count);
+      lane.dataset.boardLaneDefault = String(count > 0);
+      lane.querySelector("[data-work-lane-count]").dataset.workLaneLabel = String(count);
     });
-    document.body.dispatchEvent(new CustomEvent("htmx:afterSettle", { detail: { target: document.getElementById("snapshot") } }));
+    document.body.dispatchEvent(new CustomEvent("htmx:afterSettle", { bubbles: true, detail: { target: document.getElementById("snapshot") } }));
   });
-  await page.locator("[data-work-search-input]").fill("pagination fixture");
-  await expect(page.locator("[data-work-page-summary]")).toHaveText("Page 1 of 3");
-  await page.getByRole("button", { name: "Next work page" }).click();
-  await expect(page.locator("[data-work-page-summary]")).toHaveText("Page 2 of 3");
+  const boardCards = page.locator('[data-work-representation="board"]:not([hidden])');
+  const todo = page.locator('[data-work-representation="board"][data-work-state="todo"]');
+  const running = page.locator('[data-work-representation="board"][data-work-readiness="running"]');
+  const pages = page.getByRole("navigation", { name: "Work pages", includeHidden: true });
+  await expect(boardCards).toHaveCount(122);
+  await expect(todo).toBeVisible();
+  await expect(running).toBeVisible();
+  await expect(pages).toBeHidden();
+  await expect(page.locator("[data-work-filter-empty]:not([hidden])")).toHaveCount(0);
+  await expect(page.locator("[data-work-result-count]")).toHaveText("122 issues");
+  await expect(page.locator('[data-board-lane="backlog"] [data-work-lane-count]')).toHaveText("120");
+
+  const fixtureHTML = await page.content();
+  const fixtureSnapshot = await page.locator("#snapshot").innerHTML();
+  let snapshotSent = false;
+  await page.route("**/*", (route) => {
+    if (route.request().resourceType() === "eventsource") {
+      if (snapshotSent) return route.fulfill({ status: 204 });
+      snapshotSent = true;
+      return route.fulfill({ contentType: "text/event-stream", body: `event: snapshot\n${fixtureSnapshot.split("\n").map((line) => `data: ${line}`).join("\n")}\n\n` });
+    }
+    return route.fallback();
+  });
+  await page.route(`**${scenarios.healthy.route}*`, (route) => route.fulfill({ contentType: "text/html", body: fixtureHTML }));
+  await page.addInitScript(() => {
+    document.addEventListener("htmx:afterSettle", (event) => {
+      if ((event.detail?.target || event.target)?.id === "snapshot") window.paginationSnapshotSettled = true;
+    });
+  });
+  await page.goto(`${runtime.url}${scenarios.healthy.route}?view=board&page=2`);
+  await expect.poll(() => page.evaluate(() => window.paginationSnapshotSettled)).toBe(true);
+  await expect(boardCards).toHaveCount(122);
+  await expect(todo).toBeVisible();
+  await expect(running).toBeVisible();
+  await expect(pages).toBeHidden();
   expect(new URL(page.url()).searchParams.get("page")).toBe("2");
-  const keys = await unhiddenKeys(page, "board");
-  expect(keys).toHaveLength(50);
+
   await page.locator('[data-work-view="list"]').click();
-  expect(await unhiddenKeys(page, "list")).toEqual(keys);
+  await expect(pages).toBeVisible();
+  await expect(page.locator("[data-work-page-summary]")).toHaveText("Page 2 of 3");
+  expect(await unhiddenKeys(page, "list")).toHaveLength(50);
   await page.getByRole("button", { name: "Next work page" }).click();
-  expect(await unhiddenKeys(page, "list")).toHaveLength(20);
+  await expect(page.locator("[data-work-page-summary]")).toHaveText("Page 3 of 3");
+  expect(await unhiddenKeys(page, "list")).toHaveLength(22);
+  await expect(page.locator("[data-work-list-summary]")).toHaveText("22 issues");
   await expect(page.getByRole("button", { name: "Next work page" })).toBeDisabled();
-  await page.locator("[data-work-search-input]").fill("pagination fixture 119");
+  await page.locator('[data-work-view="board"]').click();
+  await expect(boardCards).toHaveCount(122);
+  await expect(pages).toBeHidden();
+  expect(new URL(page.url()).searchParams.get("page")).toBe("3");
+
+  await page.locator("[data-board-lane-picker] summary").click();
+  await page.locator('[data-board-lane-visibility="backlog"]').selectOption("hide");
+  await page.locator("[data-board-lane-picker] summary").click();
+  await expect(page.locator('[data-board-lane="backlog"]')).toBeHidden();
+  await expect(todo).toBeVisible();
+  await expect(running).toBeVisible();
+  await page.evaluate((html) => new Promise((resolve) => {
+    const settled = (event) => {
+      if ((event.detail?.target || event.target)?.id !== "snapshot") return;
+      document.removeEventListener("htmx:afterSettle", settled);
+      resolve();
+    };
+    document.addEventListener("htmx:afterSettle", settled);
+    const fresh = new DOMParser().parseFromString(html, "text/html");
+    window.htmx.swap("#snapshot", fresh.querySelector("#snapshot").innerHTML, { swapStyle: "morph:innerHTML" });
+  }), fixtureHTML);
+  await expect(boardCards).toHaveCount(122);
+  await expect(page.locator('[data-board-lane="backlog"]')).toBeHidden();
+  await expect(todo).toBeVisible();
+  await expect(running).toBeVisible();
+  await expect(pages).toBeHidden();
+
+  await page.locator('[data-work-view="list"]').click();
+  await expect(page.locator("[data-work-page-summary]")).toHaveText("Page 3 of 3");
+  await page.locator("[data-work-sort]").selectOption("state");
+  await expect(page.locator("[data-work-page-summary]")).toHaveText("Page 1 of 3");
+  const states = await page.locator('[data-work-representation="list"]:not([hidden])').evaluateAll((items) => items.map((item) => item.dataset.workState));
+  expect(new Set(states)).toEqual(new Set(["backlog"]));
+  await page.locator("[data-work-search-input]").fill("pagination fixture 121");
+  expect(await unhiddenKeys(page, "list")).toEqual(["pagination-121"]);
   await expect(page.locator("[data-work-page-summary]")).toHaveText("Page 1 of 1");
-  expect(await unhiddenKeys(page, "list")).toHaveLength(1);
-  expect(await unhiddenKeys(page, "board")).toEqual(await unhiddenKeys(page, "list"));
+  await page.locator('[data-work-view="board"]').click();
+  await expect(running).toBeVisible();
+  await expect(todo).toBeHidden();
+  await expect(page.locator('[data-board-lane="todo"] [data-work-filter-empty]')).toBeVisible();
+  await expect(page.locator('[data-board-lane="todo"] [data-work-lane-count]')).toHaveText("0/1");
+  await expect(page.locator('[data-board-lane="rework"] [data-work-lane-count]')).toHaveText("1/1");
+  await page.locator("[data-work-search-input]").fill("");
+  await page.locator("[data-work-filters] summary").click();
+  await page.locator('[data-work-filter="readiness"][value="running"]').check();
+  await expect(boardCards).toHaveCount(1);
+  await expect(page.locator("[data-work-result-count]")).toHaveText("1 issue");
+  await page.locator('[data-work-filter="readiness"][value="running"]').uncheck();
+  await expect(boardCards).toHaveCount(122);
+  await expect(page.locator("[data-work-filter-empty]:not([hidden])")).toHaveCount(0);
 });
 
 test("Board and List share query, selection, detail, and density state", async ({

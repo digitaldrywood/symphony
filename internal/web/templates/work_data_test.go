@@ -1,6 +1,7 @@
 package templates
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -196,5 +197,59 @@ func TestSharedWorkRepresentationsKeepIssueHealthContextual(t *testing.T) {
 		if !strings.Contains(sheet, want) {
 			t.Fatalf("detail sheet missing contextual health %q", want)
 		}
+	}
+}
+
+func TestWorkBoardRendersLargeFleetLanes(t *testing.T) {
+	for _, backlogCount := range []int{50, 120} {
+		t.Run(fmt.Sprintf("%d backlog cards", backlogCount), func(t *testing.T) {
+			data := boardTestData()
+			data.Snapshot.Blocked = nil
+			data.Snapshot.BoardIssues = nil
+			data.Snapshot.Running[0].State = "Rework"
+			data.Kanban.States = []string{"Backlog", "Todo", "In Progress", "Rework"}
+			for index := range backlogCount {
+				data.Snapshot.BoardIssues = append(data.Snapshot.BoardIssues, telemetry.Issue{
+					ID: fmt.Sprintf("backlog-%d", index), Identifier: fmt.Sprintf("digitaldrywood/detent#%d", index+1000),
+					ProjectID: "detent", Title: "Backlog fixture", State: "Backlog",
+				})
+			}
+			data.Snapshot.BoardIssues = append(data.Snapshot.BoardIssues, telemetry.Issue{
+				ID: "queued", Identifier: "digitaldrywood/detent#3000", ProjectID: "detent", Title: "Queued fixture", State: "Todo",
+			})
+			view := boardViewFromDashboard(data)
+			if len(view.Items) != backlogCount+2 {
+				t.Fatalf("work items = %d, want %d", len(view.Items), backlogCount+2)
+			}
+			foundLanes := 0
+			for _, lane := range view.Lanes {
+				if lane.Title != "Todo" && lane.Title != "Rework" {
+					continue
+				}
+				foundLanes++
+				if len(lane.Cards) != 1 || !lane.DefaultVisible {
+					t.Fatalf("%s lane must contain one card and be visible: %#v", lane.Title, lane)
+				}
+				wantReadiness := "ready"
+				if lane.Title == "Rework" {
+					wantReadiness = "running"
+				}
+				if got := lane.Cards[0].Work.ReadinessKey; got != wantReadiness {
+					t.Fatalf("%s readiness = %q, want %q", lane.Title, got, wantReadiness)
+				}
+			}
+			if foundLanes != 2 {
+				t.Fatalf("queued and running lanes = %d, want 2", foundLanes)
+			}
+			html := renderBoardComponent(t, BoardSnapshot(data))
+			for _, representation := range []string{"board", "list"} {
+				if got := strings.Count(html, `data-work-representation="`+representation+`"`); got != backlogCount+2 {
+					t.Fatalf("%s representations = %d, want %d", representation, got, backlogCount+2)
+				}
+			}
+			if !strings.Contains(html, `data-work-list-only hidden`) {
+				t.Fatal("list pagination must be hidden on the initial board render")
+			}
+		})
 	}
 }

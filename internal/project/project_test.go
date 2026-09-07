@@ -1020,6 +1020,7 @@ func TestProjectHotReloadAppliesRuntimeGitHubTokenBeforeValidation(t *testing.T)
 		t.Fatalf("WriteFile(%s) error = %v", workflowPath, err)
 	}
 	waitForProjectLog(t, &logs, "workflow reload failed")
+	waitForWorkflowReloadError(t, got)
 	select {
 	case extra := <-connectorConfigs:
 		t.Fatalf("connector rebuilt after invalid reload = %#v", extra)
@@ -1797,6 +1798,26 @@ func waitForProjectLog(t *testing.T, logs *lockedBuffer, want string) {
 		case <-ticker.C:
 		case <-deadline:
 			t.Fatalf("timed out waiting for project log %q; logs = %q", want, logs.String())
+		}
+	}
+}
+
+func waitForWorkflowReloadError(t *testing.T, got *project.Project) {
+	t.Helper()
+
+	ticker := time.NewTicker(10 * time.Millisecond)
+	defer ticker.Stop()
+	deadline := time.After(10 * time.Second)
+
+	for {
+		status := got.WorkflowSourceStatus()
+		if status.LastReloadError != "" && !status.ReloadFailedAt.IsZero() {
+			return
+		}
+		select {
+		case <-ticker.C:
+		case <-deadline:
+			t.Fatalf("timed out waiting for workflow reload failure; status = %#v", got.WorkflowSourceStatus())
 		}
 	}
 }

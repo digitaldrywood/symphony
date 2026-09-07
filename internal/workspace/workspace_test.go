@@ -2859,8 +2859,12 @@ func TestLocalGitPrepareMergeValidatesResolvedHead(t *testing.T) {
 				if tt.gate == "remote" {
 					branch = info.Branch
 				}
-				quotedSource := `"` + filepath.ToSlash(source) + `"`
-				command += " && git -C " + quotedSource + " commit --allow-empty -m external && git -C " + quotedSource + " push origin HEAD:" + branch
+				relativeSource, err := filepath.Rel(info.Path, source)
+				if err != nil {
+					t.Fatal(err)
+				}
+				relativeSource = filepath.ToSlash(relativeSource)
+				command += " && git -C " + relativeSource + " commit --allow-empty -m external && git -C " + relativeSource + " push origin HEAD:" + branch
 			default:
 				if tt.gate != "" {
 					command += " && " + tt.gate

@@ -21,6 +21,10 @@ templ LocalTime(value time.Time, options LocalTimeOptions) {
 templ localTimeScript() {
 	<script>
 		(function () {
+			if (window.__detentLocalTimeUpgrade) {
+				window.__detentLocalTimeUpgrade(document);
+				return;
+			}
 			var selector = "time[data-local-time][datetime]";
 			var tokenPattern = /\{\{detent-time:([a-z-]+):([^}]+)\}\}/g;
 			var formatters = new Map();
@@ -67,8 +71,9 @@ templ localTimeScript() {
 				if (element.getAttribute("data-local-time-relative") === "true") {
 					label += " (" + relativeLabel(value) + ")";
 				}
-				element.textContent = label;
-				element.setAttribute("title", value.toISOString());
+				if (element.textContent !== label) element.textContent = label;
+				var title = value.toISOString();
+				if (element.getAttribute("title") !== title) element.setAttribute("title", title);
 			}
 
 			function formattedToken(style, rawValue) {
@@ -139,6 +144,9 @@ templ localTimeScript() {
 			document.addEventListener("DOMContentLoaded", function () { upgradeAll(document); });
 			document.addEventListener("htmx:afterSettle", function (event) { upgradeAll(event.target); });
 			window.__detentLocalTimeUpgrade = upgradeAll;
+			window.setInterval(function () {
+				document.querySelectorAll(selector + '[data-local-time-relative="true"]').forEach(upgrade);
+			}, 1000);
 			upgradeAll(document);
 		})();
 	</script>

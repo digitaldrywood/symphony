@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/digitaldrywood/detent/internal/procgroup"
@@ -28,6 +29,19 @@ func reapWorkerProcesses(
 	grace time.Duration,
 	now func() time.Time,
 	reap workerProcessReapFunc,
+) error {
+	return reapWorkerProcessesWithCleanup(ctx, processStore, logger, reason, grace, now, reap, cleanupWorkerProcessArtifacts)
+}
+
+func reapWorkerProcessesWithCleanup(
+	ctx context.Context,
+	processStore workerProcessStore,
+	logger *slog.Logger,
+	reason string,
+	grace time.Duration,
+	now func() time.Time,
+	reap workerProcessReapFunc,
+	cleanup func(store.WorkerProcess) error,
 ) error {
 	if processStore == nil {
 		return nil
@@ -72,7 +86,7 @@ func reapWorkerProcesses(
 			result = errors.Join(result, reapErr)
 			continue
 		}
-		if cleanupErr := cleanupWorkerProcessArtifacts(process); cleanupErr != nil {
+		if cleanupErr := retryWorkerProcessArtifactCleanup(ctx, process, logger.With(attrs...), cleanup); cleanupErr != nil {
 			attrs = append(attrs, "error", cleanupErr)
 			logger.Info("worker process lifecycle decision", attrs...)
 			result = errors.Join(result, cleanupErr)
@@ -88,6 +102,41 @@ func reapWorkerProcesses(
 		}
 	}
 	return result
+}
+
+func retryWorkerProcessArtifactCleanup(ctx context.Context, process store.WorkerProcess, logger *slog.Logger, cleanup func(store.WorkerProcess) error) error {
+	const maxAttempts = 5
+	var cleanupErr error
+	for attempt := 1; ; attempt++ {
+		if err := ctx.Err(); err != nil {
+			return errors.Join(cleanupErr, err)
+		}
+		cleanupErr = cleanup(process)
+		if cleanupErr == nil {
+			return nil
+		}
+		if !errors.Is(cleanupErr, syscall.ENOTEMPTY) {
+			return cleanupErr
+		}
+		if attempt == maxAttempts {
+			return fmt.Errorf("clean worker process artifacts after %d attempts: %w", attempt, cleanupErr)
+		}
+		delay := 250 * time.Millisecond << (attempt - 1)
+		logger.Warn("worker artifact cleanup retry",
+			"cleanup_path", process.CleanupPath,
+			"cleanup_attempt", attempt,
+			"cleanup_max_attempts", maxAttempts,
+			"retry_delay", delay,
+			"error", cleanupErr,
+		)
+		timer := time.NewTimer(delay)
+		select {
+		case <-ctx.Done():
+			timer.Stop()
+			return errors.Join(cleanupErr, ctx.Err())
+		case <-timer.C:
+		}
+	}
 }
 
 func cleanupWorkerProcessArtifacts(process store.WorkerProcess) error {

@@ -97,6 +97,7 @@ func prepareStartupSnapshot(snapshot *telemetry.Snapshot, now time.Time) {
 		Complete:   true,
 	}
 	snapshot.Runtime = telemetry.SnapshotSection{Source: telemetry.SnapshotSourceUnknown}
+	snapshot.Shutdown = telemetry.Shutdown{Status: "running"}
 	snapshot.Refresh = startupRefresh(snapshot.Refresh, now)
 	snapshot.Counts.Running = 0
 	snapshot.Running = nil

@@ -1030,7 +1030,9 @@ func TestPublishSnapshotOnceDoesNotLetPausedProjectsHoldFleetReadiness(t *testin
 	t.Parallel()
 
 	registry := projectpkg.NewRegistry()
-	mustSetProject(t, registry, startRefreshProject(t, "alpha"))
+	healthy := startRefreshProject(t, "alpha")
+	waitForProjectDataSeq(t, healthy, 1)
+	mustSetProject(t, registry, healthy)
 
 	cfg := workflowconfig.Default()
 	cfg.Tracker.Kind = workflowconfig.TrackerMemory

@@ -2,7 +2,7 @@
 
 Detent Hub owns its SQLite database and exposes fleet coordination through an authenticated HTTP API. Clients must never open or copy the live database files.
 
-This page documents implemented behavior, including native collaboration and scoped runner enrollment through `/api/v2`. The [native Hub and Cloud RFC](cloud-hub-rfc.md) defines the broader architecture; native Changes, hosted human identity, artifact custody, and deployment contracts remain separate deliverables.
+This page documents implemented behavior, including native collaboration, Changes and scoped runner enrollment through `/api/v2`. See [self-hosted operations](hub-self-hosting.md) for deployment, export/import and recovery, and [artifact deployment](artifacts-deployment.md) for independent durable storage. The [native Hub and Cloud RFC](cloud-hub-rfc.md) defines the broader architecture.
 
 ## Approved repository policy
 
@@ -729,11 +729,12 @@ than trusting a stale worker checkpoint to identify the current version.
 Collaboration content, content versions, typed events, idempotency responses and
 owner backups all contain retained data. This release has no automatic native
 content expiry or issue-deletion endpoint. Append-only triggers deliberately
-reject ordinary history deletion. Retention durations, backup expiry and a
-privileged maintenance command remain deployment decisions and implementation
-work for #2197; append-only storage is not a promise of permanent retention.
+reject ordinary history deletion. [Self-hosted operations](hub-self-hosting.md)
+defines full-instance export/import, credential fencing on restore, whole-instance
+retirement and operator-managed backup expiry. Scoped purge remains unimplemented;
+append-only storage is not a promise of permanent retention.
 
-The privileged deletion procedure must use the following contract:
+A future scoped deletion procedure must use the following contract:
 
 1. Authorize the organization and record the deletion scope outside the affected
    content. Fence writers and active leases, then take an owner backup when
@@ -760,9 +761,11 @@ The privileged deletion procedure must use the following contract:
 
 The implemented tests prove ordinary append-only enforcement, immutable identity,
 scoped revision retrieval, backup-compatible migration and restart persistence.
-They do not claim that the future privileged purge/restore maintenance command is
-implemented. Until it is, operators must retain backups deliberately and must not
-disable triggers on a running Hub as a substitute for supported deletion.
+They do not claim that a privileged scoped purge command is implemented.
+The supported full-instance restore revokes copied credentials and releases leases;
+it does not implement scoped erasure or automatically replay a customer deletion
+ledger. Operators must retain backups deliberately and must not disable triggers
+on a running Hub as a substitute for supported deletion.
 
 ## Provider capacity reports
 

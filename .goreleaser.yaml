@@ -41,6 +41,9 @@ archives:
     files:
       - README.md
       - LICENSE
+      - docs/*.md
+      - docs/**/*
+      - scripts/hub-smoke.py
 
 brews:
   - name: detent
@@ -80,6 +83,11 @@ nfpms:
       - deb
       - rpm
     contents:
+      - src: docs/
+        dst: /usr/share/doc/detent/docs
+        type: tree
+      - src: scripts/hub-smoke.py
+        dst: /usr/share/doc/detent/scripts/hub-smoke.py
       - src: LICENSE
         dst: /usr/share/doc/detent/copyright
         file_info:

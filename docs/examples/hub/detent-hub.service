@@ -1,0 +1,24 @@
+[Unit]
+Description=Detent customer-operated Hub
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=detent-hub
+Group=detent-hub
+StateDirectory=detent-hub
+StateDirectoryMode=0700
+UMask=0077
+EnvironmentFile=/etc/detent-hub/credentials.env
+ExecStart=/usr/bin/detent hub serve --database /var/lib/detent-hub/hub.db --listen 127.0.0.1:7777 --github-disabled
+Restart=on-failure
+RestartSec=10
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+TimeoutStopSec=45
+
+[Install]
+WantedBy=multi-user.target

@@ -262,10 +262,10 @@ func TestHostedBillingReplayAndRecovery(t *testing.T) {
 
 func TestHostedBillingAuthorizationAndCheckout(t *testing.T) {
 	t.Parallel()
+	f, p := newHostedBillingFixture(t)
 	for _, account := range []string{"owner", "viewer", "staff", "support-viewer", "wrong-organization", "revoked", "expired", "missing"} {
 		t.Run(account, func(t *testing.T) {
-			t.Parallel()
-			f, p := newHostedBillingFixture(t)
+			calls, checkouts, portals := p.calls, len(p.checkouts), len(p.portals)
 			for _, path := range []string{"/organization/billing", "/api/cloud/billing/subscription"} {
 				response := f.page(t, account, path)
 				if (response.Code == http.StatusOK) != (account == "owner") {
@@ -281,7 +281,7 @@ func TestHostedBillingAuthorizationAndCheckout(t *testing.T) {
 					t.Fatalf("%s response=%d %s", path, response.Code, response.Body.String())
 				}
 			}
-			if account != "owner" && (p.calls != 0 || len(p.checkouts) != 0 || len(p.portals) != 0) {
+			if account != "owner" && (p.calls != calls || len(p.checkouts) != checkouts || len(p.portals) != portals) {
 				t.Fatal("unauthorized action reached Stripe")
 			}
 			if account == "owner" && (p.checkouts[0].CustomerID != "cus_fixture" || p.portals[0].CustomerID != "cus_fixture") {
@@ -289,7 +289,7 @@ func TestHostedBillingAuthorizationAndCheckout(t *testing.T) {
 			}
 		})
 	}
-	f, p := newHostedBillingFixture(t)
+	f, p = newHostedBillingFixture(t)
 	p.checkoutFail = true
 	requireNativeStatus(t, f.form(t, "owner", "/organization/billing/checkout", url.Values{"price": {"price_fixture"}}), http.StatusServiceUnavailable)
 	p.checkoutFail = false

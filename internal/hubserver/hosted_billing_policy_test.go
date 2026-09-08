@@ -125,6 +125,7 @@ func TestHostedBillingPreservesRunningLease(t *testing.T) {
 
 func TestHostedBillingConfiguration(t *testing.T) {
 	t.Parallel()
+	f, _ := newHostedBillingFixture(t)
 	for _, test := range []struct {
 		name string
 		edit func(*HostedBillingConfig)
@@ -143,7 +144,6 @@ func TestHostedBillingConfiguration(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			f, _ := newHostedBillingFixture(t)
 			config := *f.service.config.Hosted.Billing
 			config.Prices = slices.Clone(config.Prices)
 			test.edit(&config)
@@ -152,7 +152,6 @@ func TestHostedBillingConfiguration(t *testing.T) {
 			}
 		})
 	}
-	f, _ := newHostedBillingFixture(t)
 	config := *f.service.config.Hosted
 	changed := *config.Billing
 	config.Billing = &changed
@@ -290,6 +289,7 @@ func TestHostedBillingRenewalAndPlanChange(t *testing.T) {
 		wantEnd              time.Time
 	}{
 		{"renewal", "price_fixture", "paid", now.Add(31 * 24 * time.Hour), "extended", now.Add(31*24*time.Hour + time.Hour)},
+		{"three-year approved price", "price_fixture", "paid", now.AddDate(3, 0, 0), "extended", now.AddDate(3, 0, 0).Add(time.Hour)},
 		{"paid downgrade", "price_lower", "paid", now.Add(31 * 24 * time.Hour), "limited", now.Add(31*24*time.Hour + time.Hour)},
 		{"unpaid plan change", "price_lower", "open", now.Add(31 * 24 * time.Hour), "extended", paid.AccessUntil},
 	} {

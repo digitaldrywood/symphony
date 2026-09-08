@@ -26,7 +26,7 @@ func resolveHostedBilling(config *HostedBillingConfig, previous hostedBillingSta
 			state.Plan = price.Plan
 		}
 	}
-	if state.Plan.ID == "" || snapshot.PeriodEnd.After(now.AddDate(2, 0, 0)) {
+	if state.Plan.ID == "" {
 		if snapshot.SubscriptionID != "" {
 			state.Status = "unapproved_plan"
 		}

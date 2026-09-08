@@ -35,6 +35,9 @@ type snapshotEnrichmentCache struct {
 	raw      telemetry.Snapshot
 	enriched telemetry.Snapshot
 	loading  bool
+	pending  telemetry.Snapshot
+	revision int64
+	loadedAt time.Time
 }
 
 type spendRegressionMonitor struct {
@@ -53,7 +56,11 @@ func newSnapshotEnrichmentCache() *snapshotEnrichmentCache {
 }
 
 func (s *Server) cachedEnrichedSnapshot(ctx context.Context, snapshot telemetry.Snapshot) telemetry.Snapshot {
-	return s.snapshots.enrich(ctx, snapshot, s.enrichSnapshot)
+	revision, err := workflowHistoryRevision(ctx, s.store)
+	if err != nil {
+		return s.enrichSnapshot(ctx, snapshot)
+	}
+	return s.snapshots.enrichVersion(ctx, snapshot, revision, s.now(), s.enrichSnapshot)
 }
 
 func (c *snapshotEnrichmentCache) get(snapshot telemetry.Snapshot) (telemetry.Snapshot, bool) {
@@ -88,14 +95,33 @@ func sameSnapshotForEnrichment(left telemetry.Snapshot, right telemetry.Snapshot
 	return reflect.DeepEqual(left, right)
 }
 
+func newerEnrichmentSnapshot(left, right telemetry.Snapshot) bool {
+	return left.Seq > right.Seq && left.Project.ID == right.Project.ID && !left.GeneratedAt.Before(right.GeneratedAt)
+}
+
 func (c *snapshotEnrichmentCache) enrich(ctx context.Context, snapshot telemetry.Snapshot, enrich func(context.Context, telemetry.Snapshot) telemetry.Snapshot) telemetry.Snapshot {
+	return c.enrichVersion(ctx, snapshot, 0, time.Now(), enrich)
+}
+
+func (c *snapshotEnrichmentCache) enrichVersion(ctx context.Context, snapshot telemetry.Snapshot, revision int64, now time.Time, enrich func(context.Context, telemetry.Snapshot) telemetry.Snapshot) telemetry.Snapshot {
 	if c == nil {
 		return enrich(ctx, snapshot)
 	}
 
 	c.mu.Lock()
+	if !c.loading || newerEnrichmentSnapshot(snapshot, c.pending) {
+		c.pending = snapshot
+	}
 	for {
-		if c.cached && sameSnapshotForEnrichment(c.raw, snapshot) {
+		if ctx != nil && ctx.Err() != nil {
+			c.mu.Unlock()
+			return snapshot
+		}
+		if newerEnrichmentSnapshot(c.pending, snapshot) {
+			snapshot = c.pending
+		}
+
+		if c.cached && c.revision == revision && workflowHistoryFresh(c.loadedAt, now) && (sameSnapshotForEnrichment(c.raw, snapshot) || newerEnrichmentSnapshot(c.raw, snapshot)) {
 			enriched := c.enriched
 			c.mu.Unlock()
 			return enriched
@@ -119,6 +145,8 @@ func (c *snapshotEnrichmentCache) enrich(ctx context.Context, snapshot telemetry
 	}
 
 	c.mu.Lock()
+	c.revision = revision
+	c.loadedAt = now
 	c.raw = snapshot
 	c.enriched = enriched
 	c.cached = true

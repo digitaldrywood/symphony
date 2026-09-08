@@ -13,3 +13,15 @@ when_to_use: "Use when parallel Go HTTP tests intermittently fail with transport
 - Assert the ownership invariant separately by constructing two clients and verifying both transports are non-nil and distinct.
 - Isolate lifecycle state by cloning the standard `*http.Transport` for each client. If the process default can be a custom `RoundTripper`, use an independent standard-settings fallback rather than silently sharing the custom transport.
 - Prove the regression red against the old constructor, then repeat the focused test, the affected package with a high `-count`, the focused package under `-race`, and the repository validation gate.
+
+## Confirm the real bodyless-response window
+
+When a valid 204 is reported as a transport failure, prefer a real HTTP/1 transport reproduction before using a synthetic close-sensitive transport:
+
+- Inspect the pinned Go version's bodyless-response read loop. It can pool the connection before delivering the response to RoundTrip.
+- Attach httptrace.ClientTrace.PutIdleConn to the request. Signal entry through a channel and hold the callback on another channel; this parks the real response between pooling and delivery.
+- After the signal, close an unrelated httptest.Server. With the shared default transport, wait for RoundTrip to return before releasing the callback. Assert the bounded error category identifies CloseIdleConnections, not a context deadline. Join the callback before ending the test.
+- Run a control using the fixture-owned server.Client transport: close the unrelated server at the same point, release the callback, and assert successful response delivery. Check that fixture transports are non-nil, distinct from the default, and distinct across servers.
+- Keep the global-default control non-parallel. Bound stalled requests with context cancellation and release trace callbacks on failure. Do not use sleeps or manufacture the expected transport error.
+- For a fixture-only defect, inject server.Client with the intended timeout and redirect policy. Do not change production authorization semantics or add retries without separate production evidence.
+- Distinguish a demonstrated failure mechanism from attribution of an earlier uninstrumented incident. Report named operations, response status, error type, and allowlisted failure categories; omit raw URLs, headers, bodies, and arbitrary transport error text.

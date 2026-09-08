@@ -26,9 +26,10 @@ excess invocations fail explicitly instead of growing it without a bound.
 
 `-wait-timeout` (15 minutes by default) bounds registration and queue waiting.
 Interrupt/termination signals cancel waiting. Once validation starts, this wait
-budget does not limit execution; the wrapper retains the lock until the child
-exits, including if the wrapper's context is canceled during execution. The
-validation command controls its own active timeouts and shutdown.
+budget does not limit execution. Parent cancellation and termination signals
+stop the active command through the shared process-group helper. The wrapper
+retains the lock until command exit and process-group cleanup finish. The
+validation command controls its own active timeouts.
 
 Waiting diagnostics report queue position, queue size, elapsed wait, and the
 active owner's PID/acquisition time when available. They refresh when the queue

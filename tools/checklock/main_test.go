@@ -307,3 +307,66 @@ func (w *pausedWriter) Write(data []byte) (int, error) {
 func (w *pausedWriter) release() {
 	w.closed.Do(func() { close(w.resume) })
 }
+
+func TestRunCancellationStopsActiveValidation(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithTimeout(t.Context(), validationIntegrationTimeout)
+	defer cancel()
+	path := filepath.Join(t.TempDir(), "validation.lock")
+	criticalPath := filepath.Join(t.TempDir(), "critical.lock")
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		reader.Close()
+		writer.Close()
+	})
+	ready := newNotifyingWriter()
+	var stderr bytes.Buffer
+	commandCtx, stopCommand := context.WithCancel(ctx)
+	defer stopCommand()
+	done := make(chan int, 1)
+	go func() {
+		done <- run(commandCtx, []string{
+			"-lock", path, "--", os.Args[0], "-test.run=^TestValidationCancellationHelper$",
+			"--", "checklock-cancel-child", criticalPath,
+		}, reader, ready, &stderr)
+	}()
+	select {
+	case <-ready.notified:
+	case code := <-done:
+		t.Fatalf("command exited before readiness: %d: %s", code, &stderr)
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	}
+	for _, heldPath := range []string{path, criticalPath} {
+		inspection, err := instancelock.Inspect(heldPath)
+		if err != nil || inspection.Status != instancelock.StatusHeld {
+			t.Fatalf("validation was not active before cancellation: %+v, %v", inspection, err)
+		}
+	}
+	stopCommand()
+	select {
+	case code := <-done:
+		if code == 0 {
+			t.Fatalf("canceled command returned success: %s", &stderr)
+		}
+	case <-ctx.Done():
+		t.Fatal("active validation ignored cancellation")
+	}
+	for _, releasedPath := range []string{path, criticalPath} {
+		acquireTestLock(t, releasedPath)
+	}
+}
+
+func TestValidationCancellationHelper(t *testing.T) {
+	if len(os.Args) < 3 || os.Args[len(os.Args)-2] != "checklock-cancel-child" {
+		t.Skip("helper process")
+	}
+	acquireTestLock(t, os.Args[len(os.Args)-1])
+	fmt.Fprintln(os.Stdout, "ready")
+	if _, err := io.ReadFull(os.Stdin, make([]byte, 1)); err != nil {
+		t.Fatal(err)
+	}
+}

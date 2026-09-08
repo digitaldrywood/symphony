@@ -11,6 +11,8 @@ import (
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/digitaldrywood/detent/internal/procgroup"
 )
 
 const validationLockPollInterval = 100 * time.Millisecond
@@ -77,10 +79,14 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		Stdout: stdout,
 		Stderr: stderr,
 	}
-	commandErr := cmd.Run()
+	commandErr := runValidationCommand(ctx, cmd)
 	closeErr := lock.Close()
 	if closeErr != nil {
 		fmt.Fprintf(stderr, "release validation lock: %v\n", closeErr)
+	}
+	if err := ctx.Err(); err != nil {
+		fmt.Fprintf(stderr, "validation command canceled: %v\n", errors.Join(err, commandErr))
+		return 1
 	}
 	if commandErr != nil {
 		var exitErr *exec.ExitError
@@ -94,4 +100,28 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		return 1
 	}
 	return 0
+}
+
+func runValidationCommand(ctx context.Context, cmd *exec.Cmd) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	procgroup.Configure(ctx, cmd)
+	terminate := cmd.Cancel
+	cmd.Cancel = nil
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	groupID := procgroup.GroupID(cmd)
+	terminated := make(chan struct{})
+	var terminationErr error
+	stop := context.AfterFunc(ctx, func() {
+		terminationErr = terminate()
+		close(terminated)
+	})
+	waitErr := cmd.Wait()
+	if !stop() {
+		<-terminated
+	}
+	return errors.Join(waitErr, terminationErr, procgroup.Cleanup(groupID))
 }

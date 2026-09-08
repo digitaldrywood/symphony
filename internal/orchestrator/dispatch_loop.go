@@ -112,6 +112,9 @@ func (o *Orchestrator) evaluateDispatchLoopProgress(
 }
 
 func dispatchLoopPreservesSpecificDecision(decision implementCompletionProgressDecision) bool {
+	if decision.DependencyDeferral {
+		return true
+	}
 	switch strings.TrimSpace(decision.Reason) {
 	case strandedUnpushedWorkReason, workpadBlockedUnactionedReason:
 		return true

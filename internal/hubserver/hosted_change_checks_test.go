@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/digitaldrywood/detent/internal/policy"
+	"github.com/digitaldrywood/detent/internal/runnerauth"
 	"github.com/digitaldrywood/detent/internal/tracker"
 )
 
@@ -236,5 +237,39 @@ func testHostedCheckRevocation(t *testing.T, f *browserHostedFixture, base, path
 				}
 			})
 		}
+	}
+}
+
+func TestHostedRunnerChangeChecks(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		source string
+		want   int
+	}{
+		{"customer", http.StatusOK},
+		{"independent", http.StatusUnprocessableEntity},
+	} {
+		t.Run(test.source, func(t *testing.T) {
+			t.Parallel()
+			f := newChangeFixture(t, nil)
+			runner := prepareRunner(t, f.nativeFixture, runnerauth.Collaborate)
+			runner.enroll(t)
+			if test.source == "customer" {
+				rules := f.rules
+				rules.RequiredChecks[0].PrincipalID = runner.identity.RunnerID
+				rules.RequiredChecks[0].Source = test.source
+				requireNativeStatus(t, performHubAPIRequest(t, f.service, http.MethodPut, f.base+"/change-review-policy", testHubAdminToken, tracker.ApproveChangeReviewPolicy{Mutation: tracker.Mutation{IdempotencyKey: "customer-policy"}, ExpectedID: f.rules.ID, Policy: rules}), http.StatusOK)
+			}
+			version := f.publish(t, "v1", "")
+			f.service.config.Hosted = &HostedConfig{OrganizationID: string(f.project.OrganizationID)}
+			path := f.path + "/versions/" + version.ID + "/checks"
+			request := changeTestResult(version)
+			requireNativeStatus(t, performHubAPIRequest(t, f.service, http.MethodPost, path, runner.redemption.Credential, request), test.want)
+			if test.source == "customer" {
+				requireNativeStatus(t, performHubAPIRequest(t, f.service, http.MethodPost, path, runner.redemption.Credential, request), http.StatusOK)
+				request.IdempotencyKey, request.Source = "forged-independent", "independent"
+				requireNativeStatus(t, performHubAPIRequest(t, f.service, http.MethodPost, path, runner.redemption.Credential, request), http.StatusUnprocessableEntity)
+			}
+		})
 	}
 }

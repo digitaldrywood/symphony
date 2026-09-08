@@ -234,7 +234,7 @@ func (s *Service) nativeMutation(c echo.Context, command tracker.Mutation, input
 	if err := s.recheckHostedMutation(ctx, tx, scope); err != nil {
 		return s.nativeAPIError(c, err)
 	}
-	if s.config.Hosted != nil && scope.credential.Hosted == nil && changeCheckRequest(c) {
+	if s.config.Hosted != nil && scope.credential.Hosted == nil && scope.credential.Runner.RunnerID == "" && changeCheckRequest(c) {
 		if err := s.requireHostedChangeCheckPrincipal(ctx, tx, scope); err != nil {
 			return s.nativeAPIError(c, err)
 		}

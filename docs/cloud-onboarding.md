@@ -102,6 +102,10 @@ execution worker, hosted user cookie, or unapproved operator cannot substitute.
 This exception grants no reads, publication, review decisions, policy changes,
 imports, or token administration.
 
+Enrolled runners retain their existing `collaborate` operation for expected
+`customer` checks. They cannot satisfy an `independent` check or change the
+source pinned by the immutable version.
+
 Provision through the existing instance-administrator token APIs before enabling
 hosted serving, or during an explicitly authorized private maintenance window.
 For maintenance, the hosted process must be stopped and the sole database-owning

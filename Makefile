@@ -46,7 +46,7 @@ GOSEC_EXCLUDE_DIRS ?= .detent
 GOSEC_EXCLUDE_DIR_FLAGS := $(addprefix -exclude-dir=,$(GOSEC_EXCLUDE_DIRS))
 CHECK_LOCK_WAIT ?= 15m
 
-.PHONY: dev generate check-generated css css-watch build test test-race test-cover test-cover-packages soak visual-e2e visual-e2e-update lint vet gosec-build security-gosec-determinism security check check-unlocked modernize-check nilaway-audit release-snapshot sqlc db-migrate setup clean help
+.PHONY: dev generate check-migrations check-generated css css-watch build test test-race test-cover test-cover-packages soak visual-e2e visual-e2e-update lint vet gosec-build security-gosec-determinism security check check-unlocked modernize-check nilaway-audit release-snapshot sqlc db-migrate setup clean help
 
 dev:
 	@mkdir -p tmp
@@ -65,6 +65,9 @@ generate:
 	fi
 	@$(MAKE) sqlc
 	@$(MAKE) css
+
+check-migrations:
+	go run ./tools/migrationcheck
 
 check-generated:
 	go run ./internal/config/cmd/configdoc -root . -check
@@ -147,11 +150,11 @@ security: security-gosec-determinism
 nilaway-audit:
 	$(NILAWAY) -include-pkgs=$(NILAWAY_INCLUDE_PKGS) ./...
 
-check:
+check: check-migrations
 	@common_dir="$$(git rev-parse --path-format=absolute --git-common-dir)" && \
 	go run ./tools/checklock -lock "$$common_dir/detent-validation.lock" -wait-timeout "$(CHECK_LOCK_WAIT)" -- $(MAKE) check-unlocked
 
-check-unlocked: check-generated build lint vet nilaway-audit test-race test-cover test-cover-packages
+check-unlocked: check-migrations check-generated build lint vet nilaway-audit test-race test-cover test-cover-packages
 	@echo "All checks passed."
 
 modernize-check:

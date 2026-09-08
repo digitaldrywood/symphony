@@ -1558,6 +1558,11 @@ func (o *Orchestrator) completeProgrammaticMergeWorkerResult(
 		o.waitForMergeWorkerCurrentHeadCI(ctx, state, event, running, issue)
 		return true
 	}
+	if mergeWorkerCheckedPullRequest(issue) &&
+		strings.EqualFold(strings.TrimSpace(issue.PullRequest.MergeableState), "behind") {
+		o.refreshMergeWorkerBase(ctx, state, event, running, issue, "pull_request_base_behind")
+		return true
+	}
 	if !mergeWorkerProgrammaticMergeReady(issue) {
 		if pullRequestHydrationBlocksProgress(issue.PullRequest) {
 			o.waitForMergeWorkerPullRequestHydration(ctx, state, event, running, issue)
@@ -1628,22 +1633,8 @@ func (o *Orchestrator) completeProgrammaticMergeWorkerResult(
 	number := pullRequestNumber(issue)
 	headSHA := strings.TrimSpace(issue.PullRequest.HeadSHA)
 	if err := merger.MergePullRequest(ctx, repository, number, headSHA, o.cfg.MergeMethod); err != nil {
-		if errors.Is(err, connector.ErrPullRequestBaseOutOfDate) &&
-			event.Result.Output == runpkg.RunOutputMergeFastPathCheckedHead &&
-			strings.EqualFold(issue.PullRequest.MergeableState, "behind") {
-			reservation := reserveMergeCandidate(state, issue, event.CompletedAt)
-			reservation.RefreshHeadSHA = headSHA
-			state.mergeReservations[reservation.Repository] = reservation
-			running.Issue = issue
-			o.completeDurableWorkAttemptWithMetadata(ctx, state, running, event.CompletedAt, store.WorkAttemptTerminalSuccess,
-				"", "", "waiting", "base refresh required by merge API", map[string]any{mergeReservationMetadataKey: reservation})
-			o.releaseTerminalAttemptClaim(ctx, state, issue, event.CompletedAt)
-			o.scheduleRetry(state, issue, nextAttempt(running.Attempt), event.CompletedAt, "base refresh required by merge API", true, running.WorkerHost)
-			if o.logger != nil {
-				o.logger.Info("merge_base_refresh_required", mergeWorkerLogAttrs(issue,
-					"reason", "merge_api_rejected_out_of_date_base", "error", err,
-					"prior_validation_invalidated", true, "reservation_expires_at", reservation.ExpiresAt)...)
-			}
+		if errors.Is(err, connector.ErrPullRequestBaseOutOfDate) {
+			o.refreshMergeWorkerBase(ctx, state, event, running, issue, "merge_api_rejected_out_of_date_base")
 			return true
 		}
 		running.Issue = issue
@@ -1978,6 +1969,28 @@ func mergeWorkerCurrentHeadCIPendingChecks(issue connector.Issue) []string {
 	return autoPromotePendingChecksFromPullRequest(issue.PullRequest)
 }
 
+func (o *Orchestrator) refreshMergeWorkerBase(
+	ctx context.Context,
+	state *State,
+	event runpkg.Completion,
+	running Running,
+	issue connector.Issue,
+	reason string,
+) {
+	reservation := reserveMergeCandidate(state, issue, event.CompletedAt)
+	reservation.RefreshHeadSHA = strings.TrimSpace(issue.PullRequest.HeadSHA)
+	state.mergeReservations[reservation.Repository] = reservation
+	running.Issue = issue
+	o.completeDurableWorkAttemptWithMetadata(ctx, state, running, event.CompletedAt, store.WorkAttemptTerminalSuccess,
+		"", "", "waiting", "base refresh required before merge", map[string]any{mergeReservationMetadataKey: reservation})
+	o.releaseTerminalAttemptClaim(ctx, state, issue, event.CompletedAt)
+	o.scheduleRetry(state, issue, nextAttempt(running.Attempt), event.CompletedAt, "base refresh required before merge", true, running.WorkerHost)
+	if o.logger != nil {
+		o.logger.Info("merge_base_refresh_required", mergeWorkerLogAttrs(issue,
+			"reason", reason, "prior_validation_invalidated", true, "reservation_expires_at", reservation.ExpiresAt)...)
+	}
+}
+
 func (o *Orchestrator) failProgrammaticMergeWorkerResult(
 	ctx context.Context,
 	state *State,
@@ -2029,6 +2042,11 @@ func mergeFastPathResult(event runpkg.Completion) bool {
 }
 
 func mergeWorkerProgrammaticMergeReady(issue connector.Issue) bool {
+	return mergeWorkerCheckedPullRequest(issue) &&
+		strings.EqualFold(strings.TrimSpace(issue.PullRequest.MergeableState), "clean")
+}
+
+func mergeWorkerCheckedPullRequest(issue connector.Issue) bool {
 	if strings.TrimSpace(issue.ID) == "" || issue.PullRequest == nil {
 		return false
 	}
@@ -2037,11 +2055,6 @@ func mergeWorkerProgrammaticMergeReady(issue connector.Issue) bool {
 		return false
 	}
 	if normalizePullRequestState(pullRequest.State) != "open" || pullRequest.Draft {
-		return false
-	}
-	switch strings.ToLower(strings.TrimSpace(pullRequest.MergeableState)) {
-	case "clean", "behind":
-	default:
 		return false
 	}
 	if !mergeWorkerCIGreen(pullRequest.CIStatus) || len(pullRequest.RequiredCheckFailures) > 0 || pullRequest.MergeQueueEntry != nil {

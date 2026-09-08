@@ -20,7 +20,7 @@ import (
 	"github.com/digitaldrywood/detent/internal/workspace"
 )
 
-func TestMergingFastPathBehindReadyPreservesCheckedHead(t *testing.T) {
+func TestMergingFastPathCurrentReadyPreservesCheckedHead(t *testing.T) {
 	t.Parallel()
 
 	now := time.Date(2026, 6, 26, 13, 20, 0, 0, time.UTC)
@@ -41,7 +41,7 @@ func TestMergingFastPathBehindReadyPreservesCheckedHead(t *testing.T) {
 		URL:            "https://github.test/digitaldrywood/detent/pull/860",
 		BranchName:     "detent/detent-digitaldrywood_detent_860-030a2359de53",
 		State:          "OPEN",
-		MergeableState: "behind",
+		MergeableState: "clean",
 		CIStatus:       "success",
 		HeadSHA:        "head-fast-path",
 	})
@@ -1028,7 +1028,7 @@ func TestMergeWorkerProgrammaticMergeDisposition(t *testing.T) {
 		wantWait    bool
 	}{
 		{name: "clean green", state: "clean", ci: "success", wantReady: true},
-		{name: "behind green", state: "behind", ci: "success", wantReady: true},
+		{name: "behind green requires integration", state: "behind", ci: "success"},
 		{name: "behind pending", state: "behind", ci: "pending", wantWait: true},
 		{name: "unknown green", state: "unknown", ci: "success", wantPending: true},
 		{name: "empty green", ci: "success", wantPending: true},

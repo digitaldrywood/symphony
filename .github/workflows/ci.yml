@@ -60,6 +60,9 @@ jobs:
           go-version: '1.26.6'
           cache: true
 
+      - name: Check integrated migration versions
+        run: make check-migrations
+
       - name: Download modules
         run: go mod download
 

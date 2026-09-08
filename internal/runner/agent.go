@@ -766,7 +766,7 @@ func mergeFastPathCheckedHead(issue connector.Issue) bool {
 		return false
 	}
 	mergeable := strings.ToLower(strings.TrimSpace(pullRequest.MergeableState))
-	if mergeable != "clean" && mergeable != "behind" {
+	if mergeable != "clean" {
 		return false
 	}
 	if pullRequest.HydrationUnavailableReason != "" || pullRequest.HydrationDegradedReason != "" || len(pullRequest.RequiredCheckFailures) > 0 || pullRequest.MergeQueueEntry != nil {

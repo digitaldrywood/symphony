@@ -248,13 +248,15 @@ func TestMergeReservationExpiryAdmitsNextCandidate(t *testing.T) {
 func TestMergeReservationPersistsAndRestoresWait(t *testing.T) {
 	t.Parallel()
 	for _, tt := range []struct {
-		name    string
-		age     time.Duration
-		refresh bool
-		want    bool
+		name       string
+		age        time.Duration
+		refresh    bool
+		apiRefusal bool
+		want       bool
 	}{
 		{name: "CI wait", age: time.Minute, want: true},
-		{name: "base refresh refusal", age: time.Minute, refresh: true, want: true},
+		{name: "behind refresh before API", age: time.Minute, refresh: true, want: true},
+		{name: "base changes at API", age: time.Minute, refresh: true, apiRefusal: true, want: true},
 		{name: "expired", age: mergeWorkerCurrentHeadCIWaitTimeout},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -271,7 +273,10 @@ func TestMergeReservationPersistsAndRestoresWait(t *testing.T) {
 			if tt.refresh {
 				issue.PullRequest.CIStatus = "success"
 				issue.PullRequest.MergeableState = "behind"
-				tracker.err = connector.ErrPullRequestBaseOutOfDate
+				if tt.apiRefusal {
+					issue.PullRequest.MergeableState = "clean"
+					tracker.err = connector.ErrPullRequestBaseOutOfDate
+				}
 				event.Result = runpkg.RunResult{FinalState: runpkg.FinalStateCompleted, Output: runpkg.RunOutputMergeFastPathCheckedHead}
 				if !orch.completeProgrammaticMergeWorkerResult(t.Context(), &state, event, running, issue) {
 					t.Fatal("base refusal was not handled")
@@ -343,7 +348,7 @@ func TestMergeTrainDrainsWithoutAvoidableCIInvalidation(t *testing.T) {
 		external      bool
 		wantRefreshes map[int]int
 	}{
-		{name: "legal checked heads", wantRefreshes: map[int]int{}},
+		{name: "protection bypass still requires integration", wantRefreshes: map[int]int{2221: 1, 2220: 1}},
 		{name: "strict protection", strict: true, wantRefreshes: map[int]int{2221: 1, 2220: 1}},
 		{name: "external base advance during CI", strict: true, external: true, wantRefreshes: map[int]int{2221: 2, 2220: 1}},
 	} {
@@ -420,8 +425,8 @@ func TestMergeTrainDrainsWithoutAvoidableCIInvalidation(t *testing.T) {
 			if !reflect.DeepEqual(backend.refreshes, tt.wantRefreshes) {
 				t.Fatalf("refreshes = %v, want %v", backend.refreshes, tt.wantRefreshes)
 			}
-			if tt.strict && !strings.Contains(logs.String(), "reason=merge_api_rejected_out_of_date_base") {
-				t.Fatalf("missing required-refresh diagnostics: %s", logs.String())
+			if strings.Contains(logs.String(), "reason=merge_api_rejected_out_of_date_base") {
+				t.Fatalf("stale base reached merge API: %s", logs.String())
 			}
 		})
 	}

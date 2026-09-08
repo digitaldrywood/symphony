@@ -3,7 +3,7 @@ package hubserver
 import (
 	"database/sql"
 	"fmt"
-	"io/fs"
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
@@ -13,15 +13,22 @@ import (
 	"github.com/pressly/goose/v3"
 )
 
-func TestViewedFilesMigrationPreservesExistingData(t *testing.T) {
+func TestHubMigrationPreservesExistingData(t *testing.T) {
 	t.Parallel()
 	for _, test := range []struct {
 		name           string
 		version        int64
 		hostedSessions string
+		viewed         bool
+		onboarding     bool
+		crlf           bool
 	}{
-		{"artifacts", 16, "0"},
-		{"hosted identity", 17, "1"},
+		{"artifacts", 16, "0", false, false, false},
+		{"hosted identity", 17, "1", false, false, false},
+		{"viewed files version 18", 18, "1", true, false, false},
+		{"onboarding version 18", 18, "1", false, true, false},
+		{"both tables version 18", 18, "1", true, true, false},
+		{"both tables CRLF version 18", 18, "1", true, true, true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
@@ -38,9 +45,41 @@ func TestViewedFilesMigrationPreservesExistingData(t *testing.T) {
 			if _, err := db.ExecContext(t.Context(), fmt.Sprintf("PRAGMA application_id = %d", hubApplicationID)); err != nil {
 				t.Fatal(err)
 			}
-			migrations, err := fs.Sub(migrationFiles, "migrations")
+			files, err := migrationFiles.ReadDir("migrations")
 			if err != nil {
 				t.Fatal(err)
+			}
+			migrations := fstest.MapFS{}
+			for _, file := range files {
+				if file.Name() >= "00018_" && file.Name() != "00018_change_viewed_files.sql" {
+					continue
+				}
+				if file.Name() == "00018_change_viewed_files.sql" && !test.viewed {
+					continue
+				}
+				data, err := migrationFiles.ReadFile("migrations/" + file.Name())
+				if err != nil {
+					t.Fatal(err)
+				}
+				migrations[file.Name()] = &fstest.MapFile{Data: data}
+			}
+			if test.onboarding {
+				data, err := os.ReadFile("testdata/migrations/00018_project_onboarding.sql")
+				if err != nil {
+					t.Fatal(err)
+				}
+				data = []byte(strings.ReplaceAll(string(data), "\r\n", "\n"))
+				if test.crlf {
+					data = []byte(strings.ReplaceAll(string(data), "\n", "\r\n"))
+				}
+				if test.viewed {
+					up, _, _ := strings.Cut(string(data), "-- +goose Down")
+					up = strings.TrimPrefix(up, "-- +goose Up")
+					viewed := migrations["00018_change_viewed_files.sql"]
+					viewed.Data = append(viewed.Data, []byte(up)...)
+				} else {
+					migrations["00018_project_onboarding.sql"] = &fstest.MapFile{Data: data}
+				}
 			}
 			provider, err := goose.NewProvider(goose.DialectSQLite3, db, migrations, goose.WithDisableGlobalRegistry(true), goose.WithTableName(hubSchemaTable), goose.WithSlog(discardLogger()))
 			if err != nil {
@@ -60,22 +99,35 @@ func TestViewedFilesMigrationPreservesExistingData(t *testing.T) {
 			if _, err := db.ExecContext(t.Context(), `INSERT INTO change_versions (id, change_id, number, record_json) VALUES ('existing-version', 'existing-change', 1, '{"head_sha":"preserved"}')`); err != nil {
 				t.Fatal(err)
 			}
-			if test.version == 17 {
+			if test.version >= 17 {
 				if _, err := db.ExecContext(t.Context(), `INSERT INTO hosted_sessions (token_hash, email, identity_json, expires_at, created_at) VALUES ('existing-session', 'reviewer@example.test', '{}', ?, ?)`, testTimestamp, testTimestamp); err != nil {
 					t.Fatal(err)
 				}
 			}
-			var viewedTables int
-			if err := db.QueryRowContext(t.Context(), "SELECT count(*) FROM sqlite_schema WHERE name = 'change_viewed_files'").Scan(&viewedTables); err != nil || viewedTables != 0 {
-				t.Fatalf("pre-upgrade viewed tables = %d, error = %v", viewedTables, err)
+			if test.viewed {
+				if _, err := db.ExecContext(t.Context(), `INSERT INTO change_viewed_files (version_id, principal_id, manifest_sha256, file_sha256, viewed) VALUES ('existing-version', 'reviewer', ?, ?, 1)`, strings.Repeat("a", 64), strings.Repeat("b", 64)); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if test.onboarding {
+				if _, err := db.ExecContext(t.Context(), `INSERT INTO project_onboarding (organization_id, project_id, revision, progress_json, updated_at) SELECT organization_id, project_id, 7, '{"policy_approved":true}', ? FROM issues WHERE id = ?`, testTimestamp, issueID); err != nil {
+					t.Fatal(err)
+				}
 			}
 			if err := db.Close(); err != nil {
 				t.Fatal(err)
 			}
 			cfg := Config{DatabasePath: path}
 			service := openTestService(t, cfg)
-			if _, err := service.database.db.ExecContext(t.Context(), `INSERT INTO change_viewed_files (version_id, principal_id, manifest_sha256, file_sha256, viewed) VALUES ('existing-version', 'reviewer', ?, ?, 1)`, strings.Repeat("a", 64), strings.Repeat("b", 64)); err != nil {
-				t.Fatal(err)
+			if !test.viewed {
+				if _, err := service.database.db.ExecContext(t.Context(), `INSERT INTO change_viewed_files (version_id, principal_id, manifest_sha256, file_sha256, viewed) VALUES ('existing-version', 'reviewer', ?, ?, 1)`, strings.Repeat("a", 64), strings.Repeat("b", 64)); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if !test.onboarding {
+				if _, err := service.database.db.ExecContext(t.Context(), `INSERT INTO project_onboarding (organization_id, project_id, revision, progress_json, updated_at) SELECT organization_id, project_id, 7, '{"policy_approved":true}', ? FROM issues WHERE id = ?`, testTimestamp, issueID); err != nil {
+					t.Fatal(err)
+				}
 			}
 			if err := service.Close(); err != nil {
 				t.Fatal(err)
@@ -83,8 +135,12 @@ func TestViewedFilesMigrationPreservesExistingData(t *testing.T) {
 			service = openTestService(t, cfg)
 			for _, check := range []struct{ name, query, want string }{
 				{"schema version", "SELECT max(version_id) FROM hub_schema_version WHERE is_applied = 1", strconv.FormatInt(supportedSchemaVersion, 10)},
+				{"onboarding migration", "SELECT count(*) FROM hub_schema_version WHERE version_id = 19 AND is_applied = 1", "1"},
+				{"onboarding progress", "SELECT progress_json FROM project_onboarding", `{"policy_approved":true}`},
+				{"onboarding revision", "SELECT revision FROM project_onboarding", "7"},
+				{"onboarding timestamp", "SELECT updated_at FROM project_onboarding", testTimestamp},
 				{"identity migration", "SELECT count(*) FROM hub_schema_version WHERE version_id = 17 AND is_applied = 1", "1"},
-				{"viewed migration", "SELECT count(*) FROM hub_schema_version WHERE version_id = 18 AND is_applied = 1", "1"},
+				{"version 18 recorded once", "SELECT count(*) FROM hub_schema_version WHERE version_id = 18 AND is_applied = 1", "1"},
 				{"existing code version", "SELECT record_json FROM change_versions WHERE id = 'existing-version'", `{"head_sha":"preserved"}`},
 				{"viewed state", "SELECT viewed FROM change_viewed_files WHERE version_id = 'existing-version' AND principal_id = 'reviewer'", "1"},
 				{"hosted sessions", "SELECT count(*) FROM hosted_sessions WHERE token_hash = 'existing-session' AND email = 'reviewer@example.test'", test.hostedSessions},

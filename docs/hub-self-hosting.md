@@ -238,6 +238,16 @@ binary retries the remainder on restart. Fix disk/permission problems first.
 Never manually advance the schema table or run the unrelated local orchestrator
 `make db-migrate` against a Hub database.
 
+Schema 19 repairs the two formerly valid schema-18 branches. Migration 18 remains
+`00018_change_viewed_files.sql`; onboarding moves to
+`00019_project_onboarding.sql`. The forward-only, transactional migration creates
+only missing tables. A viewed-files schema 18 retains all viewed markers and gains
+onboarding; an onboarding schema 18 retains progress, revision and timestamps and
+gains viewed-files storage. Hosted identity and change-version rows stay in place.
+Both-table databases also retain their rows. Ordinary startup handles these
+variants automatically; no schema-version edits or table deletion is required.
+Use the backup procedure above before upgrading; keep the snapshot for rollback.
+
 If restore is interrupted before publication, the requested destination is absent.
 A private `.hub-restore-*` directory may remain beside it; retain it for diagnosis
 or remove it only after confirming no maintenance process owns it. Retry from the

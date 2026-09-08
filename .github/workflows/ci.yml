@@ -119,6 +119,7 @@ jobs:
   browser-visual:
     name: Browser Visual
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
         with:
@@ -356,6 +357,7 @@ jobs:
   goreleaser-snapshot:
     name: GoReleaser Snapshot
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     steps:
       - uses: actions/checkout@v5
         with:

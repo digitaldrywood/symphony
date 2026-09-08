@@ -42,10 +42,10 @@ var requiredPRStatusChecks = []requiredStatusCheck{
 	},
 	{
 		name:     "Browser Visual",
-		budget:   "5m",
+		budget:   "15m",
 		jobStart: "  browser-visual:",
 		jobEnd:   "  portability-verify:",
-		markers:  []string{"name: Browser Visual", "Run full browser visual gate", "Run browser smoke gate"},
+		markers:  []string{"name: Browser Visual", "timeout-minutes: 15", "Run full browser visual gate", "Run browser smoke gate"},
 	},
 	{
 		name:     "Portability Verify (macos-latest)",
@@ -84,10 +84,10 @@ var requiredPRStatusChecks = []requiredStatusCheck{
 	},
 	{
 		name:     "GoReleaser Snapshot",
-		budget:   "8m",
+		budget:   "15m",
 		jobStart: "  goreleaser-snapshot:",
 		jobEnd:   "",
-		markers:  []string{"name: GoReleaser Snapshot"},
+		markers:  []string{"name: GoReleaser Snapshot", "timeout-minutes: 15", "args: release --snapshot --clean", "MINISIGN_KEY_FILE: ${{ runner.temp }}/detent-minisign.key"},
 	},
 }
 
@@ -103,6 +103,34 @@ func TestCIConcurrencyKeepsMainPushRuns(t *testing.T) {
 		if !strings.Contains(concurrency, want) {
 			t.Fatalf("CI concurrency missing %q", want)
 		}
+	}
+}
+
+func TestSnapshotBudgetPreservesReleaseWork(t *testing.T) {
+	t.Parallel()
+
+	config := readNormalizedFile(t, ".goreleaser.yaml")
+	for _, tt := range []struct {
+		name    string
+		start   string
+		end     string
+		markers []string
+	}{
+		{"hooks", "before:", "\nbuilds:", []string{"go mod download", "go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.30.0", "make generate", "go test ./..."}},
+		{"targets", "builds:", "\narchives:", []string{"CGO_ENABLED=0", "-trimpath", "- darwin", "- linux", "- windows", "- amd64", "- arm64"}},
+		{"archives", "archives:", "\nbrews:", []string{"- tar.gz", "goos: windows", "- zip", "- README.md", "- LICENSE", "- docs/**/*", "- scripts/hub-smoke.py"}},
+		{"packages", "nfpms:", "\nscoops:", []string{"- deb", "- rpm"}},
+		{"checksums", "checksum:", "\nsigns:", []string{"algorithm: sha256"}},
+		{"signing", "signs:", "\nsnapshot:", []string{"artifacts: checksum", "cmd: minisign", "${artifact}.minisig", "{{ .Env.MINISIGN_KEY_FILE }}"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			section := workflowBetween(t, config, tt.start, tt.end)
+			for _, marker := range tt.markers {
+				if !strings.Contains(section, marker) {
+					t.Errorf("release configuration missing %q", marker)
+				}
+			}
+		})
 	}
 }
 

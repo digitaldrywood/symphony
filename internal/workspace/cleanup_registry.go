@@ -266,6 +266,10 @@ func (l *LocalGit) ReconcileResiduals(ctx context.Context, activeIssues []Issue)
 }
 
 func (l *LocalGit) reconcileWorkspace(ctx context.Context, record cleanupOwnershipRecord, recorded bool, result *ReconcileResult) (bool, error) {
+	if !recorded && record.Branch != "detent/"+strings.ToLower(record.Key) {
+		result.UnownedSkipped++
+		return false, nil
+	}
 	exists, _, err := pathExists(record.Path)
 	if err != nil {
 		return false, err

@@ -225,6 +225,7 @@ func TestClientStopsLookupsAfterHeaderlessForbiddenRateLimitResponse(t *testing.
 			if err != nil {
 				t.Fatalf("NewClient() error = %v", err)
 			}
+			client.restBackoffs = newRESTBackoffRegistry()
 
 			for call := range 2 {
 				err := tt.call(context.Background(), client)
@@ -304,6 +305,7 @@ func TestConnectorRateLimitProbesRequireFreshResponse(t *testing.T) {
 			if err != nil {
 				t.Fatalf("NewConnector() error = %v", err)
 			}
+			conn.client.restBackoffs = newRESTBackoffRegistry()
 			if err := tt.seed(context.Background(), conn); !errors.Is(err, ErrRateLimited) {
 				t.Fatalf("seed error = %v, want ErrRateLimited", err)
 			}
@@ -386,6 +388,7 @@ func TestConnectorProbeRESTRateLimitClearsRecoveredBackoff(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewConnector() error = %v", err)
 	}
+	conn.client.restBackoffs = newRESTBackoffRegistry()
 	if err := conn.client.REST(context.Background(), http.MethodGet, "/user", nil, nil); !errors.Is(err, ErrRateLimited) {
 		t.Fatalf("REST() error = %v, want ErrRateLimited", err)
 	}
@@ -856,6 +859,7 @@ func TestClientRESTLogsRateLimitFailuresByDefault(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewClient() error = %v", err)
 	}
+	client.restBackoffs = newRESTBackoffRegistry()
 
 	err = client.REST(context.Background(), http.MethodGet, "/repos/digitaldrywood/detent/issues", nil, nil)
 	if !errors.Is(err, ErrRateLimited) {
@@ -1002,6 +1006,7 @@ func TestClientRESTAggregatesUsageAndBacksOffAfterRateLimit(t *testing.T) {
 	if err != nil {
 		t.Fatalf("NewClient() error = %v", err)
 	}
+	client.restBackoffs = newRESTBackoffRegistry()
 
 	var issues []restIssue
 	if err := client.REST(context.Background(), http.MethodGet, "/repos/digitaldrywood/detent/issues?labels=detent%3Atodo", nil, &issues); err != nil {
@@ -1888,6 +1893,7 @@ func mustAtoi(t *testing.T, value string) int {
 func TestClientRESTBackoffAppliesAcrossClientsWithSharedToken(t *testing.T) {
 	t.Parallel()
 
+	token := StaticTokenSource(t.TempDir())
 	resetAt := time.Now().UTC().Add(time.Hour)
 	var calls atomic.Int64
 	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
@@ -1905,7 +1911,7 @@ func TestClientRESTBackoffAppliesAcrossClientsWithSharedToken(t *testing.T) {
 
 	clientA, err := NewClient(ClientConfig{
 		Endpoint:    server.URL,
-		TokenSource: StaticTokenSource("shared-rest-token"),
+		TokenSource: token,
 		HTTPClient:  server.Client(),
 	})
 	if err != nil {
@@ -1913,7 +1919,7 @@ func TestClientRESTBackoffAppliesAcrossClientsWithSharedToken(t *testing.T) {
 	}
 	clientB, err := NewClient(ClientConfig{
 		Endpoint:    server.URL,
-		TokenSource: StaticTokenSource("shared-rest-token"),
+		TokenSource: token,
 		HTTPClient:  server.Client(),
 	})
 	if err != nil {
@@ -1935,6 +1941,81 @@ func TestClientRESTBackoffAppliesAcrossClientsWithSharedToken(t *testing.T) {
 	usage := clientB.FlushRESTRateLimitUsage()
 	if !usage.BackoffUntil.After(time.Now()) {
 		t.Fatalf("clientB BackoffUntil = %v, want shared future deadline", usage.BackoffUntil)
+	}
+}
+
+func TestClientRESTBackoffLifetimeAcrossRecreatedClients(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name             string
+		endpoint         string
+		token            string
+		isolatedRegistry bool
+		wantBackoff      bool
+	}{
+		{name: "same identity retains backoff", wantBackoff: true},
+		{name: "private registry isolates repeated fixture", isolatedRegistry: true},
+		{name: "different endpoint isolates backoff", endpoint: "http://127.0.0.1:12346"},
+		{name: "different token isolates backoff", token: "other-token"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			registry := newRESTBackoffRegistry()
+			cfg := ClientConfig{
+				Endpoint:    "http://127.0.0.1:12345",
+				TokenSource: StaticTokenSource("test-token"),
+				HTTPClient: staticHTTPClient{do: func(r *http.Request) (*http.Response, error) {
+					return jsonResponse(r, http.StatusForbidden, `{"message":"API rate limit exceeded"}`, http.Header{
+						"Retry-After": []string{"120"},
+					}), nil
+				}},
+			}
+			first, err := NewClient(cfg)
+			if err != nil {
+				t.Fatalf("NewClient() first error = %v", err)
+			}
+			first.restBackoffs = registry
+			if err := first.REST(t.Context(), http.MethodGet, "/user", nil, nil); !errors.Is(err, ErrRateLimited) {
+				t.Fatalf("first REST() error = %v, want ErrRateLimited", err)
+			}
+
+			var calls atomic.Int64
+			cfg.HTTPClient = staticHTTPClient{do: func(r *http.Request) (*http.Response, error) {
+				calls.Add(1)
+				return jsonResponse(r, http.StatusOK, `{}`, nil), nil
+			}}
+			if tt.endpoint != "" {
+				cfg.Endpoint = tt.endpoint
+			}
+			if tt.token != "" {
+				cfg.TokenSource = StaticTokenSource(tt.token)
+			}
+			recreated, err := NewClient(cfg)
+			if err != nil {
+				t.Fatalf("NewClient() recreated error = %v", err)
+			}
+			recreated.restBackoffs = registry
+			if tt.isolatedRegistry {
+				recreated.restBackoffs = newRESTBackoffRegistry()
+			}
+			err = recreated.REST(t.Context(), http.MethodGet, "/user", nil, nil)
+			wantCalls := int64(1)
+			if tt.wantBackoff {
+				wantCalls = 0
+				var apiErr *StatusError
+				if !errors.Is(err, ErrRateLimited) || !errors.As(err, &apiErr) || apiErr.StatusCode != http.StatusTooManyRequests {
+					t.Fatalf("recreated REST() error = %v, want synthetic 429 backoff", err)
+				}
+			} else if err != nil {
+				t.Fatalf("recreated REST() error = %v", err)
+			}
+			if got := calls.Load(); got != wantCalls {
+				t.Fatalf("recreated HTTP calls = %d, want %d", got, wantCalls)
+			}
+		})
 	}
 }
 

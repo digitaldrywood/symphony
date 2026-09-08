@@ -25,6 +25,7 @@ type database struct {
 	schemaVersion      int64
 	hostedOrganization tracker.OrganizationID
 	hostedPlans        *HostedPlansConfig
+	hostedBilling      bool
 	now                func() time.Time
 	newLeaseID         func() string
 	closeOnce          sync.Once
@@ -74,6 +75,9 @@ func openDatabase(ctx context.Context, cfg Config) (*database, error) {
 		return nil, errors.Join(err, store.Close())
 	}
 	if err := store.configureHostedPlans(ctx, cfg.Hosted); err != nil {
+		return nil, errors.Join(err, store.Close())
+	}
+	if err := store.configureHostedBilling(ctx, cfg.Hosted); err != nil {
 		return nil, errors.Join(err, store.Close())
 	}
 	if err := store.health(ctx); err != nil {

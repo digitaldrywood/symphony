@@ -24,6 +24,7 @@ const (
 )
 
 type Service struct {
+	billing           *hostedBillingWorker
 	hostedMutationMu  sync.Mutex
 	hostedSessions    *auth.Service
 	echo              *echo.Echo
@@ -110,6 +111,7 @@ func Open(ctx context.Context, cfg Config) (*Service, error) {
 	if service.outbox != nil {
 		service.outbox.start(ctx)
 	}
+	service.startHostedBilling()
 	return service, nil
 }
 
@@ -231,6 +233,7 @@ func (s *Service) Shutdown(ctx context.Context) error {
 	if httpErr != nil {
 		httpErr = fmt.Errorf("shut down hub server: %w", httpErr)
 	}
+	s.stopHostedBilling()
 	return errors.Join(httpErr, s.stopGitHubWebhookMaintenance(), s.stopGitHubReconciliation())
 }
 
@@ -253,6 +256,7 @@ func (s *Service) Close() error {
 		}
 		webhookErr := s.stopGitHubWebhookMaintenance()
 		reconcileErr := s.stopGitHubReconciliation()
+		s.stopHostedBilling()
 		if s.outbox != nil {
 			s.outbox.stop()
 		}

@@ -34,6 +34,8 @@ templ HostedPage(data HostedPageData) {
 						@hostedOnboarding(data)
 					case "plan":
 						@hostedPlanUsage(data)
+					case "billing":
+						@hostedBilling(data)
 					case "organization":
 						@hostedOrganization(data)
 					case "project":
@@ -166,6 +168,9 @@ templ hostedOnboarding(data HostedPageData) {
 }
 
 templ hostedOrganization(data HostedPageData) {
+	if data.CanManageOwnership && data.SupportActor == "" {
+		<a href="/organization/billing" class="inline-flex min-h-11 items-center rounded-card border border-line px-4 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">Billing and subscriptions</a>
+	}
     if data.CanManage {
         <a href="/organization/plan" class="inline-flex min-h-11 items-center rounded-card border border-line px-4 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">Plan and usage</a>
     }
@@ -336,6 +341,7 @@ templ hostedPlanUsage(data HostedPageData) {
         <p class="text-sm text-sec">Expiry or downgrade preserves existing data. Reading, export, billing, and safe completion remain available. Repository permissions and runner safety limits still apply.</p>
         <a href="/organization" class="inline-flex min-h-11 items-center rounded-card border border-line px-4 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">Return to organization</a>
         if data.CanManageOwnership {
+            <a href="/organization/billing" class="inline-flex min-h-11 items-center rounded-card border border-line px-4 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">Manage billing</a>
             <a href="/api/cloud/billing" class="inline-flex min-h-11 items-center rounded-card border border-line px-4 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">Billing usage export</a>
         }
     </section>

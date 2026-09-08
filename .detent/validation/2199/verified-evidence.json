@@ -1,0 +1,191 @@
+{
+  "captured_at_utc": "2026-09-08T06:20:17.646865+00:00",
+  "elapsed_seconds": 14.299,
+  "go": "go version go1.26.6 darwin/arm64",
+  "hosted_costs": {
+    "backups": null,
+    "compute": null,
+    "database": null,
+    "event_retention": null,
+    "network": null,
+    "reason": "No hosted deployment, provider rates, utilization or support sample measured. Null is unmeasured, never zero.",
+    "relay": null,
+    "shared_baseline": null,
+    "support": null
+  },
+  "kind": "synthetic_local_protocol_evidence",
+  "known_readiness_gaps": [],
+  "measurements": [
+    "backoff scenario=\"primary reset\" wait_seconds=3600 sent=2 errors=1 suppressed=16",
+    "backoff scenario=\"secondary retry\" wait_seconds=120 sent=2 errors=1 suppressed=16",
+    "backoff scenario=\"secondary minimum\" wait_seconds=60 sent=2 errors=1 suppressed=16",
+    "github scenario=\"idle repository\" requests=map[reconcile.pull_request:1 reconcile.repository:1] issue_api=0 git_transport=outside_http_fixture",
+    "github scenario=\"full repair\" requests=map[reconcile.ci:2 reconcile.pull_request:3 reconcile.repository:1] issue_api=0 git_transport=outside_http_fixture",
+    "explicit_import comment_pages=2 issue_requests=2 steady_state_issue_requests=separate",
+    "pagination sent=500 next_request=blocked checkpoint=not_successful",
+    "github scenario=\"active repository\" requests=map[reconcile.pull_request:1 reconcile.repository:1] issue_api=0 git_transport=outside_http_fixture",
+    "artifact uploaded_bytes=65536 duplicate_append=1 retry_storage_requests=1 usage={\"window_start\":\"2026-09-08T06:00:00Z\",\"observed_at\":\"2026-09-08T06:20:11.71908Z\",\"relay_bytes\":196608,\"storage_requests\":8,\"retained_bytes\":67115,\"reserved_bytes\":0}",
+    "artifact uploaded_bytes=1024 duplicate_append=1 retry_storage_requests=1 usage={\"window_start\":\"2026-09-08T06:00:00Z\",\"observed_at\":\"2026-09-08T06:20:11.765635Z\",\"relay_bytes\":3072,\"storage_requests\":8,\"retained_bytes\":2599,\"reserved_bytes\":0}",
+    "workload {\"baseline_backup_bytes\":835584,\"elapsed_microseconds\":6157,\"final_backup_bytes\":835584,\"jobs\":0,\"rounds\":10,\"runners\":0,\"usage_delta\":{\"api_mutations\":0,\"http_duration_microseconds\":4100,\"http_requests\":10,\"http_response_bytes\":75730,\"ingested_events\":0},\"workload\":\"idle_baseline\"}",
+    "workload {\"baseline_backup_bytes\":835584,\"elapsed_microseconds\":17922,\"final_backup_bytes\":843776,\"jobs\":0,\"rounds\":10,\"runners\":1,\"usage_delta\":{\"api_mutations\":10,\"heartbeats\":10,\"http_duration_microseconds\":14651,\"http_requests\":30,\"http_response_bytes\":81369,\"ingested_events\":0},\"workload\":\"idle_one_runner\"}",
+    "workload {\"baseline_backup_bytes\":872448,\"elapsed_microseconds\":216451,\"final_backup_bytes\":872448,\"jobs\":0,\"rounds\":10,\"runners\":16,\"usage_delta\":{\"api_mutations\":160,\"heartbeats\":160,\"http_duration_microseconds\":185201,\"http_requests\":330,\"http_response_bytes\":165848,\"ingested_events\":0},\"workload\":\"idle_sixteen_runners\"}",
+    "workload {\"baseline_backup_bytes\":835584,\"elapsed_microseconds\":916789,\"final_backup_bytes\":2789376,\"jobs\":100,\"rounds\":10,\"runners\":1,\"usage_delta\":{\"api_mutations\":510,\"heartbeats\":10,\"http_duration_microseconds\":830931,\"http_requests\":630,\"http_response_bytes\":340865,\"ingested_events\":400},\"workload\":\"active_one_runner\"}",
+    "readiness independent_ci_http=200 human_approval_http=200 checks=success human_before_review=needs_evidence human_after_review=reviewed automatic=reviewed external=external_gate repositories=2 shared_runner=true",
+    "fleet runners=0 heartbeat_requests=0 candidate_reads=0 reconciliation_cycles=6 backend_calls=6 disabled_calls=0",
+    "fleet runners=1 heartbeat_requests=6 candidate_reads=6 reconciliation_cycles=6 backend_calls=6 disabled_calls=0",
+    "fleet runners=16 heartbeat_requests=96 candidate_reads=96 reconciliation_cycles=6 backend_calls=6 disabled_calls=0"
+  ],
+  "passed_tests_and_subtests": 416,
+  "platform": "Darwin/arm64",
+  "race": false,
+  "release_authorized": false,
+  "required_tests": 58,
+  "schema": 1,
+  "source_dirty": true,
+  "source_head": "44935b146c6250d975ee27cfa349e25e615791b5",
+  "suites": {
+    "artifact": [
+      "TestPilotArtifactTraffic",
+      "TestHTTPArtifactAccessWithoutRunners",
+      "TestHTTPUploadStorageOutage",
+      "TestRemoteHubAuthorizationFailsClosed",
+      "TestUploadRecoveryAndImmutableManifests",
+      "TestArtifactFailureStates",
+      "TestRestoredCatalogCannotResurrectDeletedArtifact",
+      "TestHostedTrafficAndAdmittedCompletion",
+      "TestHostedRelayQuotaAndRemoteLimits",
+      "TestHostedConcurrentReservationsAndDowngrade"
+    ],
+    "hubclient": [
+      "TestNativeSchedulerAndConnectorWithoutGitHub",
+      "TestNativeExecutionContextKeepsItsOriginalFence",
+      "TestNativeDelayedResponsesPreserveSuccessor",
+      "TestArtifactJournalReplay"
+    ],
+    "hubgithub": [
+      "TestPilotGitHubRequestBudgets",
+      "TestPilotGitHubImportBudget",
+      "TestPilotGitHubBackoffAndOperationBound",
+      "TestSharedTransportBackoffAndRequestCounts"
+    ],
+    "hubserver": [
+      "TestPilotIdleRunnerReconciliation",
+      "TestPilotHostedWorkloads",
+      "TestPilotHostedHistoryAfterRunnerLossAndRestart",
+      "TestPilotHostedArtifactGatewayWithoutRunners",
+      "TestPilotHostedTwoRepositoryReadiness",
+      "TestHostedIndependentChangeChecks",
+      "TestHostedRunnerChangeChecks",
+      "TestHostedWorkAccess",
+      "TestHostedChangePolicyJourney",
+      "TestHostedChangePolicyAuthorization",
+      "TestHostedBrowserFirstOrganization",
+      "TestHostedBrowserProviderAccountSelection",
+      "TestHostedLoginInvitationIntentAndReplay",
+      "TestHostedOnboardingFirstRun",
+      "TestNativeRecoveryAfterReassignmentAndRestart",
+      "TestNativeCheckpointValidation",
+      "TestProjectPolicyIsolationAndRestart",
+      "TestRunnerRoutingClaims",
+      "TestRunnerSharedHostConcurrentClaimsAndRestart",
+      "TestRunnerRoutingRevocationAndDrain",
+      "TestGitHubImportCheckpointCutoverAndNativeIsolation",
+      "TestChangeApprovalPreservesProtectedMerge",
+      "TestChangeInvalidVersionAndReviewPolicy",
+      "TestChangeCIRejectsForgedAndReplayedResults",
+      "TestHostedSecurityRoleProjectMatrix",
+      "TestHostedSecurityReplayAndCursorRevocation",
+      "TestHostedSecurityRoleRevocationAppliesImmediately",
+      "TestHostedArtifactReadPermissions",
+      "TestHostedArtifactGrantRevocation",
+      "TestHostedConcurrentClaimsDowngradeRelease",
+      "TestHostedMutationQuotaRollbackAndRetry",
+      "TestHostedPlanResolutionBoundaries",
+      "TestHostedProjectRetryAfterDowngrade",
+      "TestHostedPlanConfigurationAndTelemetry",
+      "TestHostedPlansDisabledWithoutNetwork",
+      "TestHostedMetadataExcludesCustomerContent",
+      "TestHostedSecurityLogsExcludeCustomerContent",
+      "TestRecoveryPreservesCollaborationAndFencesAuthority",
+      "TestRecoveryRejectsUnsafeSourcesAndDestinations",
+      "TestSelfHostedRunnerVersionCompatibility"
+    ]
+  },
+  "test_sha256": {
+    "internal/artifact/pilot_test.go": "ce48daf49edf1c907b8e4b1062a6021a8b699bd0e0585fbe9d104ebb9229b415",
+    "internal/hubgithub/pilot_test.go": "eda9e6a062d9b1e2780cd0896bbee7ed0a97fe71f224bd8c2882258595d9d6d3",
+    "internal/hubserver/pilot_artifacts_test.go": "62625c339ccbe69dc34433b9140670395c7c17ad966f2506cf6aa16409d15af5",
+    "internal/hubserver/pilot_journey_test.go": "68187ab525ac0191d2baed93680f6e4c8a1adc6ec50115d9fa73025f00469502",
+    "internal/hubserver/pilot_review_test.go": "d7d7f113c0b1412d6e467adee15698aa41eec93e33888c7b541c32788ad200f4",
+    "internal/hubserver/pilot_test.go": "902a2c2343fb8306e608907789b612046f5184ae1e1b67fd590b3495a724c788"
+  },
+  "workloads": [
+    {
+      "baseline_backup_bytes": 835584,
+      "elapsed_microseconds": 6157,
+      "final_backup_bytes": 835584,
+      "jobs": 0,
+      "rounds": 10,
+      "runners": 0,
+      "usage_delta": {
+        "api_mutations": 0,
+        "http_duration_microseconds": 4100,
+        "http_requests": 10,
+        "http_response_bytes": 75730,
+        "ingested_events": 0
+      },
+      "workload": "idle_baseline"
+    },
+    {
+      "baseline_backup_bytes": 835584,
+      "elapsed_microseconds": 17922,
+      "final_backup_bytes": 843776,
+      "jobs": 0,
+      "rounds": 10,
+      "runners": 1,
+      "usage_delta": {
+        "api_mutations": 10,
+        "heartbeats": 10,
+        "http_duration_microseconds": 14651,
+        "http_requests": 30,
+        "http_response_bytes": 81369,
+        "ingested_events": 0
+      },
+      "workload": "idle_one_runner"
+    },
+    {
+      "baseline_backup_bytes": 872448,
+      "elapsed_microseconds": 216451,
+      "final_backup_bytes": 872448,
+      "jobs": 0,
+      "rounds": 10,
+      "runners": 16,
+      "usage_delta": {
+        "api_mutations": 160,
+        "heartbeats": 160,
+        "http_duration_microseconds": 185201,
+        "http_requests": 330,
+        "http_response_bytes": 165848,
+        "ingested_events": 0
+      },
+      "workload": "idle_sixteen_runners"
+    },
+    {
+      "baseline_backup_bytes": 835584,
+      "elapsed_microseconds": 916789,
+      "final_backup_bytes": 2789376,
+      "jobs": 100,
+      "rounds": 10,
+      "runners": 1,
+      "usage_delta": {
+        "api_mutations": 510,
+        "heartbeats": 10,
+        "http_duration_microseconds": 830931,
+        "http_requests": 630,
+        "http_response_bytes": 340865,
+        "ingested_events": 400
+      },
+      "workload": "active_one_runner"
+    }
+  ]
+}

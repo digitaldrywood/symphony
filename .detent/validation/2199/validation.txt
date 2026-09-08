@@ -1,0 +1,28 @@
+Issue: digitaldrywood/detent#2199
+Scope: synthetic pilot evidence; complete hosted pilot gate remains incomplete.
+Toolchain: Go 1.26.6 darwin/arm64
+
+PYTHONDONTWRITEBYTECODE=1 python3 scripts/pilot_evidence_test.py
+PASS: complete, missing, failed, skipped-parent and skipped-child outcomes.
+
+python3 scripts/pilot-evidence.py --output <new-path>
+PASS: 50 required tests, 252 tests and subtests.
+
+python3 scripts/pilot-evidence.py --race --output <new-path>
+PASS: 50 required tests, 252 tests and subtests.
+
+GOTOOLCHAIN=go1.26.6 make check CHECK_LOCK_WAIT=60m
+PASS: build/generated checks, lint, vet, NilAway, full race suite,
+79.3% aggregate coverage (70% required), configured package/file floors.
+
+python3 scripts/hub-smoke.py tmp/detent
+PASS: isolated installation, restart, backup, restore and credential fencing.
+
+Chrome DevTools: 390x844, DPR 1; mocked provider sign-in, project policy,
+runner identity/tags, actual native issue creation and usage. No overflow.
+Preview stopped through its own endpoint and test exited successfully.
+Issue and Change URLs display JSON; full hosted browser journey awaits #2290.
+Hosted owner Change review-policy approval returns 404; tracked by #2291.
+
+No deployment, customer invitations, live identity/billing configuration,
+DNS changes, charging or live Detent process changes performed.

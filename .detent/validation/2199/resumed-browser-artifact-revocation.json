@@ -1,0 +1,8 @@
+{
+  "grant_status": 200,
+  "download_before": 200,
+  "revoke_status": 200,
+  "download_after": 403,
+  "only_bearer_sent": true,
+  "captured_at_utc": "2026-09-08T04:35:40.453Z"
+}

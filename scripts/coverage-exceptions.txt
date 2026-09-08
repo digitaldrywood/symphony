@@ -15,6 +15,10 @@ github.com/digitaldrywood/detent/internal/orchestrator/ranking.go 90 # Safety-cr
 github.com/digitaldrywood/detent/internal/orchestrator/required_gate.go 90
 github.com/digitaldrywood/detent/internal/orchestrator/snapshot.go 90
 github.com/digitaldrywood/detent/internal/orchestrator/spend_progress.go 90 # Safety-critical spend progress brake.
+github.com/digitaldrywood/detent/internal/runner/session_brake.go 90
+github.com/digitaldrywood/detent/internal/runner/session_progress.go 90
+github.com/digitaldrywood/detent/internal/store/session_progress.go 90
+github.com/digitaldrywood/detent/internal/workspace/local_progress.go 90
 github.com/digitaldrywood/detent/internal/scheduler/global_gate.go 90 # Safety-critical fleet-wide dispatch gate.
 github.com/digitaldrywood/detent/internal/scheduler/pool_registry.go 90 # Safety-critical agent-pool dispatch control.
 github.com/digitaldrywood/detent/internal/tracker/normalize.go 90

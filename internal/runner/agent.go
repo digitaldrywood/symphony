@@ -1736,6 +1736,7 @@ func (r *Runner) run(ctx context.Context, req RunRequest) (RunResult, error) {
 		r.progressTicker,
 		r.logger,
 		req.Issue,
+		r.sessionProgressJournal(sessionID, resumeState.DetentSessionID),
 	)
 	defer sessionBrake.Stop()
 	req.sessionBrake = sessionBrake
@@ -2921,6 +2922,7 @@ func (r *Runner) Validate(ctx context.Context, req ValidatorRequest) (gate.Valid
 		r.progressTicker,
 		r.logger,
 		req.Issue,
+		r.sessionProgressJournal(sessionID, 0),
 	)
 	defer sessionBrake.Stop()
 	runReq.sessionBrake = sessionBrake
@@ -3998,8 +4000,10 @@ func effectiveModel(values ...string) string {
 
 func workspaceIssue(projectID string, issue connector.Issue) workspace.Issue {
 	baseRef := ""
+	progressBaseRef := ""
 	if issue.PullRequest != nil {
 		baseRef = strings.TrimSpace(issue.PullRequest.BaseSHA)
+		progressBaseRef = strings.TrimSpace(issue.PullRequest.BaseRef)
 	}
 	return workspace.Issue{
 		ProjectID:          projectID,
@@ -4007,6 +4011,7 @@ func workspaceIssue(projectID string, issue connector.Issue) workspace.Issue {
 		Identifier:         issue.Identifier,
 		BranchName:         issue.BranchName,
 		BaseRef:            baseRef,
+		ProgressBaseRef:    progressBaseRef,
 		PullRequestHeadSHA: pullRequestHeadSHA(issue.PullRequest),
 	}
 }

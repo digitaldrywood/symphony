@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/digitaldrywood/detent/internal/connector"
+	"github.com/digitaldrywood/detent/internal/store"
 	"github.com/digitaldrywood/detent/internal/workspace"
 )
 
@@ -119,6 +120,7 @@ func newSessionProgressTicker(interval time.Duration) sessionProgressTicker {
 }
 
 type sessionProgressSnapshot struct {
+	LocalProgress        *workspace.LocalProgress
 	DiffStats            DiffStats
 	HeadSHA              string
 	WorkspaceFingerprint string
@@ -164,6 +166,8 @@ type sessionBrakeController struct {
 	issue               connector.Issue
 	watchCancel         context.CancelFunc
 	watchDone           chan struct{}
+	journal             *sessionProgressJournal
+	observation         *store.SessionProgress
 }
 
 func newSessionBrakeController(
@@ -178,6 +182,7 @@ func newSessionBrakeController(
 	tickerFactory sessionProgressTickerFactory,
 	logger *slog.Logger,
 	issue connector.Issue,
+	journals ...*sessionProgressJournal,
 ) *sessionBrakeController {
 	if sessionDuration <= 0 && maxTurns <= 0 && noProgressTimeout <= 0 {
 		return nil
@@ -203,6 +208,9 @@ func newSessionBrakeController(
 		logger:            logger,
 		issue:             issue,
 	}
+	if len(journals) > 0 {
+		controller.journal = journals[0]
+	}
 	if noProgressTimeout <= 0 || probe == nil {
 		return controller
 	}
@@ -212,6 +220,9 @@ func newSessionBrakeController(
 	} else {
 		controller.initial = snapshot
 		controller.current = snapshot
+		if err := controller.observeSnapshotLocked(ctx, snapshot, startedAt); err != nil {
+			controller.logProbeFailure(err)
+		}
 	}
 	watchCtx, watchCancel := context.WithCancel(ctx)
 	controller.watchCancel = watchCancel
@@ -238,7 +249,6 @@ func (c *sessionBrakeController) checkProgress(ctx context.Context, at time.Time
 	snapshot, err := c.probe(ctx)
 	if err != nil {
 		c.logProbeFailure(err)
-		return
 	}
 	if at.IsZero() {
 		at = c.now()
@@ -250,14 +260,12 @@ func (c *sessionBrakeController) checkProgress(ctx context.Context, at time.Time
 		c.mu.Unlock()
 		return
 	}
-	if snapshot.fingerprint() != c.current.fingerprint() {
+	if err == nil {
 		c.current = snapshot
-		c.lastProgressAt = at
-		c.workProductProgress = true
-		c.mu.Unlock()
-		return
+		if err := c.observeSnapshotLocked(ctx, snapshot, at); err != nil {
+			c.logProbeFailure(err)
+		}
 	}
-	c.current = snapshot
 	if at.Sub(c.lastProgressAt) < c.noProgressTimeout {
 		c.mu.Unlock()
 		return
@@ -312,9 +320,8 @@ func (c *sessionBrakeController) refreshSnapshot(ctx context.Context) {
 		return
 	}
 	c.mu.Lock()
-	if snapshot.fingerprint() != c.current.fingerprint() {
-		c.workProductProgress = true
-		c.lastProgressAt = c.now().UTC()
+	if err := c.observeSnapshotLocked(ctx, snapshot, c.now().UTC()); err != nil {
+		c.logProbeFailure(err)
 	}
 	c.current = snapshot
 	c.mu.Unlock()
@@ -493,6 +500,14 @@ func (r *Runner) sessionProgressSnapshot(
 		}
 	}
 	var externalErr error
+	if provider, ok := backend.(workspace.LocalProgressProvider); ok {
+		local, err := provider.LocalProgress(ctx, info, issue)
+		if err != nil {
+			workspaceErr = errors.Join(workspaceErr, err)
+		} else {
+			snapshot.LocalProgress = &local
+		}
+	}
 	if external != nil {
 		snapshot.WorkpadFingerprint, externalErr = external(ctx)
 		snapshot.WorkpadFingerprint = strings.TrimSpace(snapshot.WorkpadFingerprint)

@@ -202,6 +202,7 @@ type Issue struct {
 	Identifier         string
 	BranchName         string
 	BaseRef            string
+	ProgressBaseRef    string
 	PullRequestHeadSHA string
 }
 

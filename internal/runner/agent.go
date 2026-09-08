@@ -695,11 +695,12 @@ func (r *Runner) prepareMergeFastPath(
 
 func mergePrecheckFromWorkspace(precheck workspace.MergePrepareResult) MergePrecheck {
 	return MergePrecheck{
-		Status:      string(precheck.Status),
-		Message:     precheck.Message,
-		DiffStats:   diffStatsFromWorkspace(precheck.DiffStat),
-		HeadChanged: precheck.HeadChanged,
-		HeadSHA:     precheck.HeadSHA,
+		ConflictPaths: append([]string(nil), precheck.ConflictPaths...),
+		Status:        string(precheck.Status),
+		Message:       precheck.Message,
+		DiffStats:     diffStatsFromWorkspace(precheck.DiffStat),
+		HeadChanged:   precheck.HeadChanged,
+		HeadSHA:       precheck.HeadSHA,
 	}
 }
 
@@ -766,6 +767,7 @@ func cloneMergePrecheck(precheck *MergePrecheck) *MergePrecheck {
 		return nil
 	}
 	cloned := *precheck
+	cloned.ConflictPaths = append([]string(nil), precheck.ConflictPaths...)
 	return &cloned
 }
 
@@ -4115,6 +4117,7 @@ type agentRunProgress struct {
 	output                    *runtimeoutput.Buffer
 	lastEventAt               time.Time
 	lastEvent                 string
+	lastCommand               string
 	lastMessage               string
 	lastMessageTruncation     *runtimeoutput.Truncation
 	recentEvents              []telemetry.ActivityEvent
@@ -4227,6 +4230,9 @@ func (p *agentRunProgress) apply(update AgentUpdate, eventAt time.Time) {
 	case AgentUpdateRuntimeIdentity:
 		eventMessage = "agent route selected"
 	case AgentUpdateToolStarted:
+		if command := strings.TrimSpace(update.Command); command != "" {
+			p.lastCommand = runtimeoutput.Truncate(command, 2048).Value
+		}
 		p.recordDeliverableToolStart(update)
 	case AgentUpdateToolOutput:
 		p.recordDeliverableToolOutput(update)
@@ -4899,6 +4905,7 @@ func (r *Runner) publishRunUpdate(
 		TurnCount:             progress.turnCount(),
 		LastEventAt:           progress.lastEventAt,
 		LastEvent:             progress.lastEvent,
+		LastCommand:           progress.lastCommand,
 		LastMessage:           progress.lastMessage,
 		LastMessageTruncation: runtimeoutput.CloneTruncation(progress.lastMessageTruncation),
 		RecentEvents:          progress.recentActivity(),

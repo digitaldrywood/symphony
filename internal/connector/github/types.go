@@ -194,6 +194,9 @@ type pullRequestReview struct {
 }
 
 type pullRequestReviewThread struct {
+	Comments nodeConnection[struct {
+		Body string `json:"body"`
+	}] `json:"comments"`
 	IsResolved   bool   `json:"isResolved"`
 	IsOutdated   bool   `json:"isOutdated"`
 	Path         string `json:"path"`
@@ -318,16 +321,17 @@ type restCheckRuns struct {
 }
 
 type restCheckRun struct {
-	ID          int64          `json:"id"`
-	Status      string         `json:"status"`
-	Conclusion  string         `json:"conclusion"`
-	Name        string         `json:"name"`
-	DetailsURL  string         `json:"details_url"`
-	HTMLURL     string         `json:"html_url"`
-	Output      checkRunOutput `json:"output"`
-	CreatedAt   *time.Time     `json:"created_at"`
-	StartedAt   *time.Time     `json:"started_at"`
-	CompletedAt *time.Time     `json:"completed_at"`
+	FailureDetail string         `json:"-"`
+	ID            int64          `json:"id"`
+	Status        string         `json:"status"`
+	Conclusion    string         `json:"conclusion"`
+	Name          string         `json:"name"`
+	DetailsURL    string         `json:"details_url"`
+	HTMLURL       string         `json:"html_url"`
+	Output        checkRunOutput `json:"output"`
+	CreatedAt     *time.Time     `json:"created_at"`
+	StartedAt     *time.Time     `json:"started_at"`
+	CompletedAt   *time.Time     `json:"completed_at"`
 }
 
 type checkRunOutput struct {

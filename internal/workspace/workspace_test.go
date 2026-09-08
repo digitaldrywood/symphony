@@ -956,6 +956,9 @@ func TestLocalGitPrepareMergeAbortsConflictingRebase(t *testing.T) {
 	if result.Status != MergePrepareStatusConflict {
 		t.Fatalf("PrepareMerge() status = %q, want conflict", result.Status)
 	}
+	if len(result.ConflictPaths) != 1 || result.ConflictPaths[0] != "README.md" {
+		t.Fatalf("conflict paths = %v, want README.md", result.ConflictPaths)
+	}
 	if got := strings.TrimSpace(runGit(t, info.Path, "status", "--short")); got != "" {
 		t.Fatalf("status after aborted rebase = %q, want clean", got)
 	}

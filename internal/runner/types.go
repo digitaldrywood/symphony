@@ -619,11 +619,12 @@ type SessionProgressProbe func(context.Context) (string, error)
 type ModelPermitAcquirer func(context.Context) error
 
 type MergePrecheck struct {
-	HeadSHA     string
-	Status      string
-	Message     string
-	DiffStats   DiffStats
-	HeadChanged bool
+	ConflictPaths []string
+	HeadSHA       string
+	Status        string
+	Message       string
+	DiffStats     DiffStats
+	HeadChanged   bool
 }
 
 type RoutineRequest struct {
@@ -774,6 +775,7 @@ type AgentActivityUpdate struct {
 }
 
 type UsageUpdate struct {
+	LastCommand           string
 	DetentSessionID       int64
 	SessionID             string
 	ProcessIdentity       string

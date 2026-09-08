@@ -31,11 +31,11 @@ func TestWorkerProgressCheckpointPersistence(t *testing.T) {
 			base := store.WorkAttemptHeartbeat{AttemptID: running.WorkAttemptID, HeartbeatAt: now, LeaseExpiresAt: now.Add(time.Minute)}
 			progress := newWorkerProgress(running, base, attempts, 4096)
 			running.progress = progress
-			update := runpkg.UsageUpdate{SessionID: "session", LastMessage: "tests running", DispatchLoopStart: &runpkg.DispatchLoopStartSnapshot{WorkspaceDiffAvailable: true}}
+			update := runpkg.UsageUpdate{LastCommand: "go test ./...", SessionID: "session", LastMessage: "tests running", DispatchLoopStart: &runpkg.DispatchLoopStartSnapshot{WorkspaceDiffAvailable: true}}
 			if err := progress.observe(t.Context(), update); !errors.Is(err, tt.err) {
 				t.Fatalf("observe() = %v, want %v", err, tt.err)
 			}
-			if got := running.withProgress(); got.DispatchLoopStart.Persisted != (tt.err == nil) || got.LastMessage != update.LastMessage {
+			if got := running.withProgress(); got.DispatchLoopStart.Persisted != (tt.err == nil) || got.LastMessage != update.LastMessage || got.LastCommand != update.LastCommand {
 				t.Fatalf("progress = %#v", got)
 			}
 			if got := progress.persisted.Load(); (got != nil) != (tt.err == nil) {

@@ -151,11 +151,12 @@ type MergePrepareOptions struct {
 }
 
 type MergePrepareResult struct {
-	HeadSHA     string
-	Status      MergePrepareStatus
-	DiffStat    DiffStat
-	Message     string
-	HeadChanged bool
+	ConflictPaths []string
+	HeadSHA       string
+	Status        MergePrepareStatus
+	DiffStat      DiffStat
+	Message       string
+	HeadChanged   bool
 }
 
 type MergePrepareStatus string

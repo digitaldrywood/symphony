@@ -247,6 +247,8 @@
 #         # tracker.issues[].pull_request.checks | type: list<object> | default: [] | required: No | validation: None
 #         checks:
 #           -
+#             # tracker.issues[].pull_request.checks[].failure_detail | type: string | default: none | required: No | validation: None
+#             failure_detail: null
 #             # tracker.issues[].pull_request.checks[].id | type: integer | default: 0 when configured | required: No | validation: None
 #             id: 0
 #             # tracker.issues[].pull_request.checks[].workflow_run_id | type: integer | default: 0 when configured | required: No | validation: None
@@ -274,6 +276,8 @@
 #         # tracker.issues[].pull_request.slow_checks | type: list<object> | default: [] | required: No | validation: None
 #         slow_checks:
 #           -
+#             # tracker.issues[].pull_request.slow_checks[].failure_detail | type: string | default: none | required: No | validation: None
+#             failure_detail: null
 #             # tracker.issues[].pull_request.slow_checks[].id | type: integer | default: 0 when configured | required: No | validation: None
 #             id: 0
 #             # tracker.issues[].pull_request.slow_checks[].workflow_run_id | type: integer | default: 0 when configured | required: No | validation: None
@@ -297,6 +301,8 @@
 #         # tracker.issues[].pull_request.unstarted_checks | type: list<object> | default: [] | required: No | validation: None
 #         unstarted_checks:
 #           -
+#             # tracker.issues[].pull_request.unstarted_checks[].failure_detail | type: string | default: none | required: No | validation: None
+#             failure_detail: null
 #             # tracker.issues[].pull_request.unstarted_checks[].id | type: integer | default: 0 when configured | required: No | validation: None
 #             id: 0
 #             # tracker.issues[].pull_request.unstarted_checks[].workflow_run_id | type: integer | default: 0 when configured | required: No | validation: None
@@ -316,6 +322,8 @@
 #         # tracker.issues[].pull_request.stale_successful_checks | type: list<object> | default: [] | required: No | validation: None
 #         stale_successful_checks:
 #           -
+#             # tracker.issues[].pull_request.stale_successful_checks[].failure_detail | type: string | default: none | required: No | validation: None
+#             failure_detail: null
 #             # tracker.issues[].pull_request.stale_successful_checks[].id | type: integer | default: 0 when configured | required: No | validation: None
 #             id: 0
 #             # tracker.issues[].pull_request.stale_successful_checks[].workflow_run_id | type: integer | default: 0 when configured | required: No | validation: None
@@ -335,6 +343,8 @@
 #         # tracker.issues[].pull_request.required_check_failures | type: list<object> | default: [] | required: No | validation: None
 #         required_check_failures:
 #           -
+#             # tracker.issues[].pull_request.required_check_failures[].failure_detail | type: string | default: none | required: No | validation: None
+#             failure_detail: null
 #             # tracker.issues[].pull_request.required_check_failures[].id | type: integer | default: 0 when configured | required: No | validation: None
 #             id: 0
 #             # tracker.issues[].pull_request.required_check_failures[].workflow_run_id | type: integer | default: 0 when configured | required: No | validation: None
@@ -354,6 +364,8 @@
 #         # tracker.issues[].pull_request.transient_failed_checks | type: list<object> | default: [] | required: No | validation: None
 #         transient_failed_checks:
 #           -
+#             # tracker.issues[].pull_request.transient_failed_checks[].failure_detail | type: string | default: none | required: No | validation: None
+#             failure_detail: null
 #             # tracker.issues[].pull_request.transient_failed_checks[].id | type: integer | default: 0 when configured | required: No | validation: None
 #             id: 0
 #             # tracker.issues[].pull_request.transient_failed_checks[].workflow_run_id | type: integer | default: 0 when configured | required: No | validation: None
@@ -373,6 +385,8 @@
 #         # tracker.issues[].pull_request.unresolved_review_threads | type: list<object> | default: [] | required: No | validation: None
 #         unresolved_review_threads:
 #           -
+#             # tracker.issues[].pull_request.unresolved_review_threads[].body | type: string | default: none | required: No | validation: None
+#             body: null
 #             # tracker.issues[].pull_request.unresolved_review_threads[].path | type: string | default: none | required: No | validation: None
 #             path: null
 #             # tracker.issues[].pull_request.unresolved_review_threads[].line | type: integer | default: 0 when configured | required: No | validation: None

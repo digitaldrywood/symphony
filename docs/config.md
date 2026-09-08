@@ -1328,6 +1328,7 @@ only to resettable budget pacing and never clears a per-issue hard hold.
 | `tracker.issues[].pull_request.checks[].conclusion` | `string` | `none` | No | None |
 | `tracker.issues[].pull_request.checks[].details_url` | `string` | `none` | No | None |
 | `tracker.issues[].pull_request.checks[].duration_seconds` | `integer` | `0 when configured` | No | None |
+| `tracker.issues[].pull_request.checks[].failure_detail` | `string` | `none` | No | None |
 | `tracker.issues[].pull_request.checks[].id` | `integer` | `0 when configured` | No | None |
 | `tracker.issues[].pull_request.checks[].name` | `string` | `none` | No | None |
 | `tracker.issues[].pull_request.checks[].queue_seconds` | `integer` | `0 when configured` | No | None |
@@ -1371,6 +1372,7 @@ only to resettable budget pacing and never clears a per-issue hard hold.
 | `tracker.issues[].pull_request.required_check_failures[].conclusion` | `string` | `none` | No | None |
 | `tracker.issues[].pull_request.required_check_failures[].details_url` | `string` | `none` | No | None |
 | `tracker.issues[].pull_request.required_check_failures[].duration_seconds` | `integer` | `0 when configured` | No | None |
+| `tracker.issues[].pull_request.required_check_failures[].failure_detail` | `string` | `none` | No | None |
 | `tracker.issues[].pull_request.required_check_failures[].id` | `integer` | `0 when configured` | No | None |
 | `tracker.issues[].pull_request.required_check_failures[].name` | `string` | `none` | No | None |
 | `tracker.issues[].pull_request.required_check_failures[].queue_seconds` | `integer` | `0 when configured` | No | None |
@@ -1381,6 +1383,7 @@ only to resettable budget pacing and never clears a per-issue hard hold.
 | `tracker.issues[].pull_request.slow_checks[].conclusion` | `string` | `none` | No | None |
 | `tracker.issues[].pull_request.slow_checks[].details_url` | `string` | `none` | No | None |
 | `tracker.issues[].pull_request.slow_checks[].duration_seconds` | `integer` | `0 when configured` | No | None |
+| `tracker.issues[].pull_request.slow_checks[].failure_detail` | `string` | `none` | No | None |
 | `tracker.issues[].pull_request.slow_checks[].id` | `integer` | `0 when configured` | No | None |
 | `tracker.issues[].pull_request.slow_checks[].name` | `string` | `none` | No | None |
 | `tracker.issues[].pull_request.slow_checks[].queue_seconds` | `integer` | `0 when configured` | No | None |
@@ -1390,6 +1393,7 @@ only to resettable budget pacing and never clears a per-issue hard hold.
 | `tracker.issues[].pull_request.stale_successful_checks[].conclusion` | `string` | `none` | No | None |
 | `tracker.issues[].pull_request.stale_successful_checks[].details_url` | `string` | `none` | No | None |
 | `tracker.issues[].pull_request.stale_successful_checks[].duration_seconds` | `integer` | `0 when configured` | No | None |
+| `tracker.issues[].pull_request.stale_successful_checks[].failure_detail` | `string` | `none` | No | None |
 | `tracker.issues[].pull_request.stale_successful_checks[].id` | `integer` | `0 when configured` | No | None |
 | `tracker.issues[].pull_request.stale_successful_checks[].name` | `string` | `none` | No | None |
 | `tracker.issues[].pull_request.stale_successful_checks[].queue_seconds` | `integer` | `0 when configured` | No | None |
@@ -1401,12 +1405,14 @@ only to resettable budget pacing and never clears a per-issue hard hold.
 | `tracker.issues[].pull_request.transient_failed_checks[].conclusion` | `string` | `none` | No | None |
 | `tracker.issues[].pull_request.transient_failed_checks[].details_url` | `string` | `none` | No | None |
 | `tracker.issues[].pull_request.transient_failed_checks[].duration_seconds` | `integer` | `0 when configured` | No | None |
+| `tracker.issues[].pull_request.transient_failed_checks[].failure_detail` | `string` | `none` | No | None |
 | `tracker.issues[].pull_request.transient_failed_checks[].id` | `integer` | `0 when configured` | No | None |
 | `tracker.issues[].pull_request.transient_failed_checks[].name` | `string` | `none` | No | None |
 | `tracker.issues[].pull_request.transient_failed_checks[].queue_seconds` | `integer` | `0 when configured` | No | None |
 | `tracker.issues[].pull_request.transient_failed_checks[].status` | `string` | `none` | No | None |
 | `tracker.issues[].pull_request.transient_failed_checks[].workflow_run_id` | `integer` | `0 when configured` | No | None |
 | `tracker.issues[].pull_request.unresolved_review_threads` | `list<object>` | `[]` | No | None |
+| `tracker.issues[].pull_request.unresolved_review_threads[].body` | `string` | `none` | No | None |
 | `tracker.issues[].pull_request.unresolved_review_threads[].line` | `integer` | `0 when configured` | No | None |
 | `tracker.issues[].pull_request.unresolved_review_threads[].path` | `string` | `none` | No | None |
 | `tracker.issues[].pull_request.unstarted_check_count` | `integer` | `0 when configured` | No | None |
@@ -1414,6 +1420,7 @@ only to resettable budget pacing and never clears a per-issue hard hold.
 | `tracker.issues[].pull_request.unstarted_checks[].conclusion` | `string` | `none` | No | None |
 | `tracker.issues[].pull_request.unstarted_checks[].details_url` | `string` | `none` | No | None |
 | `tracker.issues[].pull_request.unstarted_checks[].duration_seconds` | `integer` | `0 when configured` | No | None |
+| `tracker.issues[].pull_request.unstarted_checks[].failure_detail` | `string` | `none` | No | None |
 | `tracker.issues[].pull_request.unstarted_checks[].id` | `integer` | `0 when configured` | No | None |
 | `tracker.issues[].pull_request.unstarted_checks[].name` | `string` | `none` | No | None |
 | `tracker.issues[].pull_request.unstarted_checks[].queue_seconds` | `integer` | `0 when configured` | No | None |

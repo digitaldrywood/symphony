@@ -137,7 +137,7 @@ func TestCommandSpecWithArgsQuotesForConfiguredShell(t *testing.T) {
 			name:     "windows cmd",
 			goos:     "windows",
 			wantName: "cmd",
-			wantArgs: []string{"/C", `claude "-p" "--model" "fable" "Bash(git *)" "quoted'value" "percent%%value"`},
+			wantArgs: []string{"/C", `claude ^"-p^" ^"--model^" ^"fable^" ^"Bash^(git^ ^*^)^" ^"quoted'value^" ^"percent^%value^"`},
 		},
 		{
 			name:     "windows powershell",
@@ -176,5 +176,31 @@ func TestCommandBuildsExecCommand(t *testing.T) {
 	cmd := CommandForOS(context.Background(), "echo ok", "bash", "linux")
 	if !reflect.DeepEqual(cmd.Args, []string{"bash", "-c", "echo ok"}) {
 		t.Fatalf("Args = %#v, want bash -c command", cmd.Args)
+	}
+}
+
+func TestQuoteCmdArg(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name string
+		arg  string
+		want string
+	}{
+		{name: "empty", want: `^"^"`},
+		{name: "spaces", arg: `path with spaces`, want: `^"path^ with^ spaces^"`},
+		{name: "embedded quote", arg: `say "hello"`, want: `^"say^ \^"hello\^"^"`},
+		{name: "percent", arg: `%PATH%`, want: `^"^%PATH^%^"`},
+		{name: "trailing backslash", arg: `C:\path with spaces\`, want: `^"C:\path^ with^ spaces\\^"`},
+		{name: "backslash before quote", arg: `a\"b`, want: `^"a\\\^"b^"`},
+		{name: "shell syntax", arg: `a&b|c<d>e(f)^!`, want: `^"a^&b^|c^<d^>e^(f^)^^^!^"`},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			if got := quoteCmdArg(tt.arg); got != tt.want {
+				t.Fatalf("quoteCmdArg(%q) = %q, want %q", tt.arg, got, tt.want)
+			}
+		})
 	}
 }

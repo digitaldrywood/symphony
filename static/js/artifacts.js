@@ -27,8 +27,12 @@
     output.textContent = ''; objects.replaceChildren(); status.textContent = 'Checking access…';
     try {
       const body = new FormData(form);
-      body.set('member_token', form.closest('[data-artifact-viewer]').querySelector('[name="artifact_member_token"]').value);
-      const response = await fetch(form.action, {method: 'POST', body, credentials: 'same-origin', cache: 'no-store', redirect: 'error'});
+      const options = {method: 'POST', body, credentials: 'same-origin', cache: 'no-store', redirect: 'error'};
+      if (form.dataset.hostedCsrf) {
+        options.headers = {'Content-Type': 'application/json', 'X-CSRF-Token': form.dataset.hostedCsrf};
+        options.body = JSON.stringify({revision: Number(body.get('revision'))});
+      } else body.set('member_token', form.closest('[data-artifact-viewer]').querySelector('[name="artifact_member_token"]').value);
+      const response = await fetch(form.action, options);
       if (!response.ok) throw new Error('Artifact is inaccessible or your project permission was revoked.');
       const grant = await response.json();
       const base = `${grant.origin}/v1/artifacts/${grant.artifact_id}/manifests/${grant.revision}`;

@@ -132,6 +132,7 @@ func (o *Orchestrator) dispatchReadyIssues(ctx context.Context, state *State, is
 	if state.Draining || o.dispatchQuiesced() {
 		return
 	}
+	rankingIssues := issues
 	issues = o.filterImplementDependencyDeferrals(ctx, issues)
 	o.enforceLifetimeLimits(ctx, state, issues, now)
 	o.observePullRequestHydrationRecovery(state, issues, now)
@@ -142,6 +143,7 @@ func (o *Orchestrator) dispatchReadyIssues(ctx context.Context, state *State, is
 	outcomes := make(map[string]dispatchIssueOutcome, len(issues))
 	selections := make(map[string]dispatchPlanDecision, len(issues))
 	planner.plan(state, issues, now, dispatchPlanHooks{
+		rankingIssues: rankingIssues,
 		hydrate: func(issue connector.Issue) (connector.Issue, bool) {
 			return o.hydrateDispatchIssue(ctx, state, issue, now)
 		},

@@ -22,9 +22,10 @@ import (
 const nativeBase = "/api/v2/organizations/:organization/projects/:project"
 
 type nativeScope struct {
-	organization tracker.OrganizationID
-	project      tracker.ProjectID
-	credential   apiCredential
+	organization       tracker.OrganizationID
+	project            tracker.ProjectID
+	credential         apiCredential
+	requireHostedAdmin bool
 }
 
 type nativeError struct {

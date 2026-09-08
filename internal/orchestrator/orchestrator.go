@@ -96,6 +96,7 @@ type Config struct {
 	StopRunPriorityNames          map[int]string
 	MaxConcurrentAgentsPerHost    int
 	MaxRetryBackoff               time.Duration
+	Recovery                      workflowconfig.Recovery
 	OverloadRetryDelay            time.Duration
 	NoProgressTokenLimit          int64
 	NoProgressSpendLimitUSD       float64

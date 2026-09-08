@@ -161,6 +161,7 @@ type Config struct {
 	Workpad           Workpad              `yaml:"workpad,omitempty"`
 	Deliverable       Deliverable          `yaml:"deliverable,omitempty"`
 	Dependencies      Dependencies         `yaml:"dependencies,omitempty"`
+	Recovery          Recovery             `yaml:"recovery,omitempty"`
 	Worker            Worker               `yaml:"worker"`
 	Agent             Agent                `yaml:"agent"`
 	Agents            Agents               `yaml:"agents"`
@@ -179,6 +180,25 @@ type Config struct {
 	BacklogAdmission  BacklogAdmission     `yaml:"backlog_admission,omitempty"`
 
 	configuredFields map[string]struct{}
+}
+
+type Recovery struct {
+	TerminalAttemptRetryLimit *int `yaml:"terminal_attempt_retry_limit,omitempty"`
+}
+
+func (r Recovery) EffectiveTerminalAttemptRetryLimit() int {
+	if r.TerminalAttemptRetryLimit == nil {
+		return 3
+	}
+	return *r.TerminalAttemptRetryLimit
+}
+
+func (r Recovery) TerminalAttemptFailureLimit() int {
+	limit := r.EffectiveTerminalAttemptRetryLimit()
+	if limit == 0 {
+		return 1
+	}
+	return max(2, limit)
 }
 
 type Tracker struct {
@@ -1346,6 +1366,7 @@ func Default() Config {
 	budget := defaultBudget()
 
 	return Config{
+		Recovery: Recovery{TerminalAttemptRetryLimit: new(3)},
 		Tracker: Tracker{
 			Endpoint:                    defaultLinearEndpoint,
 			HTTPMaxIdleConns:            100,
@@ -1564,6 +1585,7 @@ func (c *Config) Validate() error {
 	problems = append(problems, c.ActiveHours.Validate("active_hours")...)
 	c.validateTracker(&problems)
 	problems = append(problems, c.Dependencies.Validate("dependencies")...)
+	validateNonNegative("recovery.terminal_attempt_retry_limit", c.Recovery.EffectiveTerminalAttemptRetryLimit(), &problems)
 	validatePollingInterval(c.Polling.IntervalMS, &problems)
 	validatePositive("polling.refresh_failure_threshold", c.Polling.RefreshFailureThreshold, &problems)
 	c.Workspace.validate(&problems)

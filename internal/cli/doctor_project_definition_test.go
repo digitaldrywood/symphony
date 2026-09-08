@@ -15,6 +15,40 @@ import (
 	globalconfig "github.com/digitaldrywood/detent/internal/config/global"
 )
 
+func TestDoctorTerminalAttemptRecovery(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name  string
+		local string
+		want  []string
+	}{
+		{name: "default", want: []string{"terminal_attempt_retry_limit=3", "failure 3", "cooldown recovery"}},
+		{name: "local zero", local: "0", want: []string{"terminal_attempt_retry_limit=0", "failure 1", "external review", "no automatic cooldown recovery"}},
+		{name: "local one", local: "1", want: []string{"terminal_attempt_retry_limit=1", "failure 2", "cooldown recovery"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			local := "---\n---\n"
+			if tt.local != "" {
+				local = "---\nrecovery:\n  terminal_attempt_retry_limit: " + tt.local + "\n---\n"
+			}
+			workflow, err := workflowconfig.ParseWorkflowOverlay([]byte("---\ntracker:\n  kind: memory\n---\n"), []byte(local), "detent.local.yaml")
+			if err != nil {
+				t.Fatal(err)
+			}
+			check := checkDoctorTerminalAttemptRecovery("example", workflow.Config)
+			if check.Status != doctorOK || check.Name != "Project example terminal attempt recovery" {
+				t.Fatalf("check = %#v", check)
+			}
+			for _, want := range append(tt.want, "workspace-preparation failure limit=3") {
+				if !strings.Contains(check.Detail, want) {
+					t.Fatalf("detail = %q, want %q", check.Detail, want)
+				}
+			}
+		})
+	}
+}
+
 func TestDoctorProjectDefinitionLayouts(t *testing.T) {
 	t.Parallel()
 

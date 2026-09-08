@@ -468,6 +468,7 @@ func (o *Orchestrator) handleRunResult(ctx context.Context, state *State, event 
 				running.Mode,
 				running.DiffStats,
 				event.CompletedAt,
+				terminalAttemptFailureEvidence(running, terminalState, errorClass, errorMessage, event.CompletedAt),
 			)
 			if parked {
 				return

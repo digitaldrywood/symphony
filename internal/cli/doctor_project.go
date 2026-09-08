@@ -395,6 +395,7 @@ func checkDoctorProjectWithProgress(
 	}
 	setDoctorCurrentCheck("Project " + id + " progress brake")
 	checks = append(checks, checkDoctorProgressBrake(id, workflow.Config))
+	checks = append(checks, checkDoctorTerminalAttemptRecovery(id, workflow.Config))
 	if strings.TrimSpace(storePath) != "" {
 		setDoctorCurrentCheck("Project " + id + " lifetime limits")
 		checks = append(checks, checkDoctorLifetimeLimits(ctx, id, storePath, workflow.Config, deps))
@@ -1069,6 +1070,17 @@ func checkDoctorProgressBrake(id string, cfg workflowconfig.Config) doctorCheck 
 		Status: doctorOK,
 		Detail: detail,
 	}
+}
+
+func checkDoctorTerminalAttemptRecovery(id string, cfg workflowconfig.Config) doctorCheck {
+	limit := cfg.Recovery.EffectiveTerminalAttemptRetryLimit()
+	detail := fmt.Sprintf("recovery.terminal_attempt_retry_limit=%d; park on qualifying failure %d; workspace-preparation failure limit=3", limit, cfg.Recovery.TerminalAttemptFailureLimit())
+	if limit == 0 {
+		detail += "; external review required before another worker session; no automatic cooldown recovery"
+	} else {
+		detail += "; existing breaker cooldown recovery applies"
+	}
+	return doctorCheck{Name: "Project " + id + " terminal attempt recovery", Status: doctorOK, Detail: detail}
 }
 
 func checkDoctorDisabledBudgetCaps(id string, cfg workflowconfig.Budget) (doctorCheck, bool) {

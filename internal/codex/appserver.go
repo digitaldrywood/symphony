@@ -510,7 +510,7 @@ func (s *AppServer) RunTurn(ctx context.Context, req RunTurnRequest, onUpdate Up
 		AuthenticationMode: authenticationMode,
 	}
 	if !turn.StartedEmitted {
-		startedIdentity := runtimeIdentity
+		startedIdentity := runtimeIdentity.Merge(turn.RuntimeIdentity)
 		if turn.Model != "" {
 			startedIdentity = startedIdentity.Merge(agentidentity.RuntimeUpdate(
 				turn.Model,
@@ -526,7 +526,7 @@ func (s *AppServer) RunTurn(ctx context.Context, req RunTurnRequest, onUpdate Up
 			ThreadID:        threadID,
 			TurnID:          turnID,
 			Status:          "started",
-			Model:           firstNonBlank(turn.Model, model),
+			Model:           startedIdentity.Model(),
 			RuntimeIdentity: startedIdentity,
 		}, onUpdate); err != nil {
 			return RunTurnResult{}, err
@@ -940,9 +940,10 @@ func (s *AppServer) resumeThread(
 }
 
 type startTurnResult struct {
-	ID             string
-	Model          string
-	StartedEmitted bool
+	ID              string
+	Model           string
+	RuntimeIdentity agentidentity.Identity
+	StartedEmitted  bool
 }
 
 func (s *AppServer) startTurn(
@@ -985,6 +986,7 @@ func (s *AppServer) startTurn(
 	}
 
 	trackTurnStarted := func(update Update) error {
+		turn.RuntimeIdentity = turn.RuntimeIdentity.Merge(update.RuntimeIdentity)
 		if update.Type == UpdateTurnStarted {
 			turn.StartedEmitted = true
 			if update.Model != "" {

@@ -996,6 +996,105 @@ func TestAppServerRunTurnPreservesTurnStartedRuntimeModel(t *testing.T) {
 	}
 }
 
+func TestAppServerRunTurnPreservesLatestSettingsIdentity(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name          string
+		effort        string
+		settings      string
+		settingsModel string
+		started       bool
+		threadEffort  string
+		wantEffort    agentidentity.Value
+		wantProvider  string
+		wantTier      agentidentity.Value
+	}{
+		{name: "low override", effort: "low", settings: `"effort":"low","serviceTier":"priority"`, threadEffort: "medium", wantEffort: agentidentity.NewValue("low", agentidentity.ProvenanceRuntime), wantProvider: "azure", wantTier: agentidentity.NewValue("priority", agentidentity.ProvenanceRuntime)},
+		{name: "high override", effort: "high", settings: `"effort":"high","serviceTier":"priority"`, threadEffort: "medium", wantEffort: agentidentity.NewValue("high", agentidentity.ProvenanceRuntime), wantProvider: "azure", wantTier: agentidentity.NewValue("priority", agentidentity.ProvenanceRuntime)},
+		{name: "xhigh override", effort: "xhigh", settings: `"effort":"xhigh","serviceTier":"priority"`, threadEffort: "medium", wantEffort: agentidentity.NewValue("xhigh", agentidentity.ProvenanceRuntime), wantProvider: "azure", wantTier: agentidentity.NewValue("priority", agentidentity.ProvenanceRuntime)},
+		{name: "real turn started", effort: "xhigh", settings: `"effort":"xhigh","serviceTier":"priority"`, started: true, threadEffort: "medium", wantEffort: agentidentity.NewValue("xhigh", agentidentity.ProvenanceRuntime), wantProvider: "azure", wantTier: agentidentity.NewValue("priority", agentidentity.ProvenanceRuntime)},
+		{name: "settings unavailable", effort: "xhigh", settings: `"effort":null,"serviceTier":null`, threadEffort: "medium", wantEffort: agentidentity.UnknownValue(), wantProvider: "azure", wantTier: agentidentity.UnknownValue()},
+		{name: "no runtime effort evidence", effort: "xhigh", wantProvider: "openai", wantTier: agentidentity.NewValue("default", agentidentity.ProvenanceRuntime)},
+		{name: "thread evidence only", effort: "medium", threadEffort: "medium", wantEffort: agentidentity.NewValue("medium", agentidentity.ProvenanceRuntime), wantProvider: "openai", wantTier: agentidentity.NewValue("default", agentidentity.ProvenanceRuntime)},
+		{name: "runtime model update", effort: "high", settings: `"effort":"high","serviceTier":"priority"`, settingsModel: "gpt-5.6-sol", threadEffort: "medium", wantEffort: agentidentity.NewValue("high", agentidentity.ProvenanceRuntime), wantProvider: "azure", wantTier: agentidentity.NewValue("priority", agentidentity.ProvenanceRuntime)},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+
+			messages := []Message{
+				responseMessage(t, 1, `{"userAgent":"codex-cli/0.143.0"}`),
+				responseMessage(t, threadResumeRequestID, `{"thread":{"id":"thread-1"},"model":"gpt-6-astra","modelProvider":"openai","reasoningEffort":"`+tt.threadEffort+`","serviceTier":"default"}`),
+			}
+			wantModel := "gpt-6-astra"
+			if tt.settingsModel != "" {
+				wantModel = tt.settingsModel
+			}
+			if tt.settings != "" {
+				messages = append(messages, notificationMessage(t, "thread/settings/updated", `{"threadId":"thread-1","threadSettings":{"model":"`+wantModel+`","modelProvider":"azure",`+tt.settings+`}}`))
+			}
+			if tt.started {
+				messages = append(messages, notificationMessage(t, "turn/started", `{"threadId":"thread-1","turn":{"id":"turn-1","model":"gpt-6-astra"}}`))
+			}
+			messages = append(messages,
+				responseMessage(t, 3, `{"turn":{"id":"turn-1"}}`),
+				notificationMessage(t, "turn/completed", `{"threadId":"thread-1","turn":{"id":"turn-1","status":"completed"}}`),
+			)
+			transport := newFakeAppServerTransport(messages)
+			server, err := NewAppServer(staticTransportFactory{transport: transport})
+			if err != nil {
+				t.Fatal(err)
+			}
+			var identity agentidentity.Identity
+			var started []Update
+			_, err = server.RunTurn(t.Context(), RunTurnRequest{
+				Workspace: t.TempDir(), ResumeThreadID: "thread-1", Model: "gpt-6-astra", ReasoningEffort: tt.effort,
+			}, func(update Update) error {
+				identity = identity.Merge(update.RuntimeIdentity)
+				if update.Type == UpdateTurnStarted {
+					started = append(started, update)
+				}
+				return nil
+			})
+			if err != nil {
+				t.Fatalf("RunTurn() error = %v", err)
+			}
+			if len(started) != 1 {
+				t.Fatalf("turn started updates = %d, want 1", len(started))
+			}
+			wantMethod := "turn/start"
+			if tt.started {
+				wantMethod = "turn/started"
+			}
+			if started[0].Method != wantMethod {
+				t.Fatalf("turn started method = %q, want %q", started[0].Method, wantMethod)
+			}
+			if identity.Model() != wantModel || started[0].Model != wantModel {
+				t.Fatalf("final model = %q, turn started model = %q, want %q", identity.Model(), started[0].Model, wantModel)
+			}
+			if identity.ReasoningEffort != tt.wantEffort || identity.Provider != agentidentity.NewValue(tt.wantProvider, agentidentity.ProvenanceRuntime) || identity.ServiceTier != tt.wantTier {
+				t.Fatalf("final identity = %+v, want effort=%+v provider=%s tier=%+v", identity, tt.wantEffort, tt.wantProvider, tt.wantTier)
+			}
+			for _, message := range transport.sent {
+				if message.Method != "turn/start" {
+					continue
+				}
+				var params struct {
+					Effort string `json:"effort"`
+				}
+				if err := json.Unmarshal(message.Params, &params); err != nil {
+					t.Fatal(err)
+				}
+				if params.Effort != tt.effort {
+					t.Fatalf("requested effort = %q, want %q", params.Effort, tt.effort)
+				}
+			}
+		})
+	}
+}
+
 func TestUpdateFromMessageCapturesModelReroute(t *testing.T) {
 	t.Parallel()
 

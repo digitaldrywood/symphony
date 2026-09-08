@@ -1876,6 +1876,66 @@ func TestRunnerRunRecordsRuntimeModelUpdate(t *testing.T) {
 	}
 }
 
+func TestRunnerRunRetainsEffectiveTurnIdentity(t *testing.T) {
+	t.Parallel()
+
+	for _, effort := range []string{"low", "high", "xhigh"} {
+		t.Run(effort, func(t *testing.T) {
+			t.Parallel()
+
+			threadIdentity := agentidentity.RuntimeUpdate("gpt-6-astra", "openai", "medium", "default", time.Time{})
+			turnIdentity := agentidentity.RuntimeUpdate("gpt-6-astra", "azure", effort, "priority", time.Time{})
+			agentBackend := &fakeCodexClient{
+				models: []AgentModel{{ID: "gpt-6-astra", Model: "gpt-6-astra", SupportedReasoningEfforts: []string{"low", "medium", "high", "xhigh"}}},
+				updates: []AgentUpdate{
+					{Type: AgentUpdateRuntimeIdentity, Method: "thread/resume", ThreadID: "thread-2332", RuntimeIdentity: threadIdentity},
+					{Type: AgentUpdateRuntimeIdentity, Method: "thread/settings/updated", ThreadID: "thread-2332", RuntimeIdentity: turnIdentity},
+					{Type: AgentUpdateTurnStarted, Method: "turn/start", ThreadID: "thread-2332", TurnID: "turn-1", Model: "gpt-6-astra", RuntimeIdentity: turnIdentity},
+				},
+				result: AgentTurnResult{ThreadID: "thread-2332", TurnID: "turn-1", SessionID: "thread-2332-turn-1"},
+			}
+			sessionStore := &fakeSessionStore{sessionID: 2332}
+			r, err := NewRunner(Dependencies{
+				Workflow: config.Workflow{Prompt: "Work"},
+				Workspace: &fakeWorkspaceBackend{
+					info:      workspace.Info{Path: t.TempDir(), Key: "issue-2332"},
+					diffStats: []workspace.DiffStat{{Files: 1, Added: 1}},
+				},
+				AgentBackend: agentBackend,
+				Store:        sessionStore,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			var telemetryIdentity agentidentity.Identity
+			result, err := r.Run(t.Context(), RunRequest{
+				Issue: connector.Issue{
+					ID: "issue-2332", Identifier: "digitaldrywood/detent#2332", Title: "Preserve effective turn effort",
+					Description: "```detent-agent\nschema: 1\nmodel: gpt-6-astra\neffort: " + effort + "\n```",
+				},
+				StartedAt: time.Now(),
+				OnUsageUpdate: func(update UsageUpdate) error {
+					telemetryIdentity = update.RuntimeIdentity
+					return nil
+				},
+			})
+			if err != nil {
+				t.Fatalf("Run() error = %v", err)
+			}
+			if agentBackend.request.ReasoningEffort != effort {
+				t.Fatalf("requested effort = %q, want %q", agentBackend.request.ReasoningEffort, effort)
+			}
+			for name, identity := range map[string]agentidentity.Identity{
+				"result": result.RuntimeIdentity, "session": sessionStore.finished.RuntimeIdentity, "telemetry": telemetryIdentity,
+			} {
+				if identity.ReasoningEffort != turnIdentity.ReasoningEffort || identity.Provider != turnIdentity.Provider || identity.ServiceTier != turnIdentity.ServiceTier {
+					t.Errorf("%s identity = %+v, want effective turn settings %+v", name, identity, turnIdentity)
+				}
+			}
+		})
+	}
+}
+
 func TestRunnerRunLogsBudgetRefusalWithDerivedRole(t *testing.T) {
 	t.Parallel()
 

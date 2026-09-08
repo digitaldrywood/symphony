@@ -832,12 +832,12 @@ func TestHandleRunResultTripsTokenProgressBreakerOnSubscription(t *testing.T) {
 	if !ok || blocked.Reason != spendProgressReason {
 		t.Fatalf("Blocked[%q] = %#v, want spend breaker", issue.ID, blocked)
 	}
-	if len(tracker.comments) != 1 {
-		t.Fatalf("comments = %#v, want one", tracker.comments)
+	if len(tracker.comments) != 3 {
+		t.Fatalf("comments = %#v, want pending and applied park markers and explanation", tracker.comments)
 	}
 	for _, want := range []string{"blocked_by: tokens", "25000000", "usd_breaker: inert", "Shrink the task", "first tool action"} {
-		if !strings.Contains(tracker.comments[0].body, want) {
-			t.Fatalf("comment missing %q:\n%s", want, tracker.comments[0].body)
+		if !strings.Contains(tracker.comments[2].body, want) {
+			t.Fatalf("comment missing %q:\n%s", want, tracker.comments[2].body)
 		}
 	}
 	if len(attempts.completions) != 1 {

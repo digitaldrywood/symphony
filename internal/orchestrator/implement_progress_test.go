@@ -753,7 +753,11 @@ func TestHandleRunResultClassifiesImplementWorkerProgress(t *testing.T) {
 						t.Fatalf("Blocked[%q].Recovery = %#v, want durable human acknowledgement", tt.runningIssue.ID, blocked.Recovery)
 					}
 				}
-				if len(tracker.comments) != 1 || !strings.Contains(tracker.comments[0].body, tt.wantComment) {
+				wantComments := 1
+				if tt.wantBlockReason == noProgressLimitReason || tt.wantBlockReason == dispatchLoopDetectedReason || tt.wantBlockReason == "workpad_blocked_unactioned" {
+					wantComments = 3
+				}
+				if len(tracker.comments) != wantComments || !strings.Contains(tracker.comments[wantComments-1].body, tt.wantComment) {
 					t.Fatalf("comments = %#v, want comment containing %q", tracker.comments, tt.wantComment)
 				}
 				if _, ok := state.Retry[tt.runningIssue.ID]; ok {

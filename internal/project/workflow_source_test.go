@@ -15,6 +15,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"time"
 
@@ -520,8 +521,24 @@ func TestGitRefWorkflowWatcherReloadsLocalOverlayLifecycle(t *testing.T) {
 		t.Fatalf("create Prompt = %q, want shared and local", created.Workflow.Prompt)
 	}
 
-	if err := os.Remove(localPath); err != nil {
-		t.Fatalf("Remove() error = %v", err)
+	removeDeadline := time.NewTimer(5 * time.Second)
+	defer removeDeadline.Stop()
+	removeRetry := time.NewTicker(10 * time.Millisecond)
+	defer removeRetry.Stop()
+	for {
+		err := os.Remove(localPath)
+		if err == nil {
+			break
+		}
+		const windowsSharingViolation syscall.Errno = 32
+		if runtime.GOOS != "windows" || !errors.Is(err, windowsSharingViolation) {
+			t.Fatalf("Remove() error = %v", err)
+		}
+		select {
+		case <-removeDeadline.C:
+			t.Fatalf("Remove() still failing after retry deadline: %v", err)
+		case <-removeRetry.C:
+		}
 	}
 	deleted := readWorkflowSourceUpdate(t, updates)
 	if deleted.Err != nil {

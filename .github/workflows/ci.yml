@@ -239,6 +239,10 @@ jobs:
         if: runner.os == 'Windows'
         run: go run ./tools/testgate -output tmp/windows-test-evidence -parallel 4 -timeout 10m ./...
 
+      - name: Repeat Windows workflow overlay lifecycle
+        if: runner.os == 'Windows'
+        run: go test ./internal/project -run '^TestGitRefWorkflowWatcherReloadsLocalOverlayLifecycle$' -count=50 -timeout=5m
+
       - name: Upload Windows test evidence
         if: always() && runner.os == 'Windows'
         uses: actions/upload-artifact@v7

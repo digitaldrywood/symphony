@@ -349,6 +349,7 @@ type restCheckRunAnnotation struct {
 
 type restWorkflowRun struct {
 	ID           int64      `json:"id"`
+	Status       string     `json:"status"`
 	CreatedAt    *time.Time `json:"created_at"`
 	RunStartedAt *time.Time `json:"run_started_at"`
 }

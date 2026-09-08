@@ -48,6 +48,12 @@ func (o *Orchestrator) retryTransientPullRequestChecks(
 		return false
 	}
 	if err := rerunner.RerunPullRequestChecks(ctx, issue, retryable); err != nil {
+		if connector.IsRetryable(err) {
+			if o.logger != nil {
+				o.logger.Info("transient ci retry deferred", "issue_id", issue.ID, "identifier", issue.Identifier, "error", err)
+			}
+			return true
+		}
 		if o.logger != nil {
 			o.logger.Warn("transient ci retry failed", "issue_id", issue.ID, "identifier", issue.Identifier, "error", err)
 		}

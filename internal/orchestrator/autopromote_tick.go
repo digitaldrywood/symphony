@@ -1037,14 +1037,14 @@ func (o *Orchestrator) reconcileStaleMergingPullRequestIssues(
 			continue
 		}
 		repository := mergeWorkerRepositoryKey(issue)
-		if mergeWorkerRepositoryConsumed(consumedRepositories, repository) {
+		decision := staleMergingPullRequestDecisionForIssue(issue, o.cfg)
+		if mergeWorkerRepositoryConsumed(consumedRepositories, repository) && decision.reason != string(AutoPromoteReasonCINotGreen) {
 			continue
 		}
 		if staleMergingPullRequestDispatchActive(state, issueID) {
 			consumedRepositories = consumeMergeWorkerRepository(consumedRepositories, repository)
 			continue
 		}
-		decision := staleMergingPullRequestDecisionForIssue(issue, o.cfg)
 		if decision.reason == string(AutoPromoteReasonOperationalCompletion) {
 			completion, _ := operationalCompletionFromIssue(issue)
 			_, completed, err := o.latestSuccessfulOperationalCompletionAttempt(ctx, issue, completion)
@@ -1136,7 +1136,7 @@ func staleMergingPullRequestDecisionForIssue(issue connector.Issue, cfg Config) 
 		if pullRequest.Draft {
 			return staleMergingPullRequestDecision{targetState: autoPromoteSourceState, reason: "draft_pull_request"}
 		}
-		if staleMergingCIRed(pullRequest.CIStatus) {
+		if mergeWorkerCIFailed(pullRequest) {
 			return staleMergingPullRequestDecision{targetState: autoPromoteReworkState, reason: string(AutoPromoteReasonCINotGreen)}
 		}
 		return staleMergingPullRequestDecision{}
@@ -1834,6 +1834,9 @@ func (o *Orchestrator) staleMergingQueueDispatchCandidates(state *State, issues 
 	for _, issue := range staleMergingQueueIssues(issues, o.cfg, state, now) {
 		issueID := strings.TrimSpace(issue.ID)
 		repository := mergeWorkerRepositoryKey(issue)
+		if mergeWorkerCIFailed(issue.PullRequest) {
+			continue
+		}
 		if staleMergingPullRequestDispatchActive(state, issueID) {
 			if reservation := state.mergeReservations[repository]; reservation.IssueID == issueID && reservation.ReleasedReason != "" {
 				continue

@@ -22,6 +22,7 @@ type dispatchPlanner struct {
 }
 
 type dispatchPlanHooks struct {
+	rankingIssues           []connector.Issue
 	hydrate                 func(connector.Issue) (connector.Issue, bool)
 	beforeDispatch          func(connector.Issue, int) bool
 	dispatch                func(dispatchAction) bool
@@ -72,6 +73,7 @@ func (p dispatchPlanner) plan(
 
 	plannedCandidates := cloneIssues(candidates)
 	rankingIssues := cloneIssues(candidates)
+	rankingIssues = append(rankingIssues, hooks.rankingIssues...)
 	for _, blocked := range state.Blocked {
 		rankingIssues = append(rankingIssues, cloneIssue(blocked.Issue))
 	}

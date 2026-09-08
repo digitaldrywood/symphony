@@ -145,11 +145,6 @@ func (o *Orchestrator) evaluateImplementCompletionProgress(
 		return decision
 	}
 	if !implementProgressLinkedPullRequest(running.Issue) {
-		if pullRequestUpdated {
-			decision.Reason = "pull_request_created_or_updated"
-			decision.ProgressKinds = []string{"pull_request"}
-			return decision
-		}
 		issue, workpadCurrent := o.refreshImplementCompletionIssue(ctx, running.Issue)
 		decision.Issue = issue
 		decision.TrackerState = strings.TrimSpace(issue.State)
@@ -159,6 +154,20 @@ func (o *Orchestrator) evaluateImplementCompletionProgress(
 		)
 		if workpadCurrent {
 			decision.WorkpadStatus, decision.HumanAction = implementProgressBlockedHumanAction(issue)
+			blockers, rejected, deferred := o.evaluateImplementDependencyDeferral(ctx, issue)
+			decision.DependencyBlockers = blockers
+			decision.RejectedBlockerRefs = rejected
+			if deferred {
+				decision.Reason = implementDependencyDeferralReason
+				decision.DependencyDeferral = true
+				decision.WorkpadStatus = workpad.StatusBlocked
+				return decision
+			}
+		}
+		if pullRequestUpdated {
+			decision.Reason = "pull_request_created_or_updated"
+			decision.ProgressKinds = []string{"pull_request"}
+			return decision
 		}
 		operationalCompletionCandidate := false
 		if workpadCurrent && running.DispatchProgress.CompletionKind == workpad.CompletionOperational {
@@ -248,18 +257,6 @@ func (o *Orchestrator) evaluateImplementCompletionProgress(
 		if !diffStatsPresent(running.DiffStats) {
 			decision.Reason = "workspace_diffstat_unavailable_without_pull_request"
 			return decision
-		}
-		if implementProgressDiffStatsClean(running.DiffStats) {
-			blockers, rejected, deferred := o.evaluateImplementDependencyDeferral(ctx, issue)
-			decision.DependencyBlockers = blockers
-			decision.RejectedBlockerRefs = rejected
-			if deferred {
-				decision.Outcome = store.WorkAttemptTerminalSuccess
-				decision.Reason = implementDependencyDeferralReason
-				decision.DependencyDeferral = true
-				decision.WorkpadStatus = workpad.StatusBlocked
-				return decision
-			}
 		}
 		if !implementProgressDiffStatsClean(running.DiffStats) {
 			if strings.TrimSpace(running.DiffStats.Fingerprint) == "" {
@@ -353,7 +350,7 @@ func (o *Orchestrator) evaluateImplementCompletionProgress(
 		_, decision.HumanAction = implementProgressBlockedHumanAction(issue)
 	}
 	decision.SecurityAudit = o.securityAuditEvaluation(ctx, issue)
-	if workpadCurrent && !pullRequestMerged(issue.PullRequest) && implementProgressDiffStatsClean(decision.WorkspaceDiffStats) && decision.WorkspaceDiffStats.UnpushedCommits == 0 && len(decision.WorkspaceDiffStats.CommitsNotInPullRequest) == 0 {
+	if workpadCurrent && !pullRequestMerged(issue.PullRequest) {
 		blockers, rejected, deferred := o.evaluateImplementDependencyDeferral(ctx, issue)
 		decision.DependencyBlockers = blockers
 		decision.RejectedBlockerRefs = rejected

@@ -159,8 +159,8 @@ func TestExistingPRHumanDeferralPreservesProgress(t *testing.T) {
 		deferWork bool
 	}{
 		{name: "published PR waits", stats: DiffStats{Status: "clean", HeadSHA: "accepted-head", CommitsAhead: 2}, deferWork: true},
-		{name: "unpublished work must be saved", stats: DiffStats{Status: "clean", HeadSHA: "new-head", UnpushedCommits: 1}},
-		{name: "dirty work must be saved", stats: DiffStats{Status: "dirty", HeadSHA: "accepted-head", FilesChanged: 1}},
+		{name: "unpublished work remains saved while waiting", stats: DiffStats{Status: "clean", HeadSHA: "new-head", UnpushedCommits: 1}, deferWork: true},
+		{name: "dirty work remains saved while waiting", stats: DiffStats{Status: "dirty", HeadSHA: "accepted-head", FilesChanged: 1}, deferWork: true},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
 			issue := implementProgressIssue("accepted-head")

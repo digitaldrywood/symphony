@@ -504,7 +504,14 @@ func (o *Orchestrator) handleRunResult(ctx context.Context, state *State, event 
 		return
 	}
 
-	if mergeWorkerIssue(running.Issue) {
+	var dependencyProgress implementCompletionProgressDecision
+	if mergeWorkerIssue(running.Issue) && mergeWorkerTurnSucceeded(event) && !state.Draining {
+		if diffStatsPresent(event.Result.DiffStats) {
+			running.DiffStats = event.Result.DiffStats
+		}
+		dependencyProgress = o.evaluateCompletedDependencyDeferral(ctx, running)
+	}
+	if mergeWorkerIssue(running.Issue) && !dependencyProgress.DependencyDeferral {
 		if o.completeLatestTerminalMergeWorkerResult(ctx, state, event, running) {
 			return
 		}
@@ -549,7 +556,12 @@ func (o *Orchestrator) handleRunResult(ctx context.Context, state *State, event 
 	if terminalState == store.WorkAttemptTerminalSuccess {
 		running.Issue = o.applyArtifactGateCompletionFields(ctx, running.Issue, running.DispatchWorkpadHash, running.DispatchWorkpadRead)
 	}
-	progress := o.evaluateImplementCompletionProgress(ctx, running, finalState, event.Result.PullRequestUpdated)
+	var progress implementCompletionProgressDecision
+	if dependencyProgress.DependencyDeferral {
+		progress = dependencyProgress
+	} else {
+		progress = o.evaluateImplementCompletionProgress(ctx, running, finalState, event.Result.PullRequestUpdated)
+	}
 	progress = o.evaluateDispatchLoopProgress(ctx, running, progress)
 	progress, gateWaitReason := completedReworkGateWaitProgress(running, progress, o.cfg, finalState)
 	running.Issue = progress.Issue

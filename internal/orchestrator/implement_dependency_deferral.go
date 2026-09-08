@@ -20,6 +20,27 @@ type deferredCandidate struct {
 	detail             string
 }
 
+func (o *Orchestrator) evaluateCompletedDependencyDeferral(ctx context.Context, running Running) implementCompletionProgressDecision {
+	issue, current := o.refreshImplementCompletionIssue(ctx, running.Issue)
+	if !current || workspaceIssueTerminal(issue, o.cfg.TerminalStates) {
+		return implementCompletionProgressDecision{}
+	}
+	blockers, _, deferred := o.evaluateImplementDependencyDeferral(ctx, issue)
+	if !deferred {
+		return implementCompletionProgressDecision{}
+	}
+	return implementCompletionProgressDecision{
+		Issue:              issue,
+		Outcome:            store.WorkAttemptTerminalSuccess,
+		Reason:             implementDependencyDeferralReason,
+		DependencyDeferral: true,
+		DependencyBlockers: blockers,
+		TrackerState:       strings.TrimSpace(issue.State),
+		WorkpadStatus:      workpad.StatusBlocked,
+		WorkspaceDiffStats: running.DiffStats,
+	}
+}
+
 func (o *Orchestrator) evaluateImplementDependencyDeferral(
 	ctx context.Context,
 	issue connector.Issue,
@@ -33,8 +54,9 @@ func (o *Orchestrator) evaluateImplementDependencyDeferral(
 		o.warnRejectedImplementDependencyRefs(issue, rejected, nil)
 		return nil, rejected, false
 	}
+	_, humanAction := implementProgressBlockedHumanAction(issue)
 	if strings.TrimSpace(signal.Status) != workpad.StatusBlocked ||
-		strings.TrimSpace(signal.HumanAction) != "" ||
+		humanAction != "" ||
 		len(signal.Blockers) == 0 {
 		return nil, nil, false
 	}

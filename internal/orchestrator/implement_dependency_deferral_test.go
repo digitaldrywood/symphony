@@ -3,6 +3,7 @@ package orchestrator
 import (
 	"errors"
 	"fmt"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -11,9 +12,295 @@ import (
 	"github.com/digitaldrywood/detent/internal/connector"
 	"github.com/digitaldrywood/detent/internal/connector/memory"
 	"github.com/digitaldrywood/detent/internal/explain"
+	runpkg "github.com/digitaldrywood/detent/internal/runner"
 	"github.com/digitaldrywood/detent/internal/scheduler"
 	"github.com/digitaldrywood/detent/internal/store"
+	"github.com/digitaldrywood/detent/internal/workpad"
 )
+
+func TestCompletedDependencyWaitRequiresCurrentMachineSignal(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name         string
+		status       string
+		humanAction  string
+		owner        string
+		refreshErr   error
+		blockerState string
+		invalid      bool
+		wantWait     bool
+	}{
+		{name: "machine wait", status: workpad.StatusBlocked, owner: "orchestrator", wantWait: true},
+		{name: "independent work", status: workpad.StatusInProgress},
+		{name: "body dependency alone"},
+		{name: "human action", status: workpad.StatusBlocked, humanAction: "Approve publishing"},
+		{name: "human owned blocker", status: workpad.StatusBlocked, owner: "human"},
+		{name: "stale workpad", status: workpad.StatusBlocked, refreshErr: errors.New("tracker unavailable")},
+		{name: "invalid workpad", status: workpad.StatusBlocked, invalid: true},
+		{name: "dependency already completed", status: workpad.StatusBlocked, blockerState: "Done"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			issue := implementProgressIssueWithoutPR()
+			issue.Description = "Depends on: digitaldrywood/detent#2282"
+			body := implementProgressWorkpadComment("digitaldrywood/detent#2282", tt.humanAction)
+			body = strings.Replace(body, "status: blocked", "status: "+tt.status, 1)
+			if tt.owner != "" {
+				body = strings.Replace(body, "    reason:", "    owner: "+tt.owner+"\n    reason:", 1)
+			}
+			if tt.invalid {
+				body = strings.Replace(body, "schema: 1", "schema: 99", 1)
+			}
+			if tt.status != "" {
+				issue.Comments = []connector.IssueComment{{Body: body}}
+			}
+			blocker := connector.Issue{ID: "blocker", Identifier: "digitaldrywood/detent#2282", State: firstNonBlank(tt.blockerState, "Todo")}
+			tracker := &implementProgressConnector{refreshed: issue, refreshErr: tt.refreshErr, resolvedBlockers: []connector.Issue{blocker}}
+			o := &Orchestrator{cfg: normalizeConfig(Config{TerminalStates: []string{"Done"}}), connector: tracker}
+			decision := o.evaluateImplementCompletionProgress(t.Context(), Running{Issue: issue, DiffStats: DiffStats{Status: "clean", UnpushedCommits: 1}}, FinalStateCompleted, false)
+			if decision.DependencyDeferral != tt.wantWait {
+				t.Fatalf("dependency deferral = %v, want %v (%s)", decision.DependencyDeferral, tt.wantWait, decision.Reason)
+			}
+			if !tt.wantWait {
+				o.workAttempts = &implementProgressAttemptStore{}
+				if got := o.filterImplementDependencyDeferrals(t.Context(), []connector.Issue{issue}); len(got) != 1 {
+					t.Fatal("dependency declared before its barrier prevented independent work")
+				}
+			}
+		})
+	}
+}
+
+func TestCompletedDependencyWaitPreservesUnrelatedParks(t *testing.T) {
+	t.Parallel()
+	for _, reason := range []string{repeatedFailureCircuitBreakerCause, dispatchLoopDetectedReason, workpadBlockedUnactionedReason} {
+		t.Run(reason, func(t *testing.T) {
+			t.Parallel()
+			issue := implementProgressIssueWithoutPR()
+			issue.State = "Blocked"
+			issue.Comments = []connector.IssueComment{{Body: implementProgressWorkpadComment("digitaldrywood/detent#2282", "")}}
+			tracker := &implementProgressConnector{refreshed: issue, resolvedBlockers: []connector.Issue{{ID: "blocker", Identifier: "digitaldrywood/detent#2282", State: "Todo"}}}
+			cfg := normalizeConfig(Config{ActiveStates: []string{"Todo", "In Progress", "Rework"}, TerminalStates: []string{"Done"}})
+			attempts := &implementProgressAttemptStore{}
+			o := &Orchestrator{cfg: cfg, connector: tracker, workAttempts: attempts}
+			state := newState(cfg)
+			park := Blocked{Issue: issue, Reason: reason}
+			state.Blocked[issue.ID] = park
+			state.Running[issue.ID] = Running{Issue: issue, WorkAttemptID: 1, Mode: runpkg.RunModeImplement}
+			state.Claimed[issue.ID] = Claimed{Issue: issue}
+			o.handleRunResult(t.Context(), &state, runpkg.Completion{IssueID: issue.ID, CompletedAt: time.Now(), Result: runpkg.RunResult{FinalState: FinalStateCompleted, DiffStats: DiffStats{Status: "clean", UnpushedCommits: 1}}})
+			if state.Blocked[issue.ID].Reason != reason || len(tracker.updates) != 0 {
+				t.Fatalf("wait acknowledged unrelated park: %v, %v", state.Blocked, tracker.updates)
+			}
+			completion := attempts.completions[0]
+			attempts.history = []store.WorkAttempt{{WorkerMetadataJSON: completion.WorkerMetadataJSON}}
+			tracker.resolvedBlockers[0].State = "Done"
+			candidates := o.filterImplementDependencyDeferrals(t.Context(), []connector.Issue{issue})
+			if len(candidates) != 1 || o.dispatchable(candidates[0], &state, time.Now()) || state.Blocked[issue.ID].Reason != reason {
+				t.Fatal("dependency completion cleared an unrelated hold")
+			}
+		})
+	}
+}
+
+func TestCompletedDependencyWaitAdmitsPrerequisiteAfterRestart(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name          string
+		lane          string
+		withPR        bool
+		blockerClosed bool
+	}{
+		{name: "saved commit", lane: "In Progress"},
+		{name: "saved PR", lane: "Rework", withPR: true},
+		{name: "merge return lane", lane: "Merging", withPR: true},
+		{name: "dependency completed", lane: "Rework", blockerClosed: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			ctx := t.Context()
+			now := time.Date(2026, 9, 8, 0, 10, 33, 0, time.UTC)
+			issue := implementProgressIssueWithoutPR()
+			if tt.withPR {
+				issue = implementProgressIssue("published-head", "Test")
+			}
+			issue.State = tt.lane
+			issue.AssignedToWorker = true
+			issue.BranchName = "saved-work"
+			blocker := dispatchTestIssue("blocker", "Todo")
+			blocker.Identifier = "digitaldrywood/detent#2282"
+			issue.Description = "Depends on: " + blocker.Identifier
+			issue.Comments = []connector.IssueComment{{Body: implementProgressWorkpadComment(blocker.Identifier, "")}}
+			issue.BlockedBy = []connector.BlockedRef{{ID: blocker.ID, Identifier: blocker.Identifier, State: blocker.State}}
+			unrelated := dispatchTestIssue("unrelated", "Todo")
+			unrelated.Identifier = "digitaldrywood/detent#1"
+			tracker := memory.New(memory.Config{Stateful: true, Issues: []connector.Issue{issue, blocker, unrelated}})
+			cfg := normalizeConfig(Config{Project: scheduler.ProjectCandidate{ID: "detent", Weight: 1}, MaxConcurrentAgents: 1, PrioritizeUnblockers: true, ActiveStates: []string{"Todo", "In Progress", "Rework", "Merging"}, TerminalStates: []string{"Done"}, DispatchPriorityByState: []string{"Merging", "Rework", "In Progress", "Todo"}})
+			path := filepath.Join(t.TempDir(), "detent.db")
+			backend, err := store.Open(ctx, store.Config{Path: path})
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() {
+				if err := backend.Close(); err != nil {
+					t.Error(err)
+				}
+			})
+			attempts := backend.(store.WorkAttemptStore)
+			attemptID, err := attempts.StartWorkAttempt(ctx, store.WorkAttemptStart{ProjectID: cfg.Project.ID, IssueID: issue.ID, Identifier: issue.Identifier, WorkerType: workAttemptWorkerType(issue, runpkg.RunModeImplement), Lane: issue.State, StartedAt: now.Add(-time.Minute)})
+			if err != nil {
+				t.Fatal(err)
+			}
+			globalGate := scheduler.NewGlobalDispatchGate(scheduler.NewRoundRobin(scheduler.Config{Capacity: 1}))
+			slot, acquired, err := globalGate.TryAcquire(ctx, cfg.Project, scheduler.SlotRequest{State: issue.State}, now)
+			if err != nil || !acquired {
+				t.Fatalf("initial slot: %v, %v", acquired, err)
+			}
+			workspace := t.TempDir()
+			savedPath := filepath.Join(workspace, "saved-change.txt")
+			if err := os.WriteFile(savedPath, []byte("saved implementation"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			o := &Orchestrator{cfg: cfg, connector: tracker, workAttempts: attempts, globalDispatchGate: globalGate}
+			state := newState(cfg)
+			state.Running[issue.ID] = Running{Issue: issue, Attempt: 1, WorkAttemptID: attemptID, Mode: runpkg.RunModeImplement, StartedAt: now.Add(-time.Minute), WorkspacePath: workspace, globalSlot: slot}
+			state.Claimed[issue.ID] = Claimed{Issue: issue}
+			o.handleRunResult(ctx, &state, runpkg.Completion{IssueID: issue.ID, CompletedAt: now, Request: runpkg.RunRequest{Mode: runpkg.RunModeImplement}, Result: runpkg.RunResult{FinalState: FinalStateCompleted, DiffStats: DiffStats{Status: "clean", HeadSHA: "saved-head", UnpushedCommits: 1}}})
+			if globalGate.PoolSnapshot().Available != 1 || len(state.Claimed) != 0 || len(state.Retry) != 0 {
+				t.Fatal("completed wait did not release capacity")
+			}
+			current, err := tracker.FetchIssueStatesByIDs(ctx, []string{issue.ID})
+			wantLane := tt.lane
+			if wantLane == "In Progress" {
+				wantLane = "Rework"
+			}
+			if err != nil || len(current) != 1 || current[0].State != wantLane || current[0].BranchName != issue.BranchName {
+				t.Fatalf("return lane or workspace branch lost: %+v, %v", current, err)
+			}
+			if tt.withPR && (current[0].PullRequest == nil || current[0].PullRequest.HeadSHA != "published-head") {
+				t.Fatal("wait lost the PR")
+			}
+			if contents, err := os.ReadFile(savedPath); err != nil || string(contents) != "saved implementation" {
+				t.Fatalf("saved workspace changed: %q, %v", contents, err)
+			}
+			if err := backend.Close(); err != nil {
+				t.Fatal(err)
+			}
+			backend, err = store.Open(ctx, store.Config{Path: path})
+			if err != nil {
+				t.Fatal(err)
+			}
+			if tt.blockerClosed {
+				if err := tracker.UpdateIssueState(ctx, blocker.ID, "Done"); err != nil {
+					t.Fatal(err)
+				}
+				current[0].BlockedBy[0].State = "Done"
+			}
+			runner := newWorkerHostRunner()
+			o = &Orchestrator{cfg: cfg, connector: tracker, workAttempts: backend.(store.WorkAttemptStore), globalDispatchGate: globalGate, supervisor: newTestSupervisor(t, runner, cfg), runResults: make(chan runpkg.Completion, 1)}
+			state = newState(cfg)
+			candidates := []connector.Issue{current[0], unrelated, blocker}
+			if tt.blockerClosed {
+				candidates = candidates[:2]
+			}
+			o.dispatchReadyIssues(ctx, &state, candidates, now.Add(time.Minute))
+			wantIssue := blocker.ID
+			if tt.blockerClosed {
+				wantIssue = issue.ID
+			}
+			if len(state.Running) != 1 || state.Running[wantIssue].Issue.ID != wantIssue {
+				t.Fatalf("capacity-one dispatch: %v, want %s", sortedKeys(state.Running), wantIssue)
+			}
+			t.Cleanup(func() {
+				o.cancelRunning(&state, wantIssue)
+				select {
+				case <-o.runResults:
+				case <-time.After(10 * time.Second):
+					t.Error("worker did not finish after cancellation")
+				}
+			})
+			if request := receiveWorkerHostRunRequest(t, runner.started); request.Issue.ID != wantIssue {
+				t.Fatalf("launched %s, want %s", request.Issue.ID, wantIssue)
+			}
+			for tick := 2; tick <= 4; tick++ {
+				o.dispatchReadyIssues(ctx, &state, candidates, now.Add(time.Duration(tick)*time.Minute))
+				if len(state.Running) != 1 || state.Running[wantIssue].Issue.ID != wantIssue {
+					t.Fatal("later tick displaced the executable worker")
+				}
+			}
+		})
+	}
+}
+
+func TestCompletedDependencyWaitPreservesSavedWork(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name      string
+		withPR    bool
+		updatedPR bool
+		stats     DiffStats
+	}{
+		{name: "recorded saved commit without PR", stats: DiffStats{Status: "clean", UnpushedCommits: 1, CommitsAhead: 1}},
+		{name: "saved diff without PR", stats: DiffStats{Status: "changed", FilesChanged: 1, Fingerprint: "saved-diff"}},
+		{name: "unavailable diff without PR"},
+		{name: "new PR", updatedPR: true, stats: DiffStats{Status: "clean"}},
+		{name: "saved commit with PR", withPR: true, stats: DiffStats{Status: "clean", UnpushedCommits: 1}},
+		{name: "saved diff with PR", withPR: true, stats: DiffStats{Status: "changed", FilesChanged: 1, Fingerprint: "saved-diff"}},
+		{name: "repeated clean wait", stats: DiffStats{Status: "clean"}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			issue := implementProgressIssueWithoutPR()
+			if tt.withPR {
+				issue = implementProgressIssue("published-head", "Test")
+			}
+			issue.Identifier = "digitaldrywood/detent#2279"
+			issue.Description = "Depends on: digitaldrywood/detent#2282"
+			issue.Comments = []connector.IssueComment{{Body: implementProgressWorkpadComment("digitaldrywood/detent#2282", "")}}
+			blocker := connector.Issue{ID: "blocker-2282", Identifier: "digitaldrywood/detent#2282", State: "Todo"}
+			tracker := &implementProgressConnector{refreshed: issue, hydrated: issue, resolvedBlockers: []connector.Issue{blocker}}
+			attempts := &implementProgressAttemptStore{}
+			cfg := normalizeConfig(Config{Project: scheduler.ProjectCandidate{ID: "detent"}, AutoPromote: AutoPromoteConfig{NoProgressLimit: 3}, ActiveStates: []string{"Todo", "In Progress", "Rework"}, TerminalStates: []string{"Done"}})
+			o := &Orchestrator{cfg: cfg, connector: tracker, workAttempts: attempts}
+			stats := tt.stats
+			if diffStatsPresent(stats) {
+				stats.HeadSHA = "saved-head"
+			}
+			for index, completedAt := range []time.Time{
+				time.Date(2026, 9, 8, 0, 10, 33, 0, time.UTC),
+				time.Date(2026, 9, 8, 0, 12, 50, 0, time.UTC),
+				time.Date(2026, 9, 8, 0, 15, 27, 0, time.UTC),
+			} {
+				state := newState(cfg)
+				running := Running{Issue: issue, Attempt: 1, WorkAttemptID: int64(index + 1), Mode: runpkg.RunModeImplement, StartedAt: completedAt.Add(-time.Minute), WorkspacePath: t.TempDir(), DiffStats: stats,
+					DispatchLoopStart: dispatchLoopTestStart(issue.State, autoPromoteReworkSignatureFromIssue(issue, AutoPromoteSummaryFromIssue(issue)), implementProgressDiffStatsFromDiffStats(stats))}
+				state.Running[issue.ID] = running
+				state.Claimed[issue.ID] = Claimed{Issue: issue}
+				o.handleRunResult(t.Context(), &state, runpkg.Completion{IssueID: issue.ID, CompletedAt: completedAt, Request: runpkg.RunRequest{Mode: runpkg.RunModeImplement}, Result: runpkg.RunResult{FinalState: FinalStateCompleted, DiffStats: stats, PullRequestUpdated: tt.updatedPR}})
+				if len(attempts.completions) != index+1 {
+					t.Fatalf("attempt %d did not complete", index+1)
+				}
+				completion := attempts.completions[index]
+				record := implementProgressRecordFromCompletion(t, completion)
+				if !record.DependencyDeferral || record.Reason != implementDependencyDeferralReason || completion.TerminalState != store.WorkAttemptTerminalSuccess {
+					t.Fatalf("attempt %d failed to preserve wait: %+v", index+1, record)
+				}
+				if len(state.Retry) != 0 || len(state.Running) != 0 || len(state.Claimed) != 0 || len(state.Blocked) != 0 {
+					t.Fatalf("wait retained capacity or scheduled another session: retries=%v running=%v claimed=%v blocked=%v", state.Retry, state.Running, state.Claimed, state.Blocked)
+				}
+				attempts.history = append([]store.WorkAttempt{{ID: running.WorkAttemptID, Lane: issue.State, WorkerType: "implement", TerminalState: completion.TerminalState, CompletedAt: completedAt, WorkerMetadataJSON: completion.WorkerMetadataJSON}}, attempts.history...)
+				restarted := &Orchestrator{cfg: cfg, connector: tracker, workAttempts: attempts}
+				if got := restarted.filterImplementDependencyDeferrals(t.Context(), []connector.Issue{issue}); len(got) != 0 {
+					t.Fatalf("attempt %d permits redispatch while prerequisite is open", index+1)
+				}
+			}
+			tracker.resolvedBlockers[0].State = "Done"
+			if got := o.filterImplementDependencyDeferrals(t.Context(), []connector.Issue{issue}); len(got) != 1 {
+				t.Fatal("completed dependency did not release wait")
+			}
+		})
+	}
+}
 
 func TestDependencyDeferralRefusalDetails(t *testing.T) {
 	t.Parallel()

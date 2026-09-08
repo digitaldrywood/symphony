@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"path/filepath"
 	"strings"
@@ -94,11 +95,24 @@ func TestCrossHostParkRecovery(t *testing.T) {
 
 type crossHostParkConnector struct {
 	*dependencyAutoUnblockConnector
-	now        time.Time
-	commentErr error
+	now            time.Time
+	commentErr     error
+	instanceLogin  string
+	updateDelay    time.Duration
+	afterUpdate    func()
+	updateErr      error
+	commentFailure func(string) error
+}
+
+func (c *crossHostParkConnector) InstanceLogin() string {
+	return c.instanceLogin
 }
 
 func (c *crossHostParkConnector) UpdateIssueState(ctx context.Context, issueID, state string) error {
+	if c.updateErr != nil {
+		return c.updateErr
+	}
+	c.now = c.now.Add(c.updateDelay)
 	if err := c.dependencyAutoUnblockConnector.UpdateIssueState(ctx, issueID, state); err != nil {
 		return err
 	}
@@ -109,10 +123,18 @@ func (c *crossHostParkConnector) UpdateIssueState(ctx context.Context, issueID, 
 			c.stateIssues[i].StageUpdatedActor = connector.IssueActor{Login: "shared-user", Kind: "User"}
 		}
 	}
+	if c.afterUpdate != nil {
+		c.afterUpdate()
+	}
 	return nil
 }
 
 func (c *crossHostParkConnector) CreateComment(ctx context.Context, issueID, body string) error {
+	if c.commentFailure != nil {
+		if err := c.commentFailure(body); err != nil {
+			return err
+		}
+	}
 	if err := c.dependencyAutoUnblockConnector.CreateComment(ctx, issueID, body); err != nil {
 		return err
 	}
@@ -141,12 +163,14 @@ func (c *crossHostParkConnector) FetchIssueComments(_ context.Context, issue con
 func TestCrossHostDependencyRecoveryControls(t *testing.T) {
 	t.Parallel()
 	for _, tt := range []struct {
-		name       string
-		body       string
-		authorized bool
-		age        time.Duration
-		readErr    error
-		wantHold   bool
+		name          string
+		body          string
+		authorized    bool
+		age           time.Duration
+		readErr       error
+		wantHold      bool
+		author        string
+		instanceLogin string
 	}{
 		{name: "ordinary dependency"},
 		{name: "legacy spend park", body: "Routed this issue to Blocked because resource consumption continued without any PR evidence.\n\n- reason: " + spendProgressReason, authorized: true, wantHold: true},
@@ -154,6 +178,8 @@ func TestCrossHostDependencyRecoveryControls(t *testing.T) {
 		{name: "legacy no progress park", body: "Routed this issue to Blocked because the implement worker completed repeatedly without deliverable progress.\n\n- reason: " + noProgressLimitReason, authorized: true, wantHold: true},
 		{name: "legacy human owner", body: "Routed this issue to Blocked.\n\n- reason: investigate\n- owner: human", authorized: true, wantHold: true},
 		{name: "untrusted marker", body: trackerRecoveryParkPrefix + `{"schema":1,"owner":"human"}` + "\n```"},
+		{name: "own integration marker", body: trackerRecoveryParkPrefix + `{"schema":1,"owner":"human"}` + "\n```", author: "detent[bot]", instanceLogin: "detent[bot]", wantHold: true},
+		{name: "other integration marker", body: trackerRecoveryParkPrefix + `{"schema":1,"owner":"human"}` + "\n```", author: "other[bot]", instanceLogin: "detent[bot]"},
 		{name: "prior park occupancy", body: trackerRecoveryParkPrefix + `{"schema":1,"owner":"human"}` + "\n```", authorized: true, age: time.Hour},
 		{name: "malformed marker", body: trackerRecoveryParkPrefix + "invalid\n```", authorized: true, wantHold: true},
 		{name: "unsupported marker", body: trackerRecoveryParkPrefix + `{"schema":2,"owner":"human"}` + "\n```", authorized: true, wantHold: true},
@@ -168,8 +194,9 @@ func TestCrossHostDependencyRecoveryControls(t *testing.T) {
 			issue.StageUpdatedAt = &now
 			blocker := dependencyAutoUnblockIssue("2108", "Done")
 			issue.BlockedBy = []connector.BlockedRef{{Identifier: blocker.Identifier, State: blocker.State}}
-			issue.Comments = []connector.IssueComment{{Body: tt.body, AuthorAuthorized: tt.authorized, CreatedAt: timePointer(now.Add(-tt.age))}}
+			issue.Comments = []connector.IssueComment{{Body: tt.body, AuthorAuthorized: tt.authorized, AuthorLogin: tt.author, CreatedAt: timePointer(now.Add(-tt.age))}}
 			tracker := &crossHostParkConnector{dependencyAutoUnblockConnector: &dependencyAutoUnblockConnector{stateIssues: []connector.Issue{issue}, blockers: []connector.Issue{blocker}}, now: now.Add(57 * time.Second), commentErr: tt.readErr}
+			tracker.instanceLogin = tt.instanceLogin
 			host := dependencyAutoUnblockOrchestrator(tracker.dependencyAutoUnblockConnector, DependencyAutoUnblockConfig{Enabled: true})
 			host.connector = tracker
 			host.workflowMetrics = openValidatorMemoStore(t)
@@ -177,6 +204,45 @@ func TestCrossHostDependencyRecoveryControls(t *testing.T) {
 			got := host.autoUnblockDependencyIssues(t.Context(), &state, tracker.stateIssues, tracker.now)
 			if (len(got) == 0) != tt.wantHold {
 				t.Fatalf("transitions = %v, wantHold = %t", got, tt.wantHold)
+			}
+		})
+	}
+}
+
+func TestCrossHostParkProtectsVisibleTransition(t *testing.T) {
+	t.Parallel()
+	for _, delay := range []time.Duration{0, 2 * time.Minute} {
+		t.Run(delay.String(), func(t *testing.T) {
+			t.Parallel()
+			now := time.Date(2026, 9, 3, 12, 0, 0, 0, time.UTC)
+			issue := dependencyAutoUnblockIssue("2131", "In Progress")
+			blocker := dependencyAutoUnblockIssue("2108", "Done")
+			issue.BlockedBy = []connector.BlockedRef{{Identifier: blocker.Identifier, State: blocker.State}}
+			tracker := &crossHostParkConnector{dependencyAutoUnblockConnector: &dependencyAutoUnblockConnector{stateIssues: []connector.Issue{issue}, blockers: []connector.Issue{blocker}}, now: now, updateDelay: delay}
+			hostA := blockedCauseTestOrchestrator(tracker.dependencyAutoUnblockConnector)
+			hostA.connector = tracker
+			hostA.workflowMetrics = openValidatorMemoStore(t)
+			hostB := dependencyAutoUnblockOrchestrator(tracker.dependencyAutoUnblockConnector, DependencyAutoUnblockConfig{Enabled: true})
+			hostB.connector = tracker
+			hostB.workflowMetrics = openValidatorMemoStore(t)
+			stateA, stateB := newState(hostA.cfg), newState(hostB.cfg)
+			observed := false
+			tracker.afterUpdate = func() {
+				tracker.afterUpdate = nil
+				observed = true
+				if got := hostB.autoUnblockDependencyIssues(t.Context(), &stateB, tracker.stateIssues, tracker.now); len(got) != 0 {
+					t.Error("peer unparked the visible transition before marker completion")
+				}
+			}
+			metadata := workflowLaneMetadata{BlockedRecovery: &workflowLaneBlockedRecoveryMetadata{Owner: "human", Cause: spendProgressReason, CauseFingerprint: "current-park"}}
+			if err := hostA.updateIssueStateByIDStrictWithMetadata(t.Context(), &stateA, issue.ID, issue, "Blocked", now, spendProgressReason, metadata); err != nil {
+				t.Fatal(err)
+			}
+			if !observed {
+				t.Fatal("peer never observed the visible transition")
+			}
+			if got := hostB.autoUnblockDependencyIssues(t.Context(), &stateB, tracker.stateIssues, tracker.now); len(got) != 0 {
+				t.Fatal("peer unparked completed recovery marker")
 			}
 		})
 	}
@@ -216,7 +282,10 @@ func TestRecoveryParkMarkerIncludesFingerprint(t *testing.T) {
 	t.Parallel()
 	tracker := &dependencyAutoUnblockConnector{}
 	host := blockedCauseTestOrchestrator(tracker)
-	host.publishTrackerRecoveryPark(t.Context(), "2131", "Blocked", workflowLaneMetadata{BlockedRecovery: &workflowLaneBlockedRecoveryMetadata{Owner: "human", Cause: "investigate", CauseFingerprint: "current-fingerprint"}})
+	park := newTrackerRecoveryPark("Blocked", workflowLaneMetadata{BlockedRecovery: &workflowLaneBlockedRecoveryMetadata{Owner: "human", Cause: "investigate", CauseFingerprint: "current-fingerprint"}})
+	if err := host.publishTrackerRecoveryPark(t.Context(), "2131", park); err != nil {
+		t.Fatal(err)
+	}
 	if len(tracker.comments) != 1 || !strings.Contains(tracker.comments[0].body, `"cause_fingerprint":"current-fingerprint"`) {
 		t.Fatalf("comments = %v, want tracker-visible park fingerprint", tracker.comments)
 	}
@@ -314,4 +383,99 @@ func (c *crossHostParkConnector) FetchIssueStatesByIDs(_ context.Context, ids []
 		}
 	}
 	return issues, nil
+}
+
+func TestTrackerRecoveryParkOperationSettlement(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name        string
+		phase       string
+		operationID string
+		authorized  bool
+		current     bool
+		wantHold    bool
+	}{
+		{name: "pending protects slow transition", wantHold: true},
+		{name: "applied current park", phase: "applied", operationID: "park", authorized: true, current: true, wantHold: true},
+		{name: "applied prior occupancy", phase: "applied", operationID: "park", authorized: true},
+		{name: "cancelled transition", phase: "cancelled", operationID: "park", authorized: true},
+		{name: "untrusted cancellation", phase: "cancelled", operationID: "park", wantHold: true},
+		{name: "other operation cancellation", phase: "cancelled", operationID: "other", authorized: true, wantHold: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			now := time.Date(2026, 9, 3, 12, 0, 0, 0, time.UTC)
+			issue := dependencyAutoUnblockIssue("2131", "Blocked")
+			issue.StageUpdatedAt = &now
+			marker := trackerRecoveryPark{Schema: 1, Owner: "human", Cause: spendProgressReason, OperationID: "park", Phase: "pending"}
+			encode := func(marker trackerRecoveryPark) string {
+				t.Helper()
+				data, err := json.Marshal(marker)
+				if err != nil {
+					t.Fatal(err)
+				}
+				return trackerRecoveryParkPrefix + string(data) + "\n```"
+			}
+			issue.Comments = []connector.IssueComment{{Body: encode(marker), AuthorAuthorized: true, CreatedAt: timePointer(now.Add(-time.Hour))}}
+			if tt.phase != "" {
+				marker.Phase, marker.OperationID = tt.phase, tt.operationID
+				at := now.Add(-time.Hour)
+				if tt.current {
+					at = now
+				}
+				issue.Comments = append(issue.Comments, connector.IssueComment{Body: encode(marker), AuthorAuthorized: tt.authorized, CreatedAt: &at})
+			}
+			host := blockedCauseTestOrchestrator(&dependencyAutoUnblockConnector{})
+			if got := host.trackerRecoveryParkHold(t.Context(), issue); (got != "") != tt.wantHold {
+				t.Fatalf("hold = %q, wantHold = %t", got, tt.wantHold)
+			}
+		})
+	}
+}
+
+func TestTrackerRecoveryParkPublicationFailures(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name        string
+		failPhase   string
+		updateErr   error
+		wantUpdates int
+		wantHold    bool
+	}{
+		{name: "pending publication fails", failPhase: "pending"},
+		{name: "applied publication fails", failPhase: "applied", wantUpdates: 1, wantHold: true},
+		{name: "ambiguous transition failure", updateErr: errors.New("connection lost"), wantHold: true},
+		{name: "known rejected transition", updateErr: connector.ErrStateUpdateBlocked},
+		{name: "cancellation publication fails", updateErr: connector.ErrStateUpdateBlocked, failPhase: "cancelled", wantHold: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			now := time.Date(2026, 9, 3, 12, 0, 0, 0, time.UTC)
+			issue := dependencyAutoUnblockIssue("2131", "In Progress")
+			tracker := &crossHostParkConnector{dependencyAutoUnblockConnector: &dependencyAutoUnblockConnector{stateIssues: []connector.Issue{issue}}, now: now, updateErr: tt.updateErr}
+			tracker.commentFailure = func(body string) error {
+				if tt.failPhase != "" && strings.Contains(body, `"phase":"`+tt.failPhase+`"`) {
+					return errors.New("comment unavailable")
+				}
+				return nil
+			}
+			host := blockedCauseTestOrchestrator(tracker.dependencyAutoUnblockConnector)
+			host.connector = tracker
+			host.workflowMetrics = openValidatorMemoStore(t)
+			state := newState(host.cfg)
+			metadata := workflowLaneMetadata{BlockedRecovery: &workflowLaneBlockedRecoveryMetadata{Owner: "human", Cause: spendProgressReason}}
+			if err := host.updateIssueStateByIDStrictWithMetadata(t.Context(), &state, issue.ID, issue, "Blocked", now, spendProgressReason, metadata); err == nil {
+				t.Fatal("expected publication or transition failure")
+			}
+			if len(tracker.updates) != tt.wantUpdates {
+				t.Fatalf("updates = %v, want %d", tracker.updates, tt.wantUpdates)
+			}
+			candidate := cloneIssue(tracker.stateIssues[0])
+			candidate.State = "Blocked"
+			candidate.StageUpdatedAt = timePointer(now.Add(time.Hour))
+			if got := host.trackerRecoveryParkHold(t.Context(), candidate); (got != "") != tt.wantHold {
+				t.Fatalf("hold = %q, wantHold = %t", got, tt.wantHold)
+			}
+		})
+	}
 }

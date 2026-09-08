@@ -515,8 +515,8 @@ func TestAutoPromoteParksIssueAfterRepeatedIdenticalMergeRevocations(t *testing.
 	if len(tracker.updates) != 1 || tracker.updates[0] != (autoPromoteTickUpdate{issueID: issue.ID, state: blockedStatusState}) {
 		t.Fatalf("updates = %#v, want Blocked transition", tracker.updates)
 	}
-	if len(tracker.comments) != 2 {
-		t.Fatalf("comments = %#v, want park marker and explanation", tracker.comments)
+	if len(tracker.comments) != 3 {
+		t.Fatalf("comments = %#v, want pending and applied park markers and explanation", tracker.comments)
 	}
 	for _, fragment := range []string{
 		"reason: merge_revocation_limit",
@@ -524,8 +524,8 @@ func TestAutoPromoteParksIssueAfterRepeatedIdenticalMergeRevocations(t *testing.
 		"consecutive_revocations: 3",
 		"human_action:",
 	} {
-		if !strings.Contains(tracker.comments[1].body, fragment) {
-			t.Fatalf("comment = %q, missing %q", tracker.comments[1].body, fragment)
+		if !strings.Contains(tracker.comments[2].body, fragment) {
+			t.Fatalf("comment = %q, missing %q", tracker.comments[2].body, fragment)
 		}
 	}
 	for _, fragment := range []string{

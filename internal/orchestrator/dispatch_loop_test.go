@@ -419,7 +419,7 @@ func TestHandleRunResultTripsDispatchLoopAfterFailures(t *testing.T) {
 	if blocked, ok := state.Blocked[issue.ID]; !ok || blocked.Reason != dispatchLoopDetectedReason {
 		t.Fatalf("Blocked[%q] = %#v, %v", issue.ID, blocked, ok)
 	}
-	if len(tracker.comments) != 2 || tracker.comments[1].body == "" {
+	if len(tracker.comments) != 3 || tracker.comments[2].body == "" {
 		t.Fatalf("comments = %#v, want loop-specific park comment", tracker.comments)
 	}
 }

@@ -182,7 +182,15 @@ func (o *Orchestrator) updateIssueStateByIDWithMetadataMode(
 	if err != nil {
 		return err
 	}
+	park := newTrackerRecoveryPark(targetState, metadata)
+	if err := o.publishTrackerRecoveryPark(ctx, issueID, park); err != nil {
+		return errors.Join(err, o.resolveLaneMutation(ctx, receipt, store.LaneMutationTrackerFailed, at, err))
+	}
 	if err := o.connector.UpdateIssueState(ctx, issueID, targetState); err != nil {
+		var parkErr error
+		if errors.Is(err, connector.ErrStateUpdateBlocked) {
+			parkErr = o.finishTrackerRecoveryPark(ctx, issueID, park, "cancelled")
+		}
 		if errors.Is(err, connector.ErrStateUpdateBlocked) && !strict {
 			if receiptErr := o.resolveLaneMutation(ctx, receipt, store.LaneMutationTrackerBlocked, at, err); receiptErr != nil {
 				return receiptErr
@@ -190,9 +198,9 @@ func (o *Orchestrator) updateIssueStateByIDWithMetadataMode(
 			if o.logger != nil {
 				o.logger.Debug("skip blocked issue state update", "issue_id", issueID, "target_state", targetState, "error", err)
 			}
-			return nil
+			return parkErr
 		}
-		return errors.Join(err, o.resolveLaneMutation(ctx, receipt, store.LaneMutationTrackerFailed, at, err))
+		return errors.Join(err, parkErr, o.resolveLaneMutation(ctx, receipt, store.LaneMutationTrackerFailed, at, err))
 	}
 	transitionAt := at
 	if normalizeState(issue.State) != normalizeState(targetState) {
@@ -225,7 +233,7 @@ func (o *Orchestrator) updateIssueStateByIDWithMetadataMode(
 		issue.ID = issueID
 	}
 	o.recordLaneTransition(ctx, issue, targetState, at, reason, metadata)
-	o.publishTrackerRecoveryPark(ctx, issueID, targetState, metadata)
+	receiptErr = errors.Join(receiptErr, o.finishTrackerRecoveryPark(ctx, issueID, park, "applied"))
 	if normalizeState(targetState) == normalizeState(autoPromoteReworkState) && normalizeState(issue.State) != normalizeState(targetState) {
 		o.captureReworkLesson(issue, at, reason, metadata.LessonEvidence)
 	}

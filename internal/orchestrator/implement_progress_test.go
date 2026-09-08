@@ -755,7 +755,7 @@ func TestHandleRunResultClassifiesImplementWorkerProgress(t *testing.T) {
 				}
 				wantComments := 1
 				if tt.wantBlockReason == noProgressLimitReason || tt.wantBlockReason == dispatchLoopDetectedReason || tt.wantBlockReason == "workpad_blocked_unactioned" {
-					wantComments = 2
+					wantComments = 3
 				}
 				if len(tracker.comments) != wantComments || !strings.Contains(tracker.comments[wantComments-1].body, tt.wantComment) {
 					t.Fatalf("comments = %#v, want comment containing %q", tracker.comments, tt.wantComment)

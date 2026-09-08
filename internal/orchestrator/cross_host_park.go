@@ -2,6 +2,7 @@ package orchestrator
 
 import (
 	"context"
+	"crypto/rand"
 	"encoding/json"
 	"fmt"
 	"strings"
@@ -19,6 +20,8 @@ type trackerRecoveryPark struct {
 	Owner            string `json:"owner"`
 	Cause            string `json:"cause"`
 	CauseFingerprint string `json:"cause_fingerprint"`
+	OperationID      string `json:"operation_id,omitempty"`
+	Phase            string `json:"phase,omitempty"`
 }
 
 func protectedRecoveryPark(park workflowLaneBlockedRecoveryMetadata) bool {
@@ -34,18 +37,50 @@ func protectedRecoveryPark(park workflowLaneBlockedRecoveryMetadata) bool {
 	}
 }
 
-func (o *Orchestrator) publishTrackerRecoveryPark(ctx context.Context, issueID, targetState string, metadata workflowLaneMetadata) {
+func newTrackerRecoveryPark(targetState string, metadata workflowLaneMetadata) *trackerRecoveryPark {
 	park := metadata.BlockedRecovery
 	if normalizeState(targetState) != normalizeState(blockedStatusState) || park == nil || !protectedRecoveryPark(*park) {
-		return
+		return nil
 	}
-	data, err := json.Marshal(trackerRecoveryPark{Schema: 1, Owner: park.Owner, Cause: park.Cause, CauseFingerprint: park.CauseFingerprint})
-	if err == nil {
-		err = o.connector.CreateComment(ctx, issueID, trackerRecoveryParkPrefix+string(data)+"\n```\n\nDependency reconciliation must preserve this recovery park.")
+	return &trackerRecoveryPark{Schema: 1, Owner: park.Owner, Cause: park.Cause, CauseFingerprint: park.CauseFingerprint, OperationID: rand.Text(), Phase: "pending"}
+}
+
+func (o *Orchestrator) publishTrackerRecoveryPark(ctx context.Context, issueID string, park *trackerRecoveryPark) error {
+	if park == nil {
+		return nil
 	}
-	if err != nil && o.logger != nil {
-		o.logger.Warn("publish tracker recovery park failed", "issue_id", issueID, "error", err)
+	data, err := json.Marshal(park)
+	if err != nil {
+		return fmt.Errorf("encode tracker recovery park: %w", err)
 	}
+	if err := o.connector.CreateComment(ctx, issueID, trackerRecoveryParkPrefix+string(data)+"\n```\n\nDependency reconciliation must preserve this recovery park."); err != nil {
+		return fmt.Errorf("publish tracker recovery park: %w", err)
+	}
+	return nil
+}
+
+func (o *Orchestrator) finishTrackerRecoveryPark(ctx context.Context, issueID string, park *trackerRecoveryPark, phase string) error {
+	if park == nil {
+		return nil
+	}
+	park.Phase = phase
+	return o.publishTrackerRecoveryPark(ctx, issueID, park)
+}
+
+func parseTrackerRecoveryPark(body string) (trackerRecoveryPark, bool) {
+	raw, recognized := strings.CutPrefix(strings.TrimSpace(body), trackerRecoveryParkPrefix)
+	data, _, complete := strings.Cut(raw, "\n```")
+	var park trackerRecoveryPark
+	valid := recognized && complete && json.Unmarshal([]byte(data), &park) == nil && park.Schema == 1
+	return park, valid
+}
+
+func (o *Orchestrator) trackerRecoveryParkAuthorAuthorized(comment connector.IssueComment) bool {
+	if comment.AuthorAuthorized {
+		return true
+	}
+	identity, ok := o.connector.(connector.InstanceIdentifier)
+	return ok && strings.TrimSpace(identity.InstanceLogin()) != "" && strings.EqualFold(strings.TrimSpace(comment.AuthorLogin), strings.TrimSpace(identity.InstanceLogin()))
 }
 
 func (o *Orchestrator) trackerRecoveryParkHold(ctx context.Context, issue connector.Issue) string {
@@ -57,18 +92,33 @@ func (o *Orchestrator) trackerRecoveryParkHold(ctx context.Context, issue connec
 			return "tracker_recovery_park_unavailable"
 		}
 	}
+	settled := map[string]bool{}
 	for _, comment := range comments {
-		if !comment.AuthorAuthorized {
+		park, valid := parseTrackerRecoveryPark(comment.Body)
+		if valid && park.OperationID != "" && (park.Phase == "applied" || park.Phase == "cancelled") && o.trackerRecoveryParkAuthorAuthorized(comment) {
+			settled[park.OperationID] = true
+		}
+	}
+	for _, comment := range comments {
+		if !o.trackerRecoveryParkAuthorAuthorized(comment) {
+			continue
+		}
+		park, valid := parseTrackerRecoveryPark(comment.Body)
+		if valid && park.Phase == "pending" {
+			if !settled[park.OperationID] {
+				return "tracker_recovery_park"
+			}
+			continue
+		}
+		if valid && park.Phase == "cancelled" {
 			continue
 		}
 		if comment.CreatedAt != nil && !blockedEntryMatchesCurrent(issue, *comment.CreatedAt) {
 			continue
 		}
 		body := strings.TrimSpace(comment.Body)
-		if raw, ok := strings.CutPrefix(body, trackerRecoveryParkPrefix); ok {
-			data, _, complete := strings.Cut(raw, "\n```")
-			var park trackerRecoveryPark
-			if !complete || json.Unmarshal([]byte(data), &park) != nil || park.Schema != 1 {
+		if strings.HasPrefix(body, trackerRecoveryParkPrefix) {
+			if !valid {
 				return "tracker_recovery_park_unavailable"
 			}
 			if protectedRecoveryPark(workflowLaneBlockedRecoveryMetadata{Owner: park.Owner, Cause: park.Cause}) {
@@ -78,16 +128,16 @@ func (o *Orchestrator) trackerRecoveryParkHold(ctx context.Context, issue connec
 		if !strings.HasPrefix(body, "Routed this issue to Blocked") {
 			continue
 		}
-		var park workflowLaneBlockedRecoveryMetadata
+		var legacyPark workflowLaneBlockedRecoveryMetadata
 		for line := range strings.SplitSeq(body, "\n") {
 			if value, ok := strings.CutPrefix(strings.TrimSpace(line), "- reason: "); ok {
-				park.Cause = strings.TrimSpace(value)
+				legacyPark.Cause = strings.TrimSpace(value)
 			}
 			if value, ok := strings.CutPrefix(strings.TrimSpace(line), "- owner: "); ok {
-				park.Owner = strings.TrimSpace(value)
+				legacyPark.Owner = strings.TrimSpace(value)
 			}
 		}
-		if protectedRecoveryPark(park) {
+		if protectedRecoveryPark(legacyPark) {
 			return "tracker_recovery_park"
 		}
 	}

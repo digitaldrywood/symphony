@@ -178,7 +178,7 @@ func TestHandleRunResultParksBudgetProjectionFailureWithoutRetry(t *testing.T) {
 	if len(tracker.updates) != 1 || tracker.updates[0].state != blockedStatusState {
 		t.Fatalf("state updates = %#v, want one Blocked transition", tracker.updates)
 	}
-	if len(tracker.comments) != 2 || !strings.Contains(tracker.comments[1].body, "40.250000") || !strings.Contains(tracker.comments[1].body, "10.000000") || !strings.Contains(tracker.comments[1].body, "historical") {
+	if len(tracker.comments) != 3 || !strings.Contains(tracker.comments[2].body, "40.250000") || !strings.Contains(tracker.comments[2].body, "10.000000") || !strings.Contains(tracker.comments[2].body, "historical") {
 		t.Fatalf("comments = %#v, want observed and projected cost", tracker.comments)
 	}
 	for _, want := range []string{"worker_budget_projection_ceiling_tripped", "estimate_source=historical"} {

@@ -32,6 +32,8 @@ GOSEC_BINARY ?= tmp/gosec-$(GOSEC_VERSION)-deterministic
 GOSEC_PATCH ?= scripts/gosec-v2.28.0-deterministic.patch
 GOSEC_DETERMINISM_RUNS ?= 8
 GO_TEST := env -u DETENT_API_TOKEN go test
+HUB_RACE_TIMEOUT ?= 15m
+HUB_RACE_PARALLEL ?= 2
 GOLANGCI_LINT_VERSION_FILE := .golangci-version
 GOLANGCI_LINT_VERSION := $(shell cat $(GOLANGCI_LINT_VERSION_FILE))
 GOLANGCI_LINT_TOOLCHAIN := $(shell awk '/^toolchain / { print $$2 }' go.mod)
@@ -46,7 +48,7 @@ GOSEC_EXCLUDE_DIRS ?= .detent
 GOSEC_EXCLUDE_DIR_FLAGS := $(addprefix -exclude-dir=,$(GOSEC_EXCLUDE_DIRS))
 CHECK_LOCK_WAIT ?= 15m
 
-.PHONY: dev generate check-migrations check-generated css css-watch build test test-race test-cover test-cover-packages soak visual-e2e visual-e2e-update lint vet gosec-build security-gosec-determinism security check check-unlocked modernize-check nilaway-audit release-snapshot sqlc db-migrate setup clean help
+.PHONY: dev generate check-migrations check-generated css css-watch build test test-race test-race-hub test-cover test-cover-packages soak visual-e2e visual-e2e-update lint vet gosec-build security-gosec-determinism security check check-unlocked modernize-check nilaway-audit release-snapshot sqlc db-migrate setup clean help
 
 dev:
 	@mkdir -p tmp
@@ -97,8 +99,13 @@ build: generate
 test:
 	$(GO_TEST) ./...
 
-test-race:
-	$(GO_TEST) -race ./...
+test-race: test-race-hub
+	@packages="$$(go list ./...)" && \
+	packages="$$(printf '%s\n' "$$packages" | awk '$$0 != "github.com/digitaldrywood/detent/internal/hubserver"')" && \
+	$(GO_TEST) -race $$packages
+
+test-race-hub:
+	env -u DETENT_API_TOKEN go run ./tools/testgate -race -parallel $(HUB_RACE_PARALLEL) -timeout $(HUB_RACE_TIMEOUT) -output tmp/hub-race-evidence ./internal/hubserver
 
 test-cover:
 	@mkdir -p tmp
@@ -197,6 +204,7 @@ help:
 	@echo "  build        Build $(BINARY_NAME)"
 	@echo "  test         Run Go tests"
 	@echo "  test-race    Run Go tests with the race detector"
+	@echo "  test-race-hub  Run the complete Hub race suite with timing evidence"
 	@echo "  test-cover   Run Go coverage with a $(COVERAGE_THRESHOLD)% minimum"
 	@echo "  test-cover-packages  Run per-package coverage floor checks"
 	@echo "  soak         Run opt-in orchestrator incident and adversarial soak tests"

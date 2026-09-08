@@ -76,7 +76,16 @@ jobs:
         run: go test ./...
 
       - name: Race test
-        run: go test -race ./...
+        run: make test-race
+
+      - name: Upload Hub race evidence
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: hub-race-evidence
+          path: tmp/hub-race-evidence
+          if-no-files-found: error
+          retention-days: 14
 
   test-cover:
     name: Test Coverage

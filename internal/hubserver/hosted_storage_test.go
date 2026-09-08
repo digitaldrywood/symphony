@@ -24,6 +24,8 @@ func hostedStorageConfig(t *testing.T) Config {
 
 func openHostedStorage(t *testing.T, cfg Config) *database {
 	t.Helper()
+	started := time.Now()
+	defer func() { t.Logf("hub_fixture_open_seconds=%.6f", time.Since(started).Seconds()) }()
 	db, err := openDatabase(t.Context(), cfg.normalized())
 	if err != nil {
 		t.Fatal(err)

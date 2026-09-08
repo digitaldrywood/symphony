@@ -119,7 +119,8 @@ func TestMakeTestTargetsIsolateAPIToken(t *testing.T) {
 		want string
 	}{
 		{name: "test", want: "$(GO_TEST) ./..."},
-		{name: "test-race", want: "$(GO_TEST) -race ./..."},
+		{name: "test-race", want: "$(GO_TEST) -race $$packages"},
+		{name: "test-race-hub", want: "env -u DETENT_API_TOKEN go run ./tools/testgate -race"},
 		{name: "test-cover", want: "$(GO_TEST) -coverprofile=$(COVERPROFILE_RAW) ./..."},
 	}
 	for _, tt := range tests {

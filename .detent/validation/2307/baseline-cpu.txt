@@ -1,0 +1,23 @@
+File: hub-baseline.test
+Build ID: 1e5b52c7956e688e76a07ef260064a378717cb10
+Type: cpu
+Time: 2026-09-08 06:05:05 UTC
+Duration: 203.17s, Total samples = 329.09s (161.98%)
+Active filters:
+   focus=hubserver.runMigrations
+Showing nodes accounting for 0.10s, 0.03% of 329.09s total
+Dropped 972 nodes (cum <= 1.65s)
+Showing top 12 nodes out of 278
+      flat  flat%   sum%        cum   cum%
+         0     0%     0%    159.83s 48.57%  github.com/digitaldrywood/detent/internal/hubserver.openDatabase
+         0     0%     0%    159.83s 48.57%  github.com/digitaldrywood/detent/internal/hubserver.runMigrations
+     0.06s 0.018% 0.018%    159.26s 48.39%  database/sql.withLock
+         0     0% 0.018%    159.22s 48.38%  testing.tRunner
+         0     0% 0.018%    157.82s 47.96%  github.com/pressly/goose/v3.beginTx
+         0     0% 0.018%    157.73s 47.93%  github.com/pressly/goose/v3.(*Provider).Up
+         0     0% 0.018%    157.60s 47.89%  github.com/pressly/goose/v3.(*Provider).up
+     0.01s 0.003% 0.021%    157.57s 47.88%  github.com/pressly/goose/v3.(*Provider).runMigrations
+         0     0% 0.021%    157.45s 47.84%  github.com/pressly/goose/v3.(*Provider).runIndividually
+     0.01s 0.003% 0.024%    155.67s 47.30%  database/sql.(*Tx).ExecContext
+     0.02s 0.0061%  0.03%    155.62s 47.29%  database/sql.(*DB).execDC
+         0     0%  0.03%    155.59s 47.28%  github.com/pressly/goose/v3.(*Provider).runIndividually.func1

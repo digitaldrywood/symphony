@@ -1,0 +1,336 @@
+Source: https://github.com/digitaldrywood/detent/actions/runs/34189491649/job/101948017992
+Head: 3ac09f851bfc1c491be4c94e7ab32e7c07275f2b
+Excerpt: active migration stacks and one representative parallel-slot waiter.
+
+panic: test timed out after 10m0s
+	running tests:
+		TestHostedDatabaseRejectsInvalidBinding/organization (0s)
+		TestHostedMetadataFailsWithoutExposingErrors/closed_database (4s)
+		TestHostedMetadataFailsWithoutExposingErrors/invalid_activity (5s)
+		TestHostedMetadataFailsWithoutExposingErrors/local_database (3s)
+
+
+goroutine 86201 [sync.WaitGroup.Wait]:
+sync.runtime_SemacquireWaitGroup(0xc001ce6840?, 0x40?)
+	/opt/hostedtoolcache/go/1.26.6/x64/src/runtime/sema.go:114 +0x2e
+sync.(*WaitGroup).Wait(0xc0026b8508)
+	/opt/hostedtoolcache/go/1.26.6/x64/src/sync/waitgroup.go:206 +0xc5
+golang.org/x/sync/errgroup.(*Group).Wait(0xc0026b8500)
+	/home/runner/go/pkg/mod/golang.org/x/sync@v0.22.0/errgroup/errgroup.go:56 +0x35
+github.com/pressly/goose/v3/internal/sqlparser.ParseAllFromFS({0x1ce9320, 0xc002c70320}, {0xc002a0ecfb, 0x19}, 0x0)
+	/home/runner/go/pkg/mod/github.com/pressly/goose/v3@v3.27.1/internal/sqlparser/parse.go:40 +0x2af
+github.com/pressly/goose/v3.(*Provider).prepareMigration(0xc000b08380, {0x1ce9320, 0xc002c70320}, 0xc0014195f0, 0x1)
+	/home/runner/go/pkg/mod/github.com/pressly/goose/v3@v3.27.1/provider_run.go:60 +0x46f
+github.com/pressly/goose/v3.(*Provider).runMigrations(0xc000b08380, {0x1cef350, 0xc000ab84b0}, 0xc002949e40, {0xc0022b8b00, 0x14, 0x0?}, {0x1b2663a, 0x2}, 0x0)
+	/home/runner/go/pkg/mod/github.com/pressly/goose/v3@v3.27.1/provider_run.go:128 +0x367
+github.com/pressly/goose/v3.(*Provider).up(0xc000b08380, {0x1cef350, 0xc000ab84b0}, 0x0, 0x7fffffffffffffff)
+	/home/runner/go/pkg/mod/github.com/pressly/goose/v3@v3.27.1/provider.go:409 +0xf47
+github.com/pressly/goose/v3.(*Provider).Up(0xc000b08380, {0x1cef350, 0xc000ab84b0})
+	/home/runner/go/pkg/mod/github.com/pressly/goose/v3@v3.27.1/provider.go:252 +0x72
+github.com/digitaldrywood/detent/internal/hubserver.runMigrations({0x1cef350, 0xc000ab84b0}, 0xc0016288f0, 0xc0036d0dc0)
+	/home/runner/work/detent/detent/internal/hubserver/migrate.go:51 +0x91e
+github.com/digitaldrywood/detent/internal/hubserver.openDatabase({_, _}, {0xc000dc6000, 0x0, 0x0, {0x0, 0x0}, {0xc0036aa4b0, 0x4d}, {0x1b34745, ...}, ...})
+	/home/runner/work/detent/detent/internal/hubserver/database.go:68 +0x8fc
+github.com/digitaldrywood/detent/internal/hubserver.TestHostedDatabaseRejectsInvalidBinding.func1(0xc000874908)
+	/home/runner/work/detent/detent/internal/hubserver/hosted_storage_test.go:182 +0x427
+testing.tRunner(0xc000874908, 0xc00141b290)
+	/opt/hostedtoolcache/go/1.26.6/x64/src/testing/testing.go:2036 +0x21d
+created by testing.(*T).Run in goroutine 160
+	/opt/hostedtoolcache/go/1.26.6/x64/src/testing/testing.go:2101 +0xb13
+
+
+goroutine 82649 [runnable]:
+sync.(*Mutex).Unlock(0x25e6240?)
+	/opt/hostedtoolcache/go/1.26.6/x64/src/sync/mutex.go:64 +0x25
+modernc.org/libc.Xfree(0x4cfd11?, 0x7f050f3ad8a0)
+	/home/runner/go/pkg/mod/modernc.org/libc@v1.72.3/mem_musl.go:100 +0x91
+modernc.org/sqlite/lib._sqlite3MemFree(0xc00014c2c0, 0x7f050f3ad8a8)
+	/home/runner/go/pkg/mod/modernc.org/sqlite@v1.51.0/lib/sqlite_linux_amd64.go:12911 +0x38
+modernc.org/sqlite/lib.Xsqlite3_free(0xc00014c2c0, 0x7f050f3ad8a8)
+	/home/runner/go/pkg/mod/modernc.org/sqlite@v1.51.0/lib/sqlite_linux_amd64.go:14138 +0x3e2
+modernc.org/sqlite/lib._sqlite3DbNNFreeNN(0xc00014c2c0, 0x7f04c4969028, 0x7f050f3ad8a8)
+	/home/runner/go/pkg/mod/modernc.org/sqlite@v1.51.0/lib/sqlite_linux_amd64.go:14206 +0x27a
+modernc.org/sqlite/lib._sqlite3SrcListDelete(0xc00014c2c0, 0x7f04c4969028, 0x7f049e172ea8)
+	/home/runner/go/pkg/mod/modernc.org/sqlite@v1.51.0/lib/sqlite_linux_amd64.go:98246 +0x154
+modernc.org/sqlite/lib._clearSelect(0xc00014c2c0, 0x7f04c4969028, 0x7f049eb026a8, 0x1)
+	/home/runner/go/pkg/mod/modernc.org/sqlite@v1.51.0/lib/sqlite_linux_amd64.go:115727 +0x166
+modernc.org/sqlite/lib._sqlite3SelectDelete(...)
+	/home/runner/go/pkg/mod/modernc.org/sqlite@v1.51.0/lib/sqlite_linux_amd64.go:115825
+modernc.org/sqlite/lib._sqlite3ExprDeleteNN(0xc00014c2c0, 0x7f04c4969028, 0x7f049e17aaa8)
+	/home/runner/go/pkg/mod/modernc.org/sqlite@v1.51.0/lib/sqlite_linux_amd64.go:79818 +0x20c
+modernc.org/sqlite/lib._sqlite3ExprDelete(...)
+	/home/runner/go/pkg/mod/modernc.org/sqlite@v1.51.0/lib/sqlite_linux_amd64.go:79845
+modernc.org/sqlite/lib._sqlite3DeleteTrigger(0xc00014c2c0, 0x7f04c4969028, 0x7f049dfd3c28)
+	/home/runner/go/pkg/mod/modernc.org/sqlite@v1.51.0/lib/sqlite_linux_amd64.go:125350 +0x208
+modernc.org/sqlite/lib._renameParseCleanup(0xc00014c2c0, 0x7f04ad36a820)
+	/home/runner/go/pkg/mod/modernc.org/sqlite@v1.51.0/lib/sqlite_linux_amd64.go:87937 +0x2f2
+modernc.org/sqlite/lib._renameTableTest(0xc00014c2c0, 0x7f04b4019048, 0x0?, 0x7f04b4019078)
+	/home/runner/go/pkg/mod/modernc.org/sqlite@v1.51.0/lib/sqlite_linux_amd64.go:88617 +0xd5e
+modernc.org/sqlite/lib._sqlite3VdbeExec(0xc00014c2c0, 0x7f04b4015938)
+	/home/runner/go/pkg/mod/modernc.org/sqlite@v1.51.0/lib/sqlite_linux_amd64.go:71488 +0x38ec3
+modernc.org/sqlite/lib._sqlite3Step(0xc00014c2c0, 0x7f04b4015938)
+	/home/runner/go/pkg/mod/modernc.org/sqlite@v1.51.0/lib/sqlite_linux_amd64.go:61696 +0x1ef
+modernc.org/sqlite/lib.Xsqlite3_step(0xc00014c2c0, 0x7f04b4015938)
+	/home/runner/go/pkg/mod/modernc.org/sqlite@v1.51.0/lib/sqlite_linux_amd64.go:61759 +0x1cb
+modernc.org/sqlite.(*conn).step(0xc0023143c0, 0x7f04b4015938)
+	/home/runner/go/pkg/mod/modernc.org/sqlite@v1.51.0/conn.go:351 +0x4e
+modernc.org/sqlite.(*stmt).exec.func2(0xc00054e450, {0x25e5940, 0x0, 0x0}, 0xc001ccba30, 0xc0018c802c, {0x1cef350, 0xc0012c8410})
+	/home/runner/go/pkg/mod/modernc.org/sqlite@v1.51.0/stmt.go:145 +0x2af
+modernc.org/sqlite.(*stmt).exec(0xc00054e450, {0x1cef350, 0xc0012c8410}, {0x25e5940, 0x0, 0x0})
+	/home/runner/go/pkg/mod/modernc.org/sqlite@v1.51.0/stmt.go:175 +0x29c
+modernc.org/sqlite.(*conn).exec(0xc0023143c0, {0x1cef350, 0xc0012c8410}, {0xc002563c70, 0x47}, {0x25e5940, 0x0, 0x0})
+	/home/runner/go/pkg/mod/modernc.org/sqlite@v1.51.0/conn.go:951 +0x17a
+modernc.org/sqlite.(*conn).ExecContext(0xc0023143c0, {0x1cef350, 0xc0012c8410}, {0xc002563c70, 0x47}, {0x25e5940, 0x0, 0x0})
+	/home/runner/go/pkg/mod/modernc.org/sqlite@v1.51.0/conn.go:1208 +0x95
+database/sql.ctxDriverExec({0x1cef350, 0xc0012c8410}, {0x7f050f5d3c90, 0xc0023143c0}, {0x0, 0x0}, {0xc002563c70, 0x47}, {0x25e5940, 0x0, ...})
+	/opt/hostedtoolcache/go/1.26.6/x64/src/database/sql/ctxutil.go:31 +0xeb
+database/sql.(*DB).execDC.func2()
+	/opt/hostedtoolcache/go/1.26.6/x64/src/database/sql/sql.go:1713 +0x266
+database/sql.withLock({0x1cec438, 0xc00276a900}, 0xc001ccc068)
+	/opt/hostedtoolcache/go/1.26.6/x64/src/database/sql/sql.go:3572 +0xa3
+database/sql.(*DB).execDC(0x25adb40?, {0x1cef350, 0xc0012c8410}, 0xc00276a900, 0xc00279a100, {0xc002563c70, 0x47}, {0x0, 0x0, 0x0})
+	/opt/hostedtoolcache/go/1.26.6/x64/src/database/sql/sql.go:1708 +0x405
+database/sql.(*Tx).ExecContext(0xc0027a2280, {0x1cef350, 0xc0012c8410}, {0xc002563c70, 0x47}, {0x0, 0x0, 0x0})
+	/opt/hostedtoolcache/go/1.26.6/x64/src/database/sql/sql.go:2516 +0x129
+github.com/pressly/goose/v3.(*Provider).runSQL(0xc000b082a0, {0x1cef350, 0xc0012c8410}, {0x1cee690, 0xc0027a2280}, 0xc001871d40, 0x1)
+	/home/runner/go/pkg/mod/github.com/pressly/goose/v3@v3.27.1/provider_run.go:530 +0x625
+github.com/pressly/goose/v3.(*Provider).runMigration(0xc000b082a0, {0x1cef350, 0xc0012c8410}, {0x1cee690, 0xc0027a2280}, 0xc001871d40, 0x1)
+	/home/runner/go/pkg/mod/github.com/pressly/goose/v3@v3.27.1/provider_run.go:471 +0x12c
+github.com/pressly/goose/v3.(*Provider).runIndividually.func1(0xc0027a2280)
+	/home/runner/go/pkg/mod/github.com/pressly/goose/v3@v3.27.1/provider_run.go:215 +0x86
+github.com/pressly/goose/v3.beginTx({0x1cef350, 0xc0012c8410}, 0xc0026b9840, 0xc001ccc670)
+	/home/runner/go/pkg/mod/github.com/pressly/goose/v3@v3.27.1/provider_run.go:271 +0xfc
+github.com/pressly/goose/v3.(*Provider).runIndividually(0xc000b082a0, {0x1cef350, 0xc0012c8410}, 0xc0026b9840, 0xc001871d40, 0x1)
+	/home/runner/go/pkg/mod/github.com/pressly/goose/v3@v3.27.1/provider_run.go:214 +0x4a5
+github.com/pressly/goose/v3.(*Provider).runMigrations(0xc000b082a0, {0x1cef350, 0xc0012c8410}, 0xc0026b9840, {0xc001155800, 0x14, 0x0?}, {0x1b2663a, 0x2}, 0x0)
+	/home/runner/go/pkg/mod/github.com/pressly/goose/v3@v3.27.1/provider_run.go:158 +0x102d
+github.com/pressly/goose/v3.(*Provider).up(0xc000b082a0, {0x1cef350, 0xc0012c8410}, 0x0, 0x7fffffffffffffff)
+	/home/runner/go/pkg/mod/github.com/pressly/goose/v3@v3.27.1/provider.go:409 +0xf47
+github.com/pressly/goose/v3.(*Provider).Up(0xc000b082a0, {0x1cef350, 0xc0012c8410})
+	/home/runner/go/pkg/mod/github.com/pressly/goose/v3@v3.27.1/provider.go:252 +0x72
+github.com/digitaldrywood/detent/internal/hubserver.runMigrations({0x1cef350, 0xc0012c8410}, 0xc000c93e10, 0xc00293dc40)
+	/home/runner/work/detent/detent/internal/hubserver/migrate.go:51 +0x91e
+github.com/digitaldrywood/detent/internal/hubserver.openDatabase({_, _}, {0x0, 0x0, 0x0, {0x0, 0x0}, {0xc001b25560, 0x54}, {0x1b34745, ...}, ...})
+	/home/runner/work/detent/detent/internal/hubserver/database.go:68 +0x8fc
+github.com/digitaldrywood/detent/internal/hubserver.openHostedStorage(_, {0x0, 0x0, 0x0, {0x0, 0x0}, {0xc001b25560, 0x54}, {0x0, 0x0}, ...})
+	/home/runner/work/detent/detent/internal/hubserver/hosted_storage_test.go:27 +0x1db
+github.com/digitaldrywood/detent/internal/hubserver.TestHostedMetadataFailsWithoutExposingErrors.func4(0xc0003ff8c8)
+	/home/runner/work/detent/detent/internal/hubserver/hosted_storage_test.go:305 +0x1ad
+testing.tRunner(0xc0003ff8c8, 0xc00132c840)
+	/opt/hostedtoolcache/go/1.26.6/x64/src/testing/testing.go:2036 +0x21d
+created by testing.(*T).Run in goroutine 163
+	/opt/hostedtoolcache/go/1.26.6/x64/src/testing/testing.go:2101 +0xb13
+
+
+goroutine 82658 [sync.Mutex.Lock]:
+internal/sync.runtime_SemacquireMutex(0x5?, 0xc0?, 0x0?)
+	/opt/hostedtoolcache/go/1.26.6/x64/src/runtime/sema.go:95 +0x25
+internal/sync.(*Mutex).lockSlow(0x25e6240)
+	/opt/hostedtoolcache/go/1.26.6/x64/src/internal/sync/mutex.go:149 +0x1f3
+internal/sync.(*Mutex).Lock(0x25e6240)
+	/opt/hostedtoolcache/go/1.26.6/x64/src/internal/sync/mutex.go:70 +0x45
+sync.(*Mutex).Lock(0x25c4ca0?)
+	/opt/hostedtoolcache/go/1.26.6/x64/src/sync/mutex.go:46 +0x15
+modernc.org/libc.Xfree(0x4cfd11?, 0x7f04ad3ef2a0)
+	/home/runner/go/pkg/mod/modernc.org/libc@v1.72.3/mem_musl.go:95 +0x31
+modernc.org/sqlite/lib._sqlite3MemFree(0xc0008c6000, 0x7f04ad3ef2a8)
+	/home/runner/go/pkg/mod/modernc.org/sqlite@v1.51.0/lib/sqlite_linux_amd64.go:12911 +0x38
+modernc.org/sqlite/lib.Xsqlite3_free(0xc0008c6000, 0x7f04ad3ef2a8)
+	/home/runner/go/pkg/mod/modernc.org/sqlite@v1.51.0/lib/sqlite_linux_amd64.go:14138 +0x3e2
+modernc.org/sqlite/lib._sqlite3DbNNFreeNN(0xc0008c6000, 0x7f04c4967828, 0x7f04ad3ef2a8)
+	/home/runner/go/pkg/mod/modernc.org/sqlite@v1.51.0/lib/sqlite_linux_amd64.go:14206 +0x27a
+modernc.org/sqlite/lib._sqlite3SrcListDelete(0xc0008c6000, 0x7f04c4967828, 0x7f04ad3ef2a8)
+	/home/runner/go/pkg/mod/modernc.org/sqlite@v1.51.0/lib/sqlite_linux_amd64.go:98278 +0x6d9
+modernc.org/sqlite/lib._clearSelect(0xc0008c6000, 0x7f04c4967828, 0x7f049ed1d928, 0x1)
+	/home/runner/go/pkg/mod/modernc.org/sqlite@v1.51.0/lib/sqlite_linux_amd64.go:115727 +0x166
+modernc.org/sqlite/lib._sqlite3SelectDelete(...)
+	/home/runner/go/pkg/mod/modernc.org/sqlite@v1.51.0/lib/sqlite_linux_amd64.go:115825
+modernc.org/sqlite/lib._sqlite3ExprDeleteNN(0xc0008c6000, 0x7f04c4967828, 0x7f049eb06228)
+	/home/runner/go/pkg/mod/modernc.org/sqlite@v1.51.0/lib/sqlite_linux_amd64.go:79818 +0x20c
+modernc.org/sqlite/lib._sqlite3ExprDelete(...)
+	/home/runner/go/pkg/mod/modernc.org/sqlite@v1.51.0/lib/sqlite_linux_amd64.go:79845
+modernc.org/sqlite/lib._sqlite3BeginTrigger(0xc0008c6000, 0x7f04c4962820, 0x7f049dde90c8, 0x7f049dde90e0, 0x21, 0x80, 0x0, 0x7f049e190b28, 0x7f049eb06228, 0x0, ...)
+	/home/runner/go/pkg/mod/modernc.org/sqlite@v1.51.0/lib/sqlite_linux_amd64.go:125027 +0x1648
+modernc.org/sqlite/lib._yy_reduce(0xc0008c6000, 0x7f049dde9028, 0x105, 0x0?, {0xdb?, 0x2543940?}, 0x7f04c4962820)
+	/home/runner/go/pkg/mod/modernc.org/sqlite@v1.51.0/lib/sqlite_linux_amd64.go:157300 +0x15145
+modernc.org/sqlite/lib._sqlite3Parser(0xc0008c6000, 0x7f049dde9028, 0x5, {0xc001bc7690?, 0x1bc7720?})
+	/home/runner/go/pkg/mod/modernc.org/sqlite@v1.51.0/lib/sqlite_linux_amd64.go:157790 +0x1fd
+modernc.org/sqlite/lib._sqlite3RunParser(0xc0008c6000, 0x7f04c4962820, 0x7f049e375220)
+	/home/runner/go/pkg/mod/modernc.org/sqlite@v1.51.0/lib/sqlite_linux_amd64.go:160472 +0xfaa
+modernc.org/sqlite/lib._sqlite3Prepare(0xc0008c6000, 0x7f04c4967828, 0x7f049e375220, 0xffffffff, 0x80, 0x0, 0x7f050f3af670, 0x7f050f3aae80)
+	/home/runner/go/pkg/mod/modernc.org/sqlite@v1.51.0/lib/sqlite_linux_amd64.go:115375 +0xb92
+modernc.org/sqlite/lib._sqlite3LockAndPrepare(0xc0008c6000, 0x7f04c4967828, 0x7f049e375220, 0xffffffff, 0x80, 0x0, 0x7f050f3af670, 0x7f050f3aae80)
+	/home/runner/go/pkg/mod/modernc.org/sqlite@v1.51.0/lib/sqlite_linux_amd64.go:115434 +0x2b1
+modernc.org/sqlite/lib.Xsqlite3_prepare_v2(...)
+	/home/runner/go/pkg/mod/modernc.org/sqlite@v1.51.0/lib/sqlite_linux_amd64.go:115521
+modernc.org/sqlite.(*conn).prepareV2(0xc00146aba0, 0xc001bc7a80)
+	/home/runner/go/pkg/mod/modernc.org/sqlite@v1.51.0/conn.go:628 +0x2d9
+modernc.org/sqlite.newStmt(0xc00146aba0, {0xc00047e300, 0xb7})
+	/home/runner/go/pkg/mod/modernc.org/sqlite@v1.51.0/stmt.go:33 +0xff
+modernc.org/sqlite.(*conn).prepare(...)
+	/home/runner/go/pkg/mod/modernc.org/sqlite@v1.51.0/conn.go:966
+modernc.org/sqlite.(*conn).exec(0xc00146aba0, {0x1cef350, 0xc0011f6190}, {0xc00047e300, 0xb7}, {0x25e5940, 0x0, 0x0})
+	/home/runner/go/pkg/mod/modernc.org/sqlite@v1.51.0/conn.go:940 +0x93
+modernc.org/sqlite.(*conn).ExecContext(0xc00146aba0, {0x1cef350, 0xc0011f6190}, {0xc00047e300, 0xb7}, {0x25e5940, 0x0, 0x0})
+	/home/runner/go/pkg/mod/modernc.org/sqlite@v1.51.0/conn.go:1208 +0x95
+database/sql.ctxDriverExec({0x1cef350, 0xc0011f6190}, {0x7f050f5d3c90, 0xc00146aba0}, {0x0, 0x0}, {0xc00047e300, 0xb7}, {0x25e5940, 0x0, ...})
+	/opt/hostedtoolcache/go/1.26.6/x64/src/database/sql/ctxutil.go:31 +0xeb
+database/sql.(*DB).execDC.func2()
+	/opt/hostedtoolcache/go/1.26.6/x64/src/database/sql/sql.go:1713 +0x266
+database/sql.withLock({0x1cec438, 0xc002672400}, 0xc001bc8068)
+	/opt/hostedtoolcache/go/1.26.6/x64/src/database/sql/sql.go:3572 +0xa3
+database/sql.(*DB).execDC(0x25adb40?, {0x1cef350, 0xc0011f6190}, 0xc002672400, 0xc00279a080, {0xc00047e300, 0xb7}, {0x0, 0x0, 0x0})
+	/opt/hostedtoolcache/go/1.26.6/x64/src/database/sql/sql.go:1708 +0x405
+database/sql.(*Tx).ExecContext(0xc00295e080, {0x1cef350, 0xc0011f6190}, {0xc00047e300, 0xb7}, {0x0, 0x0, 0x0})
+	/opt/hostedtoolcache/go/1.26.6/x64/src/database/sql/sql.go:2516 +0x129
+github.com/pressly/goose/v3.(*Provider).runSQL(0xc000b080e0, {0x1cef350, 0xc0011f6190}, {0x1cee690, 0xc00295e080}, 0xc003811930, 0x1)
+	/home/runner/go/pkg/mod/github.com/pressly/goose/v3@v3.27.1/provider_run.go:530 +0x625
+github.com/pressly/goose/v3.(*Provider).runMigration(0xc000b080e0, {0x1cef350, 0xc0011f6190}, {0x1cee690, 0xc00295e080}, 0xc003811930, 0x1)
+	/home/runner/go/pkg/mod/github.com/pressly/goose/v3@v3.27.1/provider_run.go:471 +0x12c
+github.com/pressly/goose/v3.(*Provider).runIndividually.func1(0xc00295e080)
+	/home/runner/go/pkg/mod/github.com/pressly/goose/v3@v3.27.1/provider_run.go:215 +0x86
+github.com/pressly/goose/v3.beginTx({0x1cef350, 0xc0011f6190}, 0xc0026b8b40, 0xc001bc8670)
+	/home/runner/go/pkg/mod/github.com/pressly/goose/v3@v3.27.1/provider_run.go:271 +0xfc
+github.com/pressly/goose/v3.(*Provider).runIndividually(0xc000b080e0, {0x1cef350, 0xc0011f6190}, 0xc0026b8b40, 0xc003811930, 0x1)
+	/home/runner/go/pkg/mod/github.com/pressly/goose/v3@v3.27.1/provider_run.go:214 +0x4a5
+github.com/pressly/goose/v3.(*Provider).runMigrations(0xc000b080e0, {0x1cef350, 0xc0011f6190}, 0xc0026b8b40, {0xc0017c8b00, 0x14, 0x0?}, {0x1b2663a, 0x2}, 0x0)
+	/home/runner/go/pkg/mod/github.com/pressly/goose/v3@v3.27.1/provider_run.go:158 +0x102d
+github.com/pressly/goose/v3.(*Provider).up(0xc000b080e0, {0x1cef350, 0xc0011f6190}, 0x0, 0x7fffffffffffffff)
+	/home/runner/go/pkg/mod/github.com/pressly/goose/v3@v3.27.1/provider.go:409 +0xf47
+github.com/pressly/goose/v3.(*Provider).Up(0xc000b080e0, {0x1cef350, 0xc0011f6190})
+	/home/runner/go/pkg/mod/github.com/pressly/goose/v3@v3.27.1/provider.go:252 +0x72
+github.com/digitaldrywood/detent/internal/hubserver.runMigrations({0x1cef350, 0xc0011f6190}, 0xc0038108f0, 0xc00293d1c0)
+	/home/runner/work/detent/detent/internal/hubserver/migrate.go:51 +0x91e
+github.com/digitaldrywood/detent/internal/hubserver.openDatabase({_, _}, {0xc0019d80f0, 0x0, 0x0, {0x0, 0x0}, {0xc0026145a0, 0x56}, {0x1b34745, ...}, ...})
+	/home/runner/work/detent/detent/internal/hubserver/database.go:68 +0x8fc
+github.com/digitaldrywood/detent/internal/hubserver.openHostedStorage(_, {0xc0019d80f0, 0x0, 0x0, {0x0, 0x0}, {0xc0026145a0, 0x56}, {0x0, 0x0}, ...})
+	/home/runner/work/detent/detent/internal/hubserver/hosted_storage_test.go:27 +0x1db
+github.com/digitaldrywood/detent/internal/hubserver.TestHostedMetadataFailsWithoutExposingErrors.func4(0xc0009c1d48)
+	/home/runner/work/detent/detent/internal/hubserver/hosted_storage_test.go:305 +0x1ad
+testing.tRunner(0xc0009c1d48, 0xc000432570)
+	/opt/hostedtoolcache/go/1.26.6/x64/src/testing/testing.go:2036 +0x21d
+created by testing.(*T).Run in goroutine 163
+	/opt/hostedtoolcache/go/1.26.6/x64/src/testing/testing.go:2101 +0xb13
+
+
+goroutine 82608 [runnable]:
+internal/sync.runtime_SemacquireMutex(0x9da85d?, 0x40?, 0xc0026a6b40?)
+	/opt/hostedtoolcache/go/1.26.6/x64/src/runtime/sema.go:95 +0x25
+internal/sync.(*Mutex).lockSlow(0x25e6240)
+	/opt/hostedtoolcache/go/1.26.6/x64/src/internal/sync/mutex.go:149 +0x1f3
+internal/sync.(*Mutex).Lock(0x25e6240)
+	/opt/hostedtoolcache/go/1.26.6/x64/src/internal/sync/mutex.go:70 +0x45
+sync.(*Mutex).Lock(0x9da505?)
+	/opt/hostedtoolcache/go/1.26.6/x64/src/sync/mutex.go:46 +0x15
+modernc.org/libc.Xmalloc(0xc0003f80b0, 0x90)
+	/home/runner/go/pkg/mod/modernc.org/libc@v1.72.3/mem_musl.go:30 +0xf0
+modernc.org/sqlite/lib._sqlite3MemMalloc(0xc0003f80b0, 0x88)
+	/home/runner/go/pkg/mod/modernc.org/sqlite@v1.51.0/lib/sqlite_linux_amd64.go:12886 +0xc9
+modernc.org/sqlite/lib._sqlite3Malloc(0xc0003f80b0, 0x88)
+	/home/runner/go/pkg/mod/modernc.org/sqlite@v1.51.0/lib/sqlite_linux_amd64.go:14032 +0x322
+modernc.org/sqlite/lib._dbMallocRawFinish(0xc0003f80b0, 0x7f04c496dc28, 0x88)
+	/home/runner/go/pkg/mod/modernc.org/sqlite@v1.51.0/lib/sqlite_linux_amd64.go:14339 +0x36
+modernc.org/sqlite/lib._sqlite3DbMallocRawNN(0xc0003f80b0, 0x7f04c496dc28, 0x88)
+	/home/runner/go/pkg/mod/modernc.org/sqlite@v1.51.0/lib/sqlite_linux_amd64.go:14391 +0x98b
+modernc.org/sqlite/lib._sqlite3ExprListAppendNew(0xc0003f80b0, 0x7f04c496dc28, 0x7f049eb0c028)
+	/home/runner/go/pkg/mod/modernc.org/sqlite@v1.51.0/lib/sqlite_linux_amd64.go:80549 +0x3f
+modernc.org/sqlite/lib._sqlite3ExprListAppend(0xc0003f80b0, 0x7f04c496d820, 0x0, 0x7f049eb0c028)
+	/home/runner/go/pkg/mod/modernc.org/sqlite@v1.51.0/lib/sqlite_linux_amd64.go:80589 +0x35f
+modernc.org/sqlite/lib._sqlite3CreateIndex(0xc0003f80b0, 0x7f04c496d820, 0x0, 0x0, 0x0, 0x0, 0xb, 0x0, 0x0, 0xffffffff, ...)
+	/home/runner/go/pkg/mod/modernc.org/sqlite@v1.51.0/lib/sqlite_linux_amd64.go:97330 +0x781f
+modernc.org/sqlite/lib._sqlite3AddPrimaryKey(0xc0003f80b0, 0x7f04c496d820, 0x0, 0xb, 0x0, 0xffffffff)
+	/home/runner/go/pkg/mod/modernc.org/sqlite@v1.51.0/lib/sqlite_linux_amd64.go:94830 +0xc3f
+modernc.org/sqlite/lib._yy_reduce(0xc0003f80b0, 0x7f049e9d4028, 0x27, 0x0?, {0x7f049e9d4023?, 0x26a7628?}, 0x7f04c496d820)
+	/home/runner/go/pkg/mod/modernc.org/sqlite@v1.51.0/lib/sqlite_linux_amd64.go:156177 +0x246e
+modernc.org/sqlite/lib._sqlite3Parser(0xc0003f80b0, 0x7f049e9d4028, 0x19, {0xc0026a7690?, 0x26a7720?})
+	/home/runner/go/pkg/mod/modernc.org/sqlite@v1.51.0/lib/sqlite_linux_amd64.go:157790 +0x1fd
+modernc.org/sqlite/lib._sqlite3RunParser(0xc0003f80b0, 0x7f04c496d820, 0x7f04adbac820)
+	/home/runner/go/pkg/mod/modernc.org/sqlite@v1.51.0/lib/sqlite_linux_amd64.go:160472 +0xfaa
+modernc.org/sqlite/lib._sqlite3Prepare(0xc0003f80b0, 0x7f04c496dc28, 0x7f04adbac820, 0xffffffff, 0x80, 0x0, 0x7f050f3ad5b0, 0x7f050f3ae550)
+	/home/runner/go/pkg/mod/modernc.org/sqlite@v1.51.0/lib/sqlite_linux_amd64.go:115375 +0xb92
+modernc.org/sqlite/lib._sqlite3LockAndPrepare(0xc0003f80b0, 0x7f04c496dc28, 0x7f04adbac820, 0xffffffff, 0x80, 0x0, 0x7f050f3ad5b0, 0x7f050f3ae550)
+	/home/runner/go/pkg/mod/modernc.org/sqlite@v1.51.0/lib/sqlite_linux_amd64.go:115434 +0x2b1
+modernc.org/sqlite/lib.Xsqlite3_prepare_v2(...)
+	/home/runner/go/pkg/mod/modernc.org/sqlite@v1.51.0/lib/sqlite_linux_amd64.go:115521
+modernc.org/sqlite.(*conn).prepareV2(0xc0011dcd80, 0xc0026a7a80)
+	/home/runner/go/pkg/mod/modernc.org/sqlite@v1.51.0/conn.go:628 +0x2d9
+modernc.org/sqlite.newStmt(0xc0011dcd80, {0xc002ad6c80, 0x129})
+	/home/runner/go/pkg/mod/modernc.org/sqlite@v1.51.0/stmt.go:33 +0xff
+modernc.org/sqlite.(*conn).prepare(...)
+	/home/runner/go/pkg/mod/modernc.org/sqlite@v1.51.0/conn.go:966
+modernc.org/sqlite.(*conn).exec(0xc0011dcd80, {0x1cef350, 0xc0011f60f0}, {0xc002ad6c80, 0x129}, {0x25e5940, 0x0, 0x0})
+	/home/runner/go/pkg/mod/modernc.org/sqlite@v1.51.0/conn.go:940 +0x93
+modernc.org/sqlite.(*conn).ExecContext(0xc0011dcd80, {0x1cef350, 0xc0011f60f0}, {0xc002ad6c80, 0x129}, {0x25e5940, 0x0, 0x0})
+	/home/runner/go/pkg/mod/modernc.org/sqlite@v1.51.0/conn.go:1208 +0x95
+database/sql.ctxDriverExec({0x1cef350, 0xc0011f60f0}, {0x7f050f5d3c90, 0xc0011dcd80}, {0x0, 0x0}, {0xc002ad6c80, 0x129}, {0x25e5940, 0x0, ...})
+	/opt/hostedtoolcache/go/1.26.6/x64/src/database/sql/ctxutil.go:31 +0xeb
+database/sql.(*DB).execDC.func2()
+	/opt/hostedtoolcache/go/1.26.6/x64/src/database/sql/sql.go:1713 +0x266
+database/sql.withLock({0x1cec438, 0xc002672200}, 0xc0026a8068)
+	/opt/hostedtoolcache/go/1.26.6/x64/src/database/sql/sql.go:3572 +0xa3
+database/sql.(*DB).execDC(0x25adb40?, {0x1cef350, 0xc0011f60f0}, 0xc002672200, 0xc0036d0010, {0xc002ad6c80, 0x129}, {0x0, 0x0, 0x0})
+	/opt/hostedtoolcache/go/1.26.6/x64/src/database/sql/sql.go:1708 +0x405
+database/sql.(*Tx).ExecContext(0xc0027a2500, {0x1cef350, 0xc0011f60f0}, {0xc002ad6c80, 0x129}, {0x0, 0x0, 0x0})
+	/opt/hostedtoolcache/go/1.26.6/x64/src/database/sql/sql.go:2516 +0x129
+github.com/pressly/goose/v3.(*Provider).runSQL(0xc000b081c0, {0x1cef350, 0xc0011f60f0}, {0x1cee690, 0xc0027a2500}, 0xc002a0af70, 0x1)
+	/home/runner/go/pkg/mod/github.com/pressly/goose/v3@v3.27.1/provider_run.go:530 +0x625
+github.com/pressly/goose/v3.(*Provider).runMigration(0xc000b081c0, {0x1cef350, 0xc0011f60f0}, {0x1cee690, 0xc0027a2500}, 0xc002a0af70, 0x1)
+	/home/runner/go/pkg/mod/github.com/pressly/goose/v3@v3.27.1/provider_run.go:471 +0x12c
+github.com/pressly/goose/v3.(*Provider).runIndividually.func1(0xc0027a2500)
+	/home/runner/go/pkg/mod/github.com/pressly/goose/v3@v3.27.1/provider_run.go:215 +0x86
+github.com/pressly/goose/v3.beginTx({0x1cef350, 0xc0011f60f0}, 0xc00267c380, 0xc0026a8670)
+	/home/runner/go/pkg/mod/github.com/pressly/goose/v3@v3.27.1/provider_run.go:271 +0xfc
+github.com/pressly/goose/v3.(*Provider).runIndividually(0xc000b081c0, {0x1cef350, 0xc0011f60f0}, 0xc00267c380, 0xc002a0af70, 0x1)
+	/home/runner/go/pkg/mod/github.com/pressly/goose/v3@v3.27.1/provider_run.go:214 +0x4a5
+github.com/pressly/goose/v3.(*Provider).runMigrations(0xc000b081c0, {0x1cef350, 0xc0011f60f0}, 0xc00267c380, {0xc0017c9e00, 0x14, 0x0?}, {0x1b2663a, 0x2}, 0x0)
+	/home/runner/go/pkg/mod/github.com/pressly/goose/v3@v3.27.1/provider_run.go:158 +0x102d
+github.com/pressly/goose/v3.(*Provider).up(0xc000b081c0, {0x1cef350, 0xc0011f60f0}, 0x0, 0x7fffffffffffffff)
+	/home/runner/go/pkg/mod/github.com/pressly/goose/v3@v3.27.1/provider.go:409 +0xf47
+github.com/pressly/goose/v3.(*Provider).Up(0xc000b081c0, {0x1cef350, 0xc0011f60f0})
+	/home/runner/go/pkg/mod/github.com/pressly/goose/v3@v3.27.1/provider.go:252 +0x72
+github.com/digitaldrywood/detent/internal/hubserver.runMigrations({0x1cef350, 0xc0011f60f0}, 0xc000c92dd0, 0xc00282c4e0)
+	/home/runner/work/detent/detent/internal/hubserver/migrate.go:51 +0x91e
+github.com/digitaldrywood/detent/internal/hubserver.openDatabase({_, _}, {0xc000dc65a0, 0x0, 0x0, {0x0, 0x0}, {0xc002614960, 0x55}, {0x1b34745, ...}, ...})
+	/home/runner/work/detent/detent/internal/hubserver/database.go:68 +0x8fc
+github.com/digitaldrywood/detent/internal/hubserver.openHostedStorage(_, {0xc000dc65a0, 0x0, 0x0, {0x0, 0x0}, {0xc002614960, 0x55}, {0x0, 0x0}, ...})
+	/home/runner/work/detent/detent/internal/hubserver/hosted_storage_test.go:27 +0x1db
+github.com/digitaldrywood/detent/internal/hubserver.TestHostedMetadataFailsWithoutExposingErrors.func4(0xc000a51448)
+	/home/runner/work/detent/detent/internal/hubserver/hosted_storage_test.go:305 +0x1ad
+testing.tRunner(0xc000a51448, 0xc0004321b0)
+	/opt/hostedtoolcache/go/1.26.6/x64/src/testing/testing.go:2036 +0x21d
+created by testing.(*T).Run in goroutine 163
+	/opt/hostedtoolcache/go/1.26.6/x64/src/testing/testing.go:2101 +0xb13
+
+
+goroutine 163402 [runnable]:
+runtime.Gosched(...)
+	/opt/hostedtoolcache/go/1.26.6/x64/src/runtime/proc.go:391
+github.com/pressly/goose/v3/internal/sqlparser.init.func1()
+	/home/runner/go/pkg/mod/github.com/pressly/goose/v3@v3.27.1/internal/sqlparser/parser.go:88 +0x45
+sync.(*Pool).Get(0x25aee80)
+	/opt/hostedtoolcache/go/1.26.6/x64/src/sync/pool.go:155 +0xdc
+github.com/pressly/goose/v3/internal/sqlparser.endsWithSemicolon({0xc00197eea0, 0x1f})
+	/home/runner/go/pkg/mod/github.com/pressly/goose/v3@v3.27.1/internal/sqlparser/parser.go:376 +0x4b
+github.com/pressly/goose/v3/internal/sqlparser.ParseSQLMigration({0x7f04c43240a8, 0xc003968130}, {0x1b2663a, 0x2}, 0x0)
+	/home/runner/go/pkg/mod/github.com/pressly/goose/v3@v3.27.1/internal/sqlparser/parser.go:247 +0x1325
+github.com/pressly/goose/v3/internal/sqlparser.parse({0x1ce9320, 0xc002c70320}, {0xc002a0ecfb, 0x19}, {0x1b2663a, 0x2}, 0x0)
+	/home/runner/go/pkg/mod/github.com/pressly/goose/v3@v3.27.1/internal/sqlparser/parse.go:54 +0x2e5
+github.com/pressly/goose/v3/internal/sqlparser.ParseAllFromFS.func1()
+	/home/runner/go/pkg/mod/github.com/pressly/goose/v3@v3.27.1/internal/sqlparser/parse.go:24 +0x8e
+golang.org/x/sync/errgroup.(*Group).Go.func1()
+	/home/runner/go/pkg/mod/golang.org/x/sync@v0.22.0/errgroup/errgroup.go:93 +0x87
+created by golang.org/x/sync/errgroup.(*Group).Go in goroutine 86201
+	/home/runner/go/pkg/mod/golang.org/x/sync@v0.22.0/errgroup/errgroup.go:78 +0x11d
+
+
+goroutine 124802 [chan receive, 2 minutes]:
+testing.(*testState).waitParallel(0xc000098cd0)
+	/opt/hostedtoolcache/go/1.26.6/x64/src/testing/testing.go:2220 +0x125
+testing.(*T).Parallel(0xc000f5b208)
+	/opt/hostedtoolcache/go/1.26.6/x64/src/testing/testing.go:1804 +0x533
+github.com/digitaldrywood/detent/internal/hubserver.TestHostedArtifactReadPermissions.func1(0xc000f5b208)
+	/home/runner/work/detent/detent/internal/hubserver/artifacts_test.go:61 +0x47
+testing.tRunner(0xc000f5b208, 0xc0011dc420)
+	/opt/hostedtoolcache/go/1.26.6/x64/src/testing/testing.go:2036 +0x21d
+created by testing.(*T).Run in goroutine 12
+	/opt/hostedtoolcache/go/1.26.6/x64/src/testing/testing.go:2101 +0xb13

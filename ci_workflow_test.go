@@ -28,10 +28,10 @@ var requiredPRStatusChecks = []requiredStatusCheck{
 	},
 	{
 		name:     "Verify (ubuntu-latest)",
-		budget:   "4m",
+		budget:   "30m",
 		jobStart: "  verify:",
 		jobEnd:   "  test-cover:",
-		markers:  []string{"name: Verify (ubuntu-latest)", "runs-on: ubuntu-latest"},
+		markers:  []string{"name: Verify (ubuntu-latest)", "runs-on: ubuntu-latest", "timeout-minutes: 30"},
 	},
 	{
 		name:     "Test Coverage",

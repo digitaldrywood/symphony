@@ -128,7 +128,7 @@ Required PR merge checks, branch protection/rulesets, and
 `gate.required_status_checks` must name the same release-blocking checks:
 
 - `Lint` - budget: `2m`
-- `Verify (ubuntu-latest)` - budget: `4m`
+- `Verify (ubuntu-latest)` - budget: `30m`
 - `Test Coverage` - budget: `4m`
 - `Browser Visual` - budget: `5m`
 - `Portability Verify (macos-latest)` - budget: `8m`

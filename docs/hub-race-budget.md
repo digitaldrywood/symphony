@@ -7,6 +7,15 @@ uncached race detector run, and a 15-minute package timeout. Other packages
 retain Go's default package concurrency and 10-minute timeout. No test name,
 assertion, fixture workload, or individual lifecycle deadline is changed.
 
+The required `Verify (ubuntu-latest)` job has an explicit 30-minute workflow
+timeout, matching its documented merge-check budget. This reserves the Hub's
+15-minute ceiling plus another 15 minutes for setup, build, vet, ordinary
+tests, and the remaining race packages. It is a whole-job failure bound,
+not a claim that every package can consume its own maximum serially. The
+former four-minute job budget was already exceeded by the recorded Hub
+package alone. Required check names and branch-protection selection remain
+the same.
+
 The Hub ceiling is a package budget, not an individual operation deadline.
 The recorded Linux/amd64 PR #2292 head passed in 474.738 seconds, then
 exhausted 600 seconds on its unchanged retry. Fifteen minutes provides 50%

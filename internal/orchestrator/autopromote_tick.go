@@ -1834,6 +1834,9 @@ func (o *Orchestrator) staleMergingQueueDispatchCandidates(state *State, issues 
 	for _, issue := range staleMergingQueueIssues(issues, o.cfg, state, now) {
 		issueID := strings.TrimSpace(issue.ID)
 		repository := mergeWorkerRepositoryKey(issue)
+		if mergeWorkerCIFailed(issue.PullRequest) {
+			continue
+		}
 		if staleMergingPullRequestDispatchActive(state, issueID) {
 			if reservation := state.mergeReservations[repository]; reservation.IssueID == issueID && reservation.ReleasedReason != "" {
 				continue

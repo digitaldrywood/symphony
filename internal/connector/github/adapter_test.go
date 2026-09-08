@@ -6127,6 +6127,7 @@ func TestConnectorRerunPullRequestChecksUsesWorkflowRun(t *testing.T) {
 	t.Parallel()
 
 	server := newGraphQLTestServer(t, []graphqlTestResponse{
+		{method: http.MethodGet, path: "/repos/example/repo/actions/runs/8001", body: `{"id":8001,"status":"completed"}`},
 		{
 			method: http.MethodPost,
 			path:   "/repos/example/repo/actions/runs/8001/rerun-failed-jobs",
@@ -6152,11 +6153,35 @@ func TestConnectorRerunPullRequestChecksUsesWorkflowRun(t *testing.T) {
 	}
 
 	requests := server.requests()
-	if len(requests) != 1 {
-		t.Fatalf("requests len = %d, want 1", len(requests))
+	if len(requests) != 2 {
+		t.Fatalf("requests len = %d, want 2", len(requests))
 	}
-	if requests[0]["method"] != http.MethodPost || requests[0]["path"] != "/repos/example/repo/actions/runs/8001/rerun-failed-jobs" {
-		t.Fatalf("request = %#v, want workflow rerun", requests[0])
+	if requests[1]["method"] != http.MethodPost || requests[1]["path"] != "/repos/example/repo/actions/runs/8001/rerun-failed-jobs" {
+		t.Fatalf("request = %#v, want workflow rerun", requests[1])
+	}
+}
+
+func TestConnectorRerunPullRequestChecksDefersActiveWorkflow(t *testing.T) {
+	t.Parallel()
+	for _, status := range []string{"queued", "in_progress", "waiting", ""} {
+		t.Run(status, func(t *testing.T) {
+			t.Parallel()
+			server := newGraphQLTestServer(t, []graphqlTestResponse{
+				{method: http.MethodGet, path: "/repos/example/repo/actions/runs/8001", body: `{"id":8001,"status":"completed"}`},
+				{method: http.MethodGet, path: "/repos/example/repo/actions/runs/8002", body: fmt.Sprintf(`{"id":8002,"status":%q}`, status)},
+			})
+			c := newGitHubTestConnector(t, server, Config{})
+			issue := connector.Issue{Identifier: "example/repo#1", PRNumber: new(42), PRRepository: "example/repo"}
+			err := c.RerunPullRequestChecks(t.Context(), issue, []connector.PullRequestCheck{{ID: 9001, WorkflowRunID: 8001}, {ID: 9002, WorkflowRunID: 8001}, {ID: 9003, WorkflowRunID: 8002}})
+			if !connector.IsRetryable(err) {
+				t.Fatalf("RerunPullRequestChecks() = %v, want retryable deferral", err)
+			}
+			for _, request := range server.requests() {
+				if request["method"] != http.MethodGet {
+					t.Fatalf("rerun submitted before all workflows completed: %v", request)
+				}
+			}
+		})
 	}
 }
 

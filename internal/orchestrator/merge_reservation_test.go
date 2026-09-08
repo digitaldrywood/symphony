@@ -14,6 +14,7 @@ import (
 
 	workflowconfig "github.com/digitaldrywood/detent/internal/config"
 	"github.com/digitaldrywood/detent/internal/connector"
+	"github.com/digitaldrywood/detent/internal/gate"
 	runpkg "github.com/digitaldrywood/detent/internal/runner"
 	"github.com/digitaldrywood/detent/internal/store"
 	"github.com/digitaldrywood/detent/internal/workspace"
@@ -262,6 +263,62 @@ func TestMergeReservationTracksWorkerPushWithoutRenewal(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestMergeReservationTransientFailureDefersRerun(t *testing.T) {
+	t.Parallel()
+	for _, restart := range []bool{false, true} {
+		t.Run(fmt.Sprintf("restart=%t", restart), func(t *testing.T) {
+			t.Parallel()
+			now := time.Date(2026, 9, 8, 15, 54, 0, 0, time.UTC)
+			cfg := normalizeConfig(Config{ActiveStates: []string{"Merging", "Rework"}, TerminalStates: []string{"Done"}, MergeFastPathEnabled: true, AutoPromote: AutoPromoteConfig{Gate: gate.Config{TransientCIRetryLimit: new(1)}}})
+			issue := nativeMergeQueueTestIssue(2320, "failure")
+			issue.StageUpdatedAt = timePointer(now.Add(-2 * time.Hour))
+			issue.PullRequest.MergeableState = "blocked"
+			issue.PullRequest.RunningChecks = []string{"Windows"}
+			issue.PullRequest.TransientFailedChecks = []connector.PullRequestCheck{{Name: "Snapshot", ID: 9001, WorkflowRunID: 8001, Status: "completed", Conclusion: "timed_out"}}
+			other := nativeMergeQueueTestIssue(2318, "success")
+			other.StageUpdatedAt = timePointer(now.Add(-time.Hour))
+			other.PullRequest.MergeableState = "behind"
+			tracker := &deferredMergeCIRetryConnector{autoPromoteTickConnector: &autoPromoteTickConnector{stateIssues: []connector.Issue{issue, other}}, err: connector.NewRetryableError("workflow is still running")}
+			orch := Orchestrator{cfg: cfg, connector: tracker}
+			state := newState(cfg)
+			if !restart {
+				reserveMergeCandidate(&state, issue, now.Add(-time.Minute))
+				state.Retry[issue.ID] = Retry{Issue: issue, Wait: RetryWait{Kind: retryWaitCurrentHeadCI}}
+			}
+			orch.reconcileMergeReservations(&state, tracker.stateIssues, now)
+			orch.reconcileStaleMergingPullRequestIssues(t.Context(), &state, tracker.stateIssues, now)
+			if len(tracker.updates) != 0 || len(state.TransientCheckRetries) != 0 || len(tracker.comments) != 0 {
+				t.Fatalf("active workflow caused rework or charged retry: updates=%v retries=%v comments=%v", tracker.updates, state.TransientCheckRetries, tracker.comments)
+			}
+			candidates := orch.mergeWorkerDispatchCandidates(&state, tracker.stateIssues, now)
+			if len(candidates) != 1 || candidates[0].ID != other.ID {
+				t.Fatalf("candidates=%v, want next candidate while transient rerun waits", candidates)
+			}
+			tracker.err = nil
+			orch.reconcileStaleMergingPullRequestIssues(t.Context(), &state, tracker.stateIssues, now.Add(time.Minute))
+			if len(tracker.reruns) != 1 || len(state.TransientCheckRetries) != 1 || len(tracker.updates) != 0 {
+				t.Fatalf("settled workflow did not retry: reruns=%v retries=%v updates=%v", tracker.reruns, state.TransientCheckRetries, tracker.updates)
+			}
+			orch.reconcileStaleMergingPullRequestIssues(t.Context(), &state, tracker.stateIssues, now.Add(2*time.Minute))
+			if !reflect.DeepEqual(tracker.updates, []autoPromoteTickUpdate{{issueID: issue.ID, state: "Rework"}}) {
+				t.Fatalf("exhausted retry updates=%v, want Rework", tracker.updates)
+			}
+		})
+	}
+}
+
+type deferredMergeCIRetryConnector struct {
+	*autoPromoteTickConnector
+	err error
+}
+
+func (c *deferredMergeCIRetryConnector) RerunPullRequestChecks(ctx context.Context, issue connector.Issue, checks []connector.PullRequestCheck) error {
+	if c.err != nil {
+		return c.err
+	}
+	return c.autoPromoteTickConnector.RerunPullRequestChecks(ctx, issue, checks)
 }
 
 func TestMergeReservationRecoversCurrentWaitingHead(t *testing.T) {

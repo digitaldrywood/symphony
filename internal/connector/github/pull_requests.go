@@ -558,6 +558,9 @@ func (c *Connector) RerunPullRequestChecks(ctx context.Context, issue connector.
 	if !ok {
 		return errors.New("rerun github pull request checks: missing pull request repository")
 	}
+	if err := c.checkWorkflowRerunsReady(ctx, repo, checks); err != nil {
+		return err
+	}
 	seenRuns := map[int64]struct{}{}
 	seenChecks := map[int64]struct{}{}
 	var errs []error
@@ -585,6 +588,27 @@ func (c *Connector) RerunPullRequestChecks(ctx context.Context, issue connector.
 	}
 	if len(errs) > 0 {
 		return fmt.Errorf("rerun github pull request checks: %w", errors.Join(errs...))
+	}
+	return nil
+}
+
+func (c *Connector) checkWorkflowRerunsReady(ctx context.Context, repo pullRequestRepo, checks []connector.PullRequestCheck) error {
+	seen := map[int64]struct{}{}
+	for _, check := range checks {
+		if check.WorkflowRunID <= 0 {
+			continue
+		}
+		if _, ok := seen[check.WorkflowRunID]; ok {
+			continue
+		}
+		seen[check.WorkflowRunID] = struct{}{}
+		var run restWorkflowRun
+		if err := c.client.REST(ctx, http.MethodGet, restWorkflowRunPath(repo, check.WorkflowRunID), nil, &run); err != nil {
+			return fmt.Errorf("check workflow run %d before rerun: %w", check.WorkflowRunID, err)
+		}
+		if !strings.EqualFold(strings.TrimSpace(run.Status), "completed") {
+			return connector.NewRetryableError(fmt.Sprintf("workflow run %d is not completed; deferring failed-job rerun", check.WorkflowRunID))
+		}
 	}
 	return nil
 }

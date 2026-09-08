@@ -8,15 +8,20 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"os/signal"
+	"syscall"
 	"time"
 
-	"github.com/digitaldrywood/detent/internal/instancelock"
+	"github.com/digitaldrywood/detent/internal/procgroup"
 )
 
 const validationLockPollInterval = 100 * time.Millisecond
 
 func main() {
-	os.Exit(run(context.Background(), os.Args[1:], os.Stdin, os.Stdout, os.Stderr))
+	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	code := run(ctx, os.Args[1:], os.Stdin, os.Stdout, os.Stderr)
+	stop()
+	os.Exit(code)
 }
 
 func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.Writer) int {
@@ -51,8 +56,12 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		fmt.Fprintf(stderr, "acquire validation lock: %v\n", err)
 		return 1
 	}
+	if err := ctx.Err(); err != nil {
+		fmt.Fprintf(stderr, "validation canceled before command start: %v\n", errors.Join(err, lock.Close()))
+		return 1
+	}
 	if waited {
-		fmt.Fprintf(stderr, "validation gate acquired shared lock: %s\n", *lockPath)
+		fmt.Fprintln(stderr, "validation gate acquired shared lock; starting validation (wait timeout no longer applies)")
 	}
 
 	commandPath, commandPathErr := exec.LookPath(command[0])
@@ -70,10 +79,14 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 		Stdout: stdout,
 		Stderr: stderr,
 	}
-	commandErr := cmd.Run()
+	commandErr := runValidationCommand(ctx, cmd)
 	closeErr := lock.Close()
 	if closeErr != nil {
 		fmt.Fprintf(stderr, "release validation lock: %v\n", closeErr)
+	}
+	if err := ctx.Err(); err != nil {
+		fmt.Fprintf(stderr, "validation command canceled: %v\n", errors.Join(err, commandErr))
+		return 1
 	}
 	if commandErr != nil {
 		var exitErr *exec.ExitError
@@ -89,29 +102,26 @@ func run(ctx context.Context, args []string, stdin io.Reader, stdout, stderr io.
 	return 0
 }
 
-func acquireValidationLock(ctx context.Context, path string, stderr io.Writer) (*instancelock.Lock, bool, error) {
-	waited := false
-	for {
-		lock, err := instancelock.Acquire(path)
-		if err == nil {
-			return lock, waited, nil
-		}
-		if !errors.Is(err, instancelock.ErrHeld) {
-			return nil, waited, err
-		}
-		if !waited {
-			fmt.Fprintf(stderr, "validation gate waiting for another worktree: %s\n", path)
-			waited = true
-		}
-
-		timer := time.NewTimer(validationLockPollInterval)
-		select {
-		case <-ctx.Done():
-			if !timer.Stop() {
-				<-timer.C
-			}
-			return nil, waited, ctx.Err()
-		case <-timer.C:
-		}
+func runValidationCommand(ctx context.Context, cmd *exec.Cmd) error {
+	if err := ctx.Err(); err != nil {
+		return err
 	}
+	procgroup.Configure(ctx, cmd)
+	terminate := cmd.Cancel
+	cmd.Cancel = nil
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	groupID := procgroup.GroupID(cmd)
+	terminated := make(chan struct{})
+	var terminationErr error
+	stop := context.AfterFunc(ctx, func() {
+		terminationErr = terminate()
+		close(terminated)
+	})
+	waitErr := cmd.Wait()
+	if !stop() {
+		<-terminated
+	}
+	return errors.Join(waitErr, terminationErr, procgroup.Cleanup(groupID))
 }

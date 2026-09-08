@@ -3645,7 +3645,7 @@ func TestRunDoctorWithProjectScopeSkipsUnrelatedProjectFailures(t *testing.T) {
 	}
 }
 
-func TestRunDoctorWithProjectScopeSkipsUnrelatedProjectPathValidation(t *testing.T) {
+func TestCheckDoctorConfigWithProjectScopeValidatesOnlySelectedPaths(t *testing.T) {
 	t.Parallel()
 
 	root := t.TempDir()
@@ -3681,39 +3681,71 @@ func TestRunDoctorWithProjectScopeSkipsUnrelatedProjectPathValidation(t *testing
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 
-	deps := successfulDoctorDeps()
-	deps.loadWorkflow = func(path string) (workflowconfig.Workflow, error) {
-		if strings.Contains(path, "missing-beta") {
-			t.Fatalf("loadWorkflow(%q) called for skipped project", path)
-		}
-		return workflowconfig.Workflow{Config: validDoctorWorkflow(alphaWorkdir)}, nil
+	opts := defaultOptions()
+	opts.resolvePath = func(string) (globalconfig.PathResolution, error) {
+		return globalconfig.PathResolution{Path: configPath, Rule: globalconfig.PathRuleFlag}, nil
 	}
-
-	report := runDoctor(context.Background(), doctorConfig{
-		ConfigPath:   configPath,
-		Output:       io.Discard,
-		CheckTimeout: time.Second,
-		ProjectID:    "alpha",
-		Flags: runtimeFlags{
-			Port: runtimeIntFlag{Value: 0, Set: true},
+	tests := []struct {
+		name        string
+		projectID   string
+		wantStatus  doctorStatus
+		wantSkipped []string
+	}{
+		{
+			name:        "skip unrelated missing paths",
+			projectID:   "alpha",
+			wantStatus:  doctorOK,
+			wantSkipped: []string{"beta"},
 		},
-	}, options{
-		resolvePath: func(string) (globalconfig.PathResolution, error) {
-			return globalconfig.PathResolution{Path: configPath, Rule: globalconfig.PathRuleFlag}, nil
+		{
+			name:        "reject selected missing paths",
+			projectID:   "beta",
+			wantStatus:  doctorFail,
+			wantSkipped: []string{"alpha"},
 		},
-		stdoutTTY: func() bool { return true },
-	}, deps)
+		{
+			name:       "reject unscoped missing paths",
+			wantStatus: doctorFail,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 
-	if report.HasFailures() {
-		t.Fatalf("HasFailures() = true, want scoped doctor to ignore beta path validation: %#v", report.Checks)
+			resolution, global, scope, scopeCheck, check := checkDoctorConfig(configPath, tt.projectID, opts)
+			if resolution.Path != configPath || resolution.Rule != globalconfig.PathRuleFlag {
+				t.Fatalf("resolution = %#v, want explicit config path %q", resolution, configPath)
+			}
+			if check.Status != tt.wantStatus {
+				t.Fatalf("config check = %#v, want status %s", check, tt.wantStatus)
+			}
+			if scope.SelectedProject != tt.projectID || !slices.Equal(scope.SkippedProjects, tt.wantSkipped) {
+				t.Fatalf("scope = %#v, want selected %q and skipped %v", scope, tt.projectID, tt.wantSkipped)
+			}
+			if scopeCheck != nil {
+				t.Fatalf("scope check = %#v, want nil", scopeCheck)
+			}
+			if tt.wantStatus == doctorFail {
+				if global != nil {
+					t.Fatalf("global = %#v, want nil for invalid paths", global)
+				}
+				if !strings.Contains(check.Detail, "workdir: path does not exist") {
+					t.Errorf("Detail = %q, want missing workdir error", check.Detail)
+				}
+				if strings.Contains(check.Detail, "workflow: path does not exist") {
+					t.Errorf("Detail = %q, want missing workflow preserved for diagnosis", check.Detail)
+				}
+				return
+			}
+			if global == nil || len(global.Projects) != 1 {
+				t.Fatalf("global = %#v, want only the selected project", global)
+			}
+			project := global.Projects[0]
+			if project.ID != "alpha" || project.Workflow != alphaWorkflow || project.Workdir != alphaWorkdir {
+				t.Fatalf("project = %#v, want alpha with its validated workflow and workdir", project)
+			}
+		})
 	}
-	if report.Scope.SelectedProject != "alpha" {
-		t.Fatalf("SelectedProject = %q, want alpha", report.Scope.SelectedProject)
-	}
-	if !slices.Equal(report.Scope.SkippedProjects, []string{"beta"}) {
-		t.Fatalf("SkippedProjects = %#v, want beta", report.Scope.SkippedProjects)
-	}
-	assertDoctorMissingCheck(t, report, "Project beta workflow")
 }
 
 func TestRunDoctorWithMissingProjectScopeFails(t *testing.T) {

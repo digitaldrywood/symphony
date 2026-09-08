@@ -42,7 +42,9 @@ func Command(ctx context.Context, command string, shellName string) *exec.Cmd {
 
 func CommandForOS(ctx context.Context, command string, shellName string, goos string) *exec.Cmd {
 	spec := CommandSpecForOS(command, shellName, goos)
-	return exec.CommandContext(ctx, spec.Name, spec.Args...) // #nosec G204 -- workflow shell and command are operator-supplied.
+	cmd := exec.CommandContext(ctx, spec.Name, spec.Args...) // #nosec G204 -- workflow shell and command are operator-supplied.
+	configureCommand(cmd, goos)
+	return cmd
 }
 
 func CommandWithArgs(ctx context.Context, command string, shellName string, args []string) *exec.Cmd {
@@ -50,8 +52,7 @@ func CommandWithArgs(ctx context.Context, command string, shellName string, args
 }
 
 func CommandWithArgsForOS(ctx context.Context, command string, shellName string, args []string, goos string) *exec.Cmd {
-	spec := CommandSpecWithArgsForOS(command, shellName, args, goos)
-	return exec.CommandContext(ctx, spec.Name, spec.Args...) // #nosec G204 -- workflow shell and command are operator-supplied.
+	return CommandForOS(ctx, commandWithArgsForOS(command, shellName, args, goos), shellName, goos)
 }
 
 func CommandSpecForOS(command string, shellName string, goos string) CommandSpec {
@@ -116,9 +117,28 @@ func quotePowerShellArg(arg string) string {
 }
 
 func quoteCmdArg(arg string) string {
-	arg = strings.ReplaceAll(arg, "%", "%%")
-	arg = strings.ReplaceAll(arg, `"`, `\"`)
-	return `"` + arg + `"`
+	var quoted strings.Builder
+	quoted.WriteString(`^"`)
+	backslashes := 0
+	for _, char := range arg {
+		if char == '\\' {
+			backslashes++
+			continue
+		}
+		if char == '"' {
+			quoted.WriteString(strings.Repeat(`\`, 2*backslashes+1))
+		} else {
+			quoted.WriteString(strings.Repeat(`\`, backslashes))
+		}
+		backslashes = 0
+		if strings.ContainsRune("()[]%!^\"`<>&|;, *?\t", char) {
+			quoted.WriteByte('^')
+		}
+		quoted.WriteRune(char)
+	}
+	quoted.WriteString(strings.Repeat(`\`, 2*backslashes))
+	quoted.WriteString(`^"`)
+	return quoted.String()
 }
 
 func shellBase(name string) string {

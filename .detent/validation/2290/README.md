@@ -17,7 +17,7 @@ Automated browser command:
 npx playwright test tests/visual/hosted-work.spec.js tests/visual/artifacts.spec.js --project=chromium
 ```
 
-Result: 10 passed. Coverage includes sign-in, native issue creation,
+Result: 11 passed. Coverage includes sign-in, native issue creation,
 discussion, stored run history, 27-comment pagination, Change creation and
 opening from the project list, Change discussion, viewer/staff/tenant/session
 denials, CSRF, and live project-grant revocation. Narrow issue and Change
@@ -25,7 +25,8 @@ pages are checked for overflow. The hosted artifact browser adapter test
 uses intercepted reference/grant/service responses to inspect the JSON CSRF
 request and token-only, checksum-verified download. The existing independent
 artifact browser fixture also passes with its real authorization/revocation
-flow and offline runners.
+flow and offline runners. Project-wide Changes use 25-row title-only pages;
+the browser follows Older Changes to open a record from the next page.
 
 Focused Go command:
 
@@ -36,6 +37,8 @@ go test ./internal/hubserver ./internal/web/templates -run 'TestHosted' -count=1
 Result: passed. Table-driven hosted route tests cover role/grant permissions,
 session/membership/grant revocation, staff, tenant mismatch, missing/foreign
 resources, no-store HTML, and redacted storage errors. Existing native hosted
-API tests cover artifact grant authorization and CSRF.
+API tests cover artifact grant authorization and CSRF. Changes pagination
+tests cover empty/exact/full pages, invalid cursors, and 64 KiB bodies that
+are excluded from the list results.
 
 Skill draft: no — this change reused established hosted authorization and browser fixture patterns.

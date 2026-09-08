@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"net/url"
+	"strconv"
 
 	"github.com/labstack/echo/v4"
 
@@ -32,7 +33,7 @@ func (s *Service) hostedWork(c echo.Context) error {
 	data.CanWriteProject = s.requireHostedProject(ctx, s.database.db, scope, true) == nil
 	data.SetupAPI = "/api/v2/organizations/" + url.PathEscape(string(scope.organization)) + "/projects/" + url.PathEscape(string(scope.project))
 	if c.Param("item") == "" {
-		data.Changes, err = changeRows[tracker.ChangeRequest](ctx, s.database.db, "SELECT record_json FROM change_requests WHERE organization_id = ? AND project_id = ? ORDER BY rowid DESC", scope.organization, scope.project)
+		err = s.hostedChanges(c, scope, &data)
 	} else {
 		var issue tracker.NativeIssue
 		issue, _, err = readNativeIssue(ctx, s.database.db, scope, c.Param("item"))
@@ -63,8 +64,41 @@ func (s *Service) hostedWork(c echo.Context) error {
 
 func (s *Service) hostedWorkError(c echo.Context, err error) error {
 	var failure *nativeError
+	if errors.As(err, &failure) && failure.status == http.StatusUnprocessableEntity {
+		return s.hostedError(c, http.StatusUnprocessableEntity, "This page request is invalid. Return to the project to restart navigation.")
+	}
 	if errors.Is(err, sql.ErrNoRows) || errors.As(err, &failure) && failure.status == http.StatusNotFound {
 		return s.hostedError(c, http.StatusNotFound, "This work is unavailable to this account")
 	}
 	return s.hostedError(c, http.StatusServiceUnavailable, "Work information is temporarily unavailable. Retry this page.")
+}
+
+func (s *Service) hostedChanges(c echo.Context, scope nativeScope, data *templates.HostedPageData) error {
+	var before int64
+	if value := c.QueryParam("before"); value != "" {
+		var err error
+		before, err = strconv.ParseInt(value, 10, 64)
+		if err != nil || before < 1 {
+			return nativeInvalid("Change page cursor is invalid")
+		}
+	}
+	rows, err := s.database.db.QueryContext(c.Request().Context(), `SELECT id, work_item_id, json_extract(record_json, '$.title'), rowid
+FROM change_requests WHERE organization_id = ? AND project_id = ? AND (? = 0 OR rowid < ?) ORDER BY rowid DESC LIMIT 26`, scope.organization, scope.project, before, before)
+	if err != nil {
+		return err
+	}
+	defer rows.Close()
+	var last int64
+	for rows.Next() {
+		if len(data.Changes) == 25 {
+			data.NextChanges = "/projects/" + url.PathEscape(string(scope.project)) + "/changes?before=" + strconv.FormatInt(last, 10)
+			break
+		}
+		var change tracker.ChangeRequest
+		if err := rows.Scan(&change.ID, &change.WorkItemID, &change.Title, &last); err != nil {
+			return err
+		}
+		data.Changes = append(data.Changes, change)
+	}
+	return rows.Err()
 }

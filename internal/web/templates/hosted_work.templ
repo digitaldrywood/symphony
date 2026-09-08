@@ -20,6 +20,9 @@ templ hostedWork(data HostedPageData) {
 				for _, change := range data.Changes {
 					<a class="flex min-h-11 items-center text-sm text-accent" href={ templ.SafeURL(ChangePath(data.SelectedProject, change.WorkItemID, change.ID)) }>{ change.Title }</a>
 				}
+				if data.NextChanges != "" {
+					<a class="inline-flex min-h-11 items-center rounded-card border border-line px-3 text-sm text-accent" href={ templ.SafeURL(data.NextChanges) }>Older Changes</a>
+				}
 			</section>
 		} else if data.Change != nil {
 			@hostedChange(data)

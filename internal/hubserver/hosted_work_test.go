@@ -3,14 +3,18 @@ package hubserver
 import (
 	"database/sql"
 	"errors"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strconv"
 	"strings"
 	"testing"
 
 	"github.com/labstack/echo/v4"
 
 	"github.com/digitaldrywood/detent/internal/tracker"
+	"github.com/digitaldrywood/detent/internal/web/templates"
 )
 
 func TestHostedWorkAccess(t *testing.T) {
@@ -152,6 +156,78 @@ func TestHostedWorkErrors(t *testing.T) {
 			requireNativeStatus(t, response, test.status)
 			if strings.Contains(response.Body.String(), "private database") {
 				t.Error("internal error disclosed")
+			}
+		})
+	}
+}
+
+func TestHostedChangesPagination(t *testing.T) {
+	t.Parallel()
+	for _, count := range []int{0, 25, 27} {
+		t.Run(strconv.Itoa(count), func(t *testing.T) {
+			t.Parallel()
+			f := newHostedSecurityFixture(t)
+			owner := f.user(t, "owner", "owner", "owner@example.test", "write", "")
+			item := f.seedIssue(t, 1)
+			for i := range count {
+				response := f.request(t, owner, http.MethodPost, f.base+"/work-items/"+string(item)+"/changes", tracker.CreateChange{Mutation: tracker.Mutation{IdempotencyKey: strconv.Itoa(i)}, Title: fmt.Sprintf("Change %02d", i), Body: strings.Repeat("x", 64<<10)})
+				requireNativeStatus(t, response, http.StatusOK)
+			}
+			path := "/projects/" + string(f.project) + "/changes"
+			first := templates.HostedPageData{}
+			scope := nativeScope{organization: "org_security", project: f.project}
+			c := echo.New().NewContext(httptest.NewRequest(http.MethodGet, path, nil), httptest.NewRecorder())
+			if err := f.service.hostedChanges(c, scope, &first); err != nil {
+				t.Fatal(err)
+			}
+			if len(first.Changes) != min(count, 25) || (first.NextChanges != "") != (count > 25) {
+				t.Fatalf("first page: %d rows, next %q", len(first.Changes), first.NextChanges)
+			}
+			for _, change := range first.Changes {
+				if change.Body != "" {
+					t.Fatal("list materialized a full Change body")
+				}
+			}
+			if count > 0 && first.Changes[0].Title != fmt.Sprintf("Change %02d", count-1) {
+				t.Fatal("Changes are not newest first")
+			}
+			if first.NextChanges == "" {
+				return
+			}
+			response := f.request(t, owner, http.MethodGet, path, nil)
+			requireNativeStatus(t, response, http.StatusOK)
+			if !strings.Contains(response.Body.String(), "Older Changes") {
+				t.Fatal("pagination link is missing")
+			}
+			next, err := url.Parse(first.NextChanges)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if next.Path != path || next.Query().Get("before") == "" {
+				t.Fatalf("invalid continuation %q", first.NextChanges)
+			}
+			second := templates.HostedPageData{}
+			c = echo.New().NewContext(httptest.NewRequest(http.MethodGet, first.NextChanges, nil), httptest.NewRecorder())
+			if err := f.service.hostedChanges(c, scope, &second); err != nil {
+				t.Fatal(err)
+			}
+			if len(second.Changes) != count-25 || second.NextChanges != "" || second.Changes[0].Title != "Change 01" {
+				t.Fatalf("second page: %+v", second)
+			}
+		})
+	}
+}
+
+func TestHostedChangesInvalidCursor(t *testing.T) {
+	t.Parallel()
+	f := newHostedSecurityFixture(t)
+	owner := f.user(t, "owner", "owner", "owner@example.test", "write", "")
+	for _, before := range []string{"not-a-number", "0", "-1", "9223372036854775808"} {
+		t.Run(before, func(t *testing.T) {
+			response := f.request(t, owner, http.MethodGet, "/projects/"+string(f.project)+"/changes?before="+before, nil)
+			requireNativeStatus(t, response, http.StatusUnprocessableEntity)
+			if !strings.Contains(response.Header().Get("Content-Type"), "text/html") {
+				t.Fatal("invalid cursor did not render HTML")
 			}
 		})
 	}

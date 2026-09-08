@@ -167,3 +167,24 @@ test('hosted artifact viewer requests scoped access and verifies independent dow
     expect(headers.cookie).toBeUndefined();
   }
 });
+
+test('project Changes paginate without loading full discussion bodies', async ({ page }) => {
+  await page.setViewportSize({width: 390, height: 844});
+  await project(page);
+  await page.getByRole('link', {name: /Review the invitation flow/}).click();
+  expect(await page.evaluate(async () => {
+    const root = document.querySelector('[data-hosted-work]');
+    for (let i = 0; i < 26; i++) {
+      const response = await fetch(root.dataset.api + '/changes', {method: 'POST', headers: {'Content-Type': 'application/json', 'X-CSRF-Token': root.dataset.csrf}, body: JSON.stringify({idempotency_key: `pagination-${i}`, title: `Archived Change ${i}`, body: 'Full body belongs on the detail page'})});
+      if (!response.ok) return response.status;
+    }
+    return 200;
+  })).toBe(200);
+  await page.getByRole('navigation', {name: 'Project work navigation'}).getByRole('link', {name: 'Changes', exact: true}).click();
+  await expect(page.locator('main a[href*="/issues/"]')).toHaveCount(25);
+  await expect(page.locator('main')).not.toContainText('Full body belongs on the detail page');
+  await narrow(page);
+  await page.getByRole('link', {name: 'Older Changes'}).click();
+  await page.getByRole('link', {name: 'Archived Change 0', exact: true}).click();
+  await expect(page.locator('[data-change-id]')).toContainText('Full body belongs on the detail page');
+});

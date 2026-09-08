@@ -11,6 +11,7 @@ type HostedPageData struct {
 	Issue               *tracker.NativeIssue
 	Change              *tracker.ChangeDetail
 	Changes             []tracker.ChangeRequest
+	NextChanges         string
 	PlanName            string
 	PlanSource          string
 	UsageWindow         string

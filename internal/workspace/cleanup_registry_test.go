@@ -417,3 +417,55 @@ func TestLocalGitOrphanDiscoveryKeepsSourceRepository(t *testing.T) {
 		})
 	}
 }
+
+func TestLocalGitReconcilePreservesManualWorktrees(t *testing.T) {
+	t.Parallel()
+	for _, branch := range []string{"feature/manual-hotfix", "detent/manual-hotfix", ""} {
+		t.Run(branch, func(t *testing.T) {
+			t.Parallel()
+			source := initSourceRepo(t)
+			publishCleanupSource(t, source)
+			root := filepath.Join(t.TempDir(), "workspaces")
+			backend, err := NewLocalGit(LocalGitOptions{Root: root, SourceRoot: source, AutoBranch: true})
+			if err != nil {
+				t.Fatal(err)
+			}
+			path := filepath.Join(root, "detent-astra-effort-ceiling")
+			if branch == "" {
+				runGit(t, source, "worktree", "add", "--detach", path, "main")
+			} else {
+				runGit(t, source, "worktree", "add", "-b", branch, path, "main")
+				runGit(t, path, "commit", "--allow-empty", "-m", "manual hotfix")
+				runGit(t, path, "push", "-u", "origin", branch)
+			}
+			if got := strings.TrimSpace(runGit(t, path, "status", "--porcelain")); got != "" {
+				t.Fatalf("manual worktree is dirty: %s", got)
+			}
+			if recorded, err := backend.cleanupOwnershipRecorded(t.Context(), path); err != nil || recorded {
+				t.Fatalf("ownership = %t, %v; want no record", recorded, err)
+			}
+			backend.scanWorkspacePaths = func(context.Context, string) ([]int, error) {
+				return nil, nil
+			}
+			result, err := backend.ReconcileResiduals(t.Context(), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := os.Stat(path); err != nil {
+				t.Fatalf("manual worktree removed: %v; result = %+v", err, result)
+			}
+			if registered, err := backend.sourceWorktreeRegistered(t.Context(), path); err != nil || !registered {
+				t.Fatalf("manual worktree registration = %t, %v", registered, err)
+			}
+			if branch != "" && !branchExists(t, source, branch) {
+				t.Fatal("manual branch removed")
+			}
+			if result.UnownedSkipped != 1 || result.Removed != 0 || len(result.CompletedPaths) != 0 || len(result.Failures) != 0 || result.PreservedSkipped != 0 || result.RegisteredSkipped != 0 || result.ActiveSkipped != 0 {
+				t.Fatalf("reconcile = %+v; want one unowned skip only", result)
+			}
+			if recorded, err := backend.cleanupOwnershipRecorded(t.Context(), path); err != nil || recorded {
+				t.Fatalf("manual worktree adopted: ownership = %t, %v", recorded, err)
+			}
+		})
+	}
+}

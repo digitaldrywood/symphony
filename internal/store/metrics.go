@@ -310,8 +310,9 @@ func workflowMetricsReport(rows []workflowMetricRow, flowRows []workflowMetricRo
 		bucket.turns += event.Turns
 	}
 
-	laneFlows := workflowLaneFlows(flowRows)
-	laneRepresentatives := workflowLaneRepresentativeRuns(rows, flowRows)
+	index := newWorkflowEventIndex(flowRows)
+	laneFlows := workflowLaneFlowsIndexed(flowRows, index)
+	laneRepresentatives := workflowLaneRepresentativeRunsIndexed(rows, index)
 	metrics := make([]WorkflowPhaseMetric, 0, len(buckets))
 	for _, bucket := range buckets {
 		metric := workflowPhaseMetricFromBucket(bucket)
@@ -373,15 +374,7 @@ func workflowMetricKeyFromParts(projectID string, phaseType string, phaseName st
 	return strings.Join(parts, "\x00")
 }
 
-func workflowLaneFlows(rows []workflowMetricRow) map[string]workflowLaneFlow {
-	activeEvents := make([]WorkflowPhaseEvent, 0, len(rows))
-	for _, row := range rows {
-		event := row.event
-		if workflowPhaseTypeIsActive(event.PhaseType) && workflowEventHasInterval(event) {
-			activeEvents = append(activeEvents, event)
-		}
-	}
-
+func workflowLaneFlowsIndexed(rows []workflowMetricRow, index workflowEventIndex) map[string]workflowLaneFlow {
 	flows := map[string]*workflowLaneFlow{}
 	for _, row := range rows {
 		lane := row.event
@@ -397,10 +390,8 @@ func workflowLaneFlows(rows []workflowMetricRow) map[string]workflowLaneFlow {
 
 		activeIntervals := []workflowInterval{}
 		if workflowEventHasInterval(lane) {
-			for _, activeEvent := range activeEvents {
-				if !workflowEventsShareIssue(lane, activeEvent) {
-					continue
-				}
+			for _, candidate := range index.matching(lane) {
+				activeEvent := index.events[candidate]
 				if overlap, ok := workflowEventOverlap(lane, activeEvent); ok {
 					activeIntervals = append(activeIntervals, overlap)
 				}
@@ -424,21 +415,7 @@ func workflowLaneFlows(rows []workflowMetricRow) map[string]workflowLaneFlow {
 	return out
 }
 
-func workflowLaneRepresentativeRuns(rows []workflowMetricRow, flowRows []workflowMetricRow) map[string][]WorkflowRepresentativeRun {
-	activeEvents := make([]WorkflowPhaseEvent, 0, len(flowRows))
-	for _, row := range flowRows {
-		event := row.event
-		if workflowPhaseTypeIsActive(event.PhaseType) && workflowEventHasInterval(event) {
-			activeEvents = append(activeEvents, event)
-		}
-	}
-	sort.SliceStable(activeEvents, func(i int, j int) bool {
-		if activeEvents[i].FinishedAt.Equal(activeEvents[j].FinishedAt) {
-			return activeEvents[i].ID > activeEvents[j].ID
-		}
-		return activeEvents[i].FinishedAt.After(activeEvents[j].FinishedAt)
-	})
-
+func workflowLaneRepresentativeRunsIndexed(rows []workflowMetricRow, index workflowEventIndex) map[string][]WorkflowRepresentativeRun {
 	laneEvents := make([]WorkflowPhaseEvent, 0, len(rows))
 	for _, row := range rows {
 		event := row.event
@@ -458,12 +435,10 @@ func workflowLaneRepresentativeRuns(rows []workflowMetricRow, flowRows []workflo
 	fallbacks := map[string][]WorkflowRepresentativeRun{}
 	for _, lane := range laneEvents {
 		key := workflowMetricKey(lane)
-		for _, activeEvent := range activeEvents {
+		for _, candidate := range index.matching(lane) {
+			activeEvent := index.events[candidate]
 			if len(out[key]) >= maxWorkflowRepresentativeRuns {
 				break
-			}
-			if !workflowEventsShareIssue(lane, activeEvent) {
-				continue
 			}
 			if _, ok := workflowEventOverlap(lane, activeEvent); !ok {
 				continue
@@ -675,31 +650,6 @@ func workflowEventHasInterval(event WorkflowPhaseEvent) bool {
 	return !event.StartedAt.IsZero() && !event.FinishedAt.IsZero() && event.StartedAt.Before(event.FinishedAt)
 }
 
-func workflowEventsShareIssue(lane WorkflowPhaseEvent, event WorkflowPhaseEvent) bool {
-	if strings.TrimSpace(lane.ProjectID) != strings.TrimSpace(event.ProjectID) {
-		return false
-	}
-	if workflowNonEmptyEqual(lane.IssueID, event.IssueID) {
-		return true
-	}
-	if workflowNonEmptyEqual(lane.Identifier, event.Identifier) {
-		return true
-	}
-	if workflowNonEmptyEqual(lane.IssueURL, event.IssueURL) {
-		return true
-	}
-	if lane.PRNumber != nil && event.PRNumber != nil && *lane.PRNumber == *event.PRNumber {
-		return true
-	}
-	return false
-}
-
-func workflowNonEmptyEqual(a string, b string) bool {
-	a = strings.TrimSpace(a)
-	b = strings.TrimSpace(b)
-	return a != "" && b != "" && a == b
-}
-
 func workflowEventOverlap(lane WorkflowPhaseEvent, event WorkflowPhaseEvent) (workflowInterval, bool) {
 	startedAt := lane.StartedAt
 	if event.StartedAt.After(startedAt) {
@@ -881,4 +831,12 @@ func workflowPhaseEventFromRow(row sqlc.WorkflowPhaseEvent) (WorkflowPhaseEvent,
 		event.ModelContextWindow = &value
 	}
 	return event, nil
+}
+
+func (s *sqliteStore) WorkflowHistoryRevision(ctx context.Context) (int64, error) {
+	var revision int64
+	if err := s.db.QueryRowContext(ctx, "SELECT revision FROM workflow_history_revision WHERE id = 1").Scan(&revision); err != nil {
+		return 0, fmt.Errorf("reading workflow history revision: %w", err)
+	}
+	return revision, nil
 }

@@ -28,7 +28,13 @@ func (s *Server) snapshotWorkflowMetrics(ctx context.Context, snapshot telemetry
 		now = time.Now()
 	}
 
-	projectID := strings.TrimSpace(snapshot.Project.ID)
+	out := s.workflowHistory.get(ctx, s.store, strings.TrimSpace(snapshot.Project.ID), now, s.now, s.loadWorkflowHistory)
+	out.OldestCards = workflowOldestCards(snapshot)
+	out.ActiveBottleneck = workflowActiveBottleneck(snapshot, now)
+	return out
+}
+
+func (s *Server) loadWorkflowHistory(ctx context.Context, projectID string, now time.Time) telemetry.WorkflowMetrics {
 	runtimeEvidence, err := s.store.RuntimeEvidence(ctx, store.RuntimeEvidenceQuery{ProjectID: projectID})
 	if err != nil {
 		s.logger.Warn("runtime store evidence query failed", slog.Any("error", err))
@@ -49,10 +55,8 @@ func (s *Server) snapshotWorkflowMetrics(ctx context.Context, snapshot telemetry
 	}
 
 	out := telemetry.WorkflowMetrics{
-		Available:        true,
-		RuntimeStore:     runtimeStoreEvidenceFromStore(runtimeEvidence),
-		OldestCards:      workflowOldestCards(snapshot),
-		ActiveBottleneck: workflowActiveBottleneck(snapshot, now),
+		Available:    true,
+		RuntimeStore: runtimeStoreEvidenceFromStore(runtimeEvidence),
 	}
 	for _, window := range windows {
 		from := now.Add(-window.duration)

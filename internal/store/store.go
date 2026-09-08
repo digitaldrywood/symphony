@@ -144,6 +144,10 @@ type ProgressCreditStore interface {
 	IssueProgressCredit(context.Context, IssueIdentity) (IssueProgressCredit, error)
 }
 
+type WorkflowHistoryRevisionReader interface {
+	WorkflowHistoryRevision(context.Context) (int64, error)
+}
+
 type WorkflowMetricsStore interface {
 	RecordWorkflowPhaseEvent(context.Context, WorkflowPhaseEvent) (int64, error)
 	WorkflowMetricsReport(context.Context, WorkflowMetricsQuery) (WorkflowMetricsReport, error)

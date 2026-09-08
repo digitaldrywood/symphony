@@ -209,6 +209,7 @@ type Server struct {
 	assets              staticAssets
 	projects            *projectSmallMultipleRecorder
 	snapshots           *snapshotEnrichmentCache
+	workflowHistory     workflowHistoryCache
 	stateEndpoints      *stateEndpointRecorder
 	spendRegressions    *spendRegressionMonitor
 	kanbanMutations     *kanbanstate.MutationTracker

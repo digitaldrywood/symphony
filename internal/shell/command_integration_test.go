@@ -77,7 +77,7 @@ func TestCommandWithArgsExecution(t *testing.T) {
 						t.Skip("Windows PowerShell uses legacy native argument parsing")
 					}
 					cmd := CommandWithArgs(t.Context(), command, shellName, tt.args)
-					cmd.Env = append(cmd.Environ(), "DETENT_SHELL_ARGUMENT_PROCESS=1", "DETENT_SHELL_VALUE=expanded", "MSYS2_ARG_CONV_EXCL=*")
+					cmd.Env = append(cmd.Environ(), "DETENT_SHELL_ARGUMENT_PROCESS=1", "DETENT_SHELL_VALUE=expanded", "MSYS2_ARG_CONV_EXCL=*", "GOCOVERDIR="+t.TempDir())
 					output, err := cmd.CombinedOutput()
 					if err != nil {
 						t.Fatalf("command failed: %v\n%s", err, output)

@@ -3681,11 +3681,10 @@ func TestCheckDoctorConfigWithProjectScopeValidatesOnlySelectedPaths(t *testing.
 		t.Fatalf("WriteFile() error = %v", err)
 	}
 
-	opts := doctorOptions(options{
-		resolvePath: func(string) (globalconfig.PathResolution, error) {
-			return globalconfig.PathResolution{Path: configPath, Rule: globalconfig.PathRuleFlag}, nil
-		},
-	})
+	opts := defaultOptions()
+	opts.resolvePath = func(string) (globalconfig.PathResolution, error) {
+		return globalconfig.PathResolution{Path: configPath, Rule: globalconfig.PathRuleFlag}, nil
+	}
 	tests := []struct {
 		name        string
 		projectID   string
@@ -3730,10 +3729,11 @@ func TestCheckDoctorConfigWithProjectScopeValidatesOnlySelectedPaths(t *testing.
 				if global != nil {
 					t.Fatalf("global = %#v, want nil for invalid paths", global)
 				}
-				for _, want := range []string{"workflow: path does not exist", "workdir: path does not exist"} {
-					if !strings.Contains(check.Detail, want) {
-						t.Errorf("Detail = %q, want containing %q", check.Detail, want)
-					}
+				if !strings.Contains(check.Detail, "workdir: path does not exist") {
+					t.Errorf("Detail = %q, want missing workdir error", check.Detail)
+				}
+				if strings.Contains(check.Detail, "workflow: path does not exist") {
+					t.Errorf("Detail = %q, want missing workflow preserved for diagnosis", check.Detail)
 				}
 				return
 			}

@@ -1,12 +1,20 @@
 # Hosted subscription billing
 
-Stripe billing is an optional, operator-configured **test-mode pilot** for an
-existing Detent Cloud organization. The subscription pays for Detent's hosted
-service. Customer model accounts, keys, usage, and provider charges stay separate.
-Free organizations need neither a card nor a Stripe customer. Local and
-self-hosted Hubs do not initialize billing or contact Stripe.
+The shared product at `https://hub.detent.build` bills organizations only for use
+of the operator's hosted service. Self-hosted Detent is free with any supported
+authentication provider, including WorkOS/custom; auth selection never enables
+Detent billing, a subscription check or Cloud networking.
 
-## Configuration
+The delivered Stripe implementation is an optional, operator-configured
+**test-mode pilot** for an existing reserved Detent Cloud organization. The
+subscription pays for Detent's hosted service. Customer model accounts, keys,
+usage, and provider charges stay separate.
+Free organizations need neither a card nor a Stripe customer. The shared-site
+design requires local and self-hosted Hubs to reject hosted billing configuration and never initialize billing or contact Stripe. Current
+self-hosting without `--hosted-config` already runs independently; separating that
+flag's WorkOS/policy coupling is follow-up work, not a shipped auth-mode switch.
+
+## Supported test-pilot configuration
 
 Add the following to the hosted identity YAML, alongside explicit
 [versioned entitlement plans](hosted-allowances.md). The referenced paid plan
@@ -62,7 +70,7 @@ shapes do not grant access. Responses requiring more than 100 subscriptions or
 100 payments/disputes fail reconciliation without applying a partial result;
 operators must resolve that unsupported account history before resuming billing.
 
-## Purchase and administration
+## Delivered tenant purchase and administration
 
 `GET /organization/billing` shows the effective plan, subscription status,
 complimentary access, reconciliation time, and the 50 most recent subscription
@@ -101,7 +109,7 @@ payloads, provider error bodies, and invoice/dispute evidence are not stored.
 Stripe session URLs remain private to the owning database/browser and are
 excluded from audit records and logs.
 
-## Signed webhooks and recovery
+## Delivered tenant webhooks and recovery
 
 Configure an organization-specific test webhook destination at
 `<public_url>/webhooks/stripe` using its own signing secret. Subscribe to
@@ -168,10 +176,108 @@ runner, provider-budget, or permission controls. Omitting billing configuration
 stops billing activity; previously verified local access still expires at its
 stored deadline rather than being extended indefinitely.
 
+## Shared-site customer and billing contract
+
+The following design is for [#2343](https://github.com/digitaldrywood/detent/issues/2343),
+after shared routing/provisioning #2341/#2342. Reuse current entitlement, grant,
+owner authorization, journal, grace and reconciliation behavior. Static
+`billing.customer_id` becomes a legacy import input, not per-customer operator
+configuration. [Deployment examples](examples/hub/README.md) distinguish currently
+supported fields from the proposed mode configuration.
+
+On a verified, non-impersonating owner's first paid action, atomically persist a
+customer-creation intent keyed by deployment, Stripe account, mode and immutable
+organization ID. Serialize competing purchases. Send a stable provider idempotency
+key and the expected organization metadata, then persist the returned customer ID
+in a unique account/mode/customer-to-organization mapping. Recover uncertain
+responses using that same operation and provider lookup; after a provider
+idempotency window expires, reconcile before issuing another creation. Never
+adopt a customer solely because user-supplied/provider metadata names an org.
+Conflicting/missing bindings leave the operation pending repair and grant no paid
+access. Free signup never creates a customer or needs a Stripe connection.
+
+The registry retains only these billing references and operation status; the
+tenant retains subscription/entitlement audit state. Use durable outbox/checkpoint
+reconciliation across the two stores; no distributed transaction is assumed.
+Checkout is enabled only after both agree on the binding. Customer creation does
+not grant a paid plan. Store operation parameters before Checkout, reuse existing
+preflight/retry rules and reconcile the authoritative subscription/invoice before
+changing entitlements. Registry unavailability cannot route a purchase to another
+customer; tenant dispatch keeps using bounded local entitlement state.
+
+Owner actions live at `/organizations/ORG/billing/checkout` and `/portal` (POST).
+All returns are server-generated from the configured shared origin and that ORG,
+with only allowlisted result parameters on `/organizations/ORG/billing`. A return
+never selects a customer or grants access. The UI shows pending verification,
+free/complimentary/subscribed state, usage and contextual grace/limit messages in
+the existing shell. Billing reads/portal/export remain available when over quota;
+no global banner or project access is conferred by billing ownership.
+
+### Environment separation and shared webhooks
+
+The target operator setting is `deployment.mode: operator_hosted`, independent of
+`auth.provider`. Billing is separately optional; when enabled `billing.mode`
+defaults to `test`. An explicit `live` value requires matching live credentials,
+objects and a separately authorized activation. A self-hosted deployment rejects
+any billing block before provider initialization. Missing/invalid config fails
+startup; neither auth choice nor a key prefix silently chooses a deployment mode.
+
+| Binding | Test | Live target |
+| --- | --- | --- |
+| API key environment reference | `DETENT_STRIPE_TEST_KEY` (`sk_test_` / `rk_test_`) | `DETENT_STRIPE_LIVE_KEY` (`sk_live_` / `rk_live_`) |
+| Webhook secret environment reference | `DETENT_STRIPE_TEST_WEBHOOK_SECRET` | `DETENT_STRIPE_LIVE_WEBHOOK_SECRET` |
+| Shared endpoint | `https://hub.detent.build/webhooks/stripe/test` | `https://hub.detent.build/webhooks/stripe/live` |
+| Object/event requirement | Verified account, mapped customer/price, `livemode=false` | Verified account, separate mapped customer/price, `livemode=true` |
+
+Both secrets use `whsec_`; the prefix cannot establish mode. Verify the signature
+with the endpoint's configured secret over raw bounded bytes before routing, then
+validate mode and account against the durable mapping. Only the configured mode's
+endpoint is active for that deployment; a separate test deployment remains
+isolated when production activates live mode. Staging uses its own exact public
+origin and account/environment configuration, not production session authority.
+Stripe documents separate test/live keys and objects in [API keys](https://docs.stripe.com/keys).
+
+The shared inbox stores only verified event ID/type, account/mode/customer
+reference and delivery status before acknowledgment. Dispatch to the mapped tenant
+with authenticated backend authority; duplicate/out-of-order delivery reuses the
+existing idempotent reconciliation worker. A tenant outage leaves a durable pending
+event. Unknown or deleted customers never cause tenant creation; record bounded
+quarantine/tombstone disposition without content and never grant access. Forged
+metadata, mismatched accounts/modes and invalid signatures fail before tenant
+mutation. Limit body size, timestamp tolerance, queues and retries as in the pilot.
+No provider payload is copied into the metadata registry or customer logs.
+
+Customer, subscription, price, portal, operation and event IDs are namespaced by
+operator deployment/account/mode. Mode changes cannot reinterpret persisted test
+records as live. Activation requires a new validated live binding/configuration
+revision and explicitly mapped live prices/plans; old test records remain isolated.
+On rollback, disable new Checkout while preserving live audit/reconciliation
+and cancellation access through the authorized live binding until obligations are
+resolved. Resume testing only in the separate test deployment; changing the
+production mode is not a billing rollback. Never delete paid records or reset grace to simulate rollback. Test and
+live credentials must not coexist as automatic fallbacks.
+
+Before live activation the operator must supply approved product/price mappings,
+portal settings, business/tax/payment policy, retention and cancellation/refund
+handling, secret distribution and webhook verification evidence. This issue
+specifies the contract; it creates no Stripe accounts/prices/webhooks, enables no
+live endpoint and authorizes no charge. Fixture tests cover live-shaped objects
+and mismatch rejection without a live transaction. Paid activation is independent
+of #2199's free pilot evidence gate.
+
+Organization deletion blocks new purchases and reconciles/cancels the existing
+subscription before retiring its routing reference; cancellation/erasure failures
+remain resumable. Account deletion does not silently cancel other owners'
+organizations. Retain minimal audited account/mode/customer tombstones under the
+operator retention policy so delayed events cannot revive deleted access.
+
 ## Validation
 
-All integration tests use test-mode HTTP fixtures, never live Stripe keys or
-charges. Focused tests cover signatures and replay tolerance, customer/account
+Delivered integration tests use test-mode HTTP fixtures, never live Stripe keys
+or charges. #2343 adds fixture-only live-mode shapes, customer-create crash/retry,
+mode/account mismatch and two-organization routing cases from the
+[shared-site trace](cloud-onboarding.md#shared-site-acceptance-trace).
+Focused tests cover signatures and replay tolerance, customer/account
 authorization, Checkout/portal requests, duplicate/reordered/concurrent event
 delivery, transaction rollback, restart recovery, grace boundaries, renewals,
 refunds/disputes, grant preservation, safe lease completion, local-only dispatch,

@@ -394,7 +394,11 @@ func TestHandleRunResultParksTerminalRetryAtDurableLimit(t *testing.T) {
 			if len(attempts.completions) != tt.failures {
 				t.Fatalf("work attempt completions = %d, want %d", len(attempts.completions), tt.failures)
 			}
-			if len(tracker.comments) != 1 || !strings.Contains(tracker.comments[0], wantError) {
+			wantComments := 1
+			if tt.limit != nil && *tt.limit == 0 {
+				wantComments = 3
+			}
+			if len(tracker.comments) != wantComments || !strings.Contains(tracker.comments[wantComments-1], wantError) {
 				t.Fatalf("retry-limit comments = %#v, want latest parked-attempt error", tracker.comments)
 			}
 
@@ -418,8 +422,8 @@ func TestHandleRunResultParksTerminalRetryAtDurableLimit(t *testing.T) {
 				if blocked.Recovery.Owner != blockedRecoveryOwnerOperator || !blocked.NeedsHumanAttention || blocked.RecoveryIntentResumable {
 					t.Fatalf("zero policy park = %#v, want operator-owned hold", blocked)
 				}
-				if !strings.Contains(tracker.comments[0], "external review") || strings.Contains(tracker.comments[0], "automatically") {
-					t.Fatalf("zero policy comment = %q", tracker.comments[0])
+				if !strings.Contains(tracker.comments[wantComments-1], "external review") || strings.Contains(tracker.comments[wantComments-1], "automatically") {
+					t.Fatalf("zero policy comment = %q", tracker.comments[wantComments-1])
 				}
 			}
 		})
@@ -1586,8 +1590,12 @@ func TestTerminalRetryTransitionFailures(t *testing.T) {
 				if tracker.issues[issue.ID].State != "In Progress" {
 					t.Fatal("failed tracker park changed the remote lane")
 				}
-				if len(tracker.comments) != 0 {
-					t.Fatal("failed tracker park published a success comment")
+				if len(tracker.comments) != 1 {
+					t.Fatalf("failed tracker park comments = %v, want pending marker", tracker.comments)
+				}
+				marker, valid := parseTrackerRecoveryPark(tracker.comments[0])
+				if !valid || marker.Phase != "pending" {
+					t.Fatalf("failed tracker park marker = %#v, want pending operation", marker)
 				}
 				o.trackCandidateBlockedStatusIssues(t.Context(), &state, []connector.Issue{updated}, now)
 				if _, held := state.Blocked[issue.ID]; !held {

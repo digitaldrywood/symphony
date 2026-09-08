@@ -7,7 +7,9 @@ import (
 	"io"
 	"log/slog"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -163,19 +165,26 @@ func TestWorkerCheckpointHandshake(t *testing.T) {
 
 func TestCheckpointPullRequestAssociation(t *testing.T) {
 	t.Parallel()
-	for _, scenario := range []string{"existing ready PR", "new draft PR", "multiple PRs", "network failure", "invalid response", "lost lease", "unknown repository", "ownership lost before create"} {
+	for _, scenario := range []string{"existing ready PR", "new draft PR", "prior PR base", "artifact deliverable", "multiple PRs", "network failure", "invalid response", "lost lease", "unknown repository", "ownership lost before create"} {
 		t.Run(scenario, func(t *testing.T) {
 			t.Parallel()
 			_, checkpoint, _ := checkpointRunnerFixture(t)
 			calls := 0
-			turn := AgentTurnRequest{DeliverableRepository: "example/repo"}
+			turn := AgentTurnRequest{DeliverableKind: config.DeliverablePullRequest, DeliverableRepository: "example/repo"}
+			if scenario == "artifact deliverable" {
+				turn.DeliverableKind = config.DeliverableArtifact
+			}
+			if scenario == "prior PR base" {
+				checkpoint.request.Issue.PullRequest = &connector.PullRequest{State: "closed", BaseRef: "release/stable"}
+			}
 			if scenario == "unknown repository" {
 				turn.DeliverableRepository = ""
 			}
 			if scenario == "lost lease" {
 				checkpoint.request.CheckpointValidate = func(context.Context) error { return ErrExecutionAuthorityUnavailable }
 			}
-			command := func(_ context.Context, _ AgentTurnRequest, args ...string) (string, error) {
+			command := func(_ AgentTurnRequest, cmd *exec.Cmd) (string, error) {
+				args := cmd.Args[1:]
 				calls++
 				if calls == 1 {
 					if args[1] != "list" {
@@ -198,10 +207,13 @@ func TestCheckpointPullRequestAssociation(t *testing.T) {
 				if args[1] != "create" || !strings.Contains(strings.Join(args, " "), "--draft") {
 					t.Fatalf("expected draft creation: %v", args)
 				}
+				if got := slices.Contains(args, "--base=release/stable"); got != (scenario == "prior PR base") {
+					t.Fatalf("incorrect draft base: %v", args)
+				}
 				return "https://example/pr/2", nil
 			}
 			url, err := checkpointPullRequest(t.Context(), checkpoint, turn, command)
-			wantOK := scenario == "existing ready PR" || scenario == "new draft PR"
+			wantOK := scenario == "existing ready PR" || scenario == "new draft PR" || scenario == "prior PR base" || scenario == "artifact deliverable"
 			if wantOK != (err == nil) {
 				t.Fatalf("PR = %s, %v", url, err)
 			}
@@ -210,6 +222,9 @@ func TestCheckpointPullRequestAssociation(t *testing.T) {
 			}
 			if scenario == "new draft PR" && calls != 2 {
 				t.Fatal("draft was not associated")
+			}
+			if scenario == "artifact deliverable" && (calls != 0 || url != "") {
+				t.Fatalf("artifact checkpoint associated a PR: calls=%d url=%q", calls, url)
 			}
 		})
 	}
@@ -435,7 +450,7 @@ func TestCheckpointCommandCancellation(t *testing.T) {
 	t.Parallel()
 	ctx, cancel := context.WithCancel(t.Context())
 	cancel()
-	_, err := checkpointCommand(ctx, AgentTurnRequest{Workspace: t.TempDir()}, "--version")
+	_, err := checkpointCommand(AgentTurnRequest{Workspace: t.TempDir()}, exec.CommandContext(ctx, "gh", "--version"))
 	if err == nil {
 		t.Fatal("cancelled command succeeded")
 	}

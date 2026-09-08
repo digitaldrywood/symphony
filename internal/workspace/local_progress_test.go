@@ -110,6 +110,40 @@ func TestLocalProgressPatchFailures(t *testing.T) {
 	}
 }
 
+func TestLocalProgressPatchLimit(t *testing.T) {
+	t.Parallel()
+	source := initSourceRepo(t)
+	if err := os.WriteFile(filepath.Join(source, "README.md"), []byte(strings.Repeat("implementation\n", 1024)), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	patch := runGit(t, source, "diff", "--binary", "--full-index", "--unified=0", "HEAD", "--", ".")
+	size := int64(len(patch))
+	tests := []struct {
+		name    string
+		limit   int64
+		wantErr bool
+	}{
+		{name: "below limit", limit: size + 1},
+		{name: "exact limit", limit: size},
+		{name: "over limit", limit: size - 1, wantErr: true},
+		{name: "truncated header", limit: 1, wantErr: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			fingerprint, err := gitProgressPatchBounded(t.Context(), source, tt.limit, "HEAD")
+			if tt.wantErr {
+				if err == nil || !strings.Contains(err.Error(), "exceeds observation limit") || fingerprint != "" {
+					t.Fatalf("oversized patch = %q, %v", fingerprint, err)
+				}
+				return
+			}
+			if err != nil || fingerprint == "" {
+				t.Fatalf("bounded patch = %q, %v", fingerprint, err)
+			}
+		})
+	}
+}
+
 func TestLocalProgressObservation(t *testing.T) {
 	t.Parallel()
 	source := initSourceRepo(t)

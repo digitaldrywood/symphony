@@ -5,8 +5,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os/exec"
 	"strings"
+	"time"
+)
+
+const (
+	localProgressTimeout    = 5 * time.Second
+	localProgressPatchLimit = 8 << 20
 )
 
 type LocalProgressProvider interface {
@@ -20,6 +27,8 @@ type LocalProgress struct {
 }
 
 func (l *LocalGit) LocalProgress(ctx context.Context, info Info, issue Issue) (LocalProgress, error) {
+	ctx, cancel := context.WithTimeout(ctx, localProgressTimeout)
+	defer cancel()
 	normalized, err := l.normalizeInfo(info, issue)
 	if err != nil {
 		return LocalProgress{}, err
@@ -76,6 +85,12 @@ func (l *LocalGit) localProgressBase(ctx context.Context, path string, issue Iss
 }
 
 func gitProgressPatch(ctx context.Context, path string, revisions ...string) (string, error) {
+	return gitProgressPatchBounded(ctx, path, localProgressPatchLimit, revisions...)
+}
+
+func gitProgressPatchBounded(ctx context.Context, path string, limit int64, revisions ...string) (string, error) {
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
 	args := []string{"-C", path, "diff", "--no-ext-diff", "--no-textconv", "--no-renames", "--no-color", "--no-relative", "--diff-algorithm=myers", "--binary", "--full-index", "--unified=0", "--src-prefix=a/", "--dst-prefix=b/"}
 	args = append(args, revisions...)
 	args = append(args, "--", ".")
@@ -94,10 +109,18 @@ func gitProgressPatch(ctx context.Context, path string, revisions ...string) (st
 	if err := diff.Start(); err != nil {
 		return "", err
 	}
-	identity := exec.CommandContext(ctx, "git", "-C", path, "patch-id", "--verbatim")
+	identity := exec.CommandContext(ctx, "git", "patch-id", "--verbatim")
+	identity.Dir = path
 	identity.WaitDelay = workspaceCommandWaitDelay
-	identity.Stdin = patch
+	bounded := &io.LimitedReader{R: patch, N: limit + 1}
+	identity.Stdin = bounded
 	output, patchErr := identity.Output()
+	if bounded.N == 0 {
+		patchErr = errors.Join(patchErr, errors.New("local progress patch exceeds observation limit"))
+	}
+	if patchErr != nil {
+		cancel()
+	}
 	closeErr := patch.Close()
 	diffErr := diff.Wait()
 	if err := errors.Join(patchErr, closeErr, diffErr); err != nil {

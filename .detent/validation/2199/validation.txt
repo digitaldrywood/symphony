@@ -2,6 +2,9 @@ Issue: digitaldrywood/detent#2199
 Scope: synthetic pilot evidence; complete hosted pilot gate remains incomplete.
 Toolchain: Go 1.26.6 darwin/arm64
 
+PYTHONDONTWRITEBYTECODE=1 python3 scripts/pilot_evidence_test.py
+PASS: complete, missing, failed, skipped-parent and skipped-child outcomes.
+
 python3 scripts/pilot-evidence.py --output <new-path>
 PASS: 50 required tests, 252 tests and subtests.
 

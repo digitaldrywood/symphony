@@ -89,6 +89,7 @@ def collect(root, race):
     result = subprocess.run(command, cwd=root, env=environment, capture_output=True, text=True, timeout=600)
     passed = set()
     failures = []
+    skipped = []
     samples = []
     measurements = []
     for line in result.stdout.splitlines():
@@ -99,6 +100,8 @@ def collect(root, race):
             passed.add((package, test))
         if event["Action"] == "fail":
             failures.append(package + "/" + test)
+        if event["Action"] == "skip":
+            skipped.append(package + "/" + test)
         output = event.get("Output", "")
         if "PILOT " in output:
             measurement = output.split("PILOT ", 1)[1].strip()
@@ -106,10 +109,10 @@ def collect(root, race):
             if measurement.startswith("workload "):
                 samples.append(json.loads(measurement.removeprefix("workload ")))
     missing = sorted(package + "/" + test for package, test in expected - passed)
-    if result.returncode or missing or failures:
+    if result.returncode or missing or failures or skipped:
         print(result.stderr)
         print(result.stdout)
-        raise RuntimeError(f"Pilot evidence failed: missing={missing}, failed={failures}")
+        raise RuntimeError(f"Pilot evidence failed: missing={missing}, failed={failures}, skipped={skipped}")
     files = [path for package in SUITES for path in (root / "internal" / package).glob("pilot*_test.go")]
     return {
         "schema": 1,

@@ -16,6 +16,7 @@ Start from the issue branch or its merged successor. Prerequisites #2194,
 (`a2c1e9c5`) and #2269 (`1d94a9a1`) verified as ancestors of `origin/main`.
 
 ```sh
+PYTHONDONTWRITEBYTECODE=1 python3 scripts/pilot_evidence_test.py
 python3 scripts/pilot-evidence.py --output tmp/pilot-evidence.json
 python3 scripts/pilot-evidence.py --race --output tmp/pilot-evidence-race.json
 GOTOOLCHAIN=go1.26.6 make check

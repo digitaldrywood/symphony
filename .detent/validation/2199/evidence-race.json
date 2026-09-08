@@ -1,6 +1,6 @@
 {
-  "captured_at_utc": "2026-09-08T03:10:15.910083+00:00",
-  "elapsed_seconds": 48.214,
+  "captured_at_utc": "2026-09-08T03:29:39.343065+00:00",
+  "elapsed_seconds": 68.412,
   "go": "go version go1.26.6 darwin/arm64",
   "hosted_costs": {
     "backups": null,
@@ -16,19 +16,19 @@
   "kind": "synthetic_local_protocol_evidence",
   "measurements": [
     "explicit_import comment_pages=2 issue_requests=2 steady_state_issue_requests=separate",
-    "backoff scenario=\"secondary retry\" wait_seconds=120 sent=2 errors=1 suppressed=16",
     "backoff scenario=\"primary reset\" wait_seconds=3600 sent=2 errors=1 suppressed=16",
     "backoff scenario=\"secondary minimum\" wait_seconds=60 sent=2 errors=1 suppressed=16",
-    "github scenario=\"idle repository\" requests=map[reconcile.pull_request:1 reconcile.repository:1] issue_api=0 git_transport=outside_http_fixture",
+    "backoff scenario=\"secondary retry\" wait_seconds=120 sent=2 errors=1 suppressed=16",
     "github scenario=\"active repository\" requests=map[reconcile.pull_request:1 reconcile.repository:1] issue_api=0 git_transport=outside_http_fixture",
+    "github scenario=\"idle repository\" requests=map[reconcile.pull_request:1 reconcile.repository:1] issue_api=0 git_transport=outside_http_fixture",
     "github scenario=\"full repair\" requests=map[reconcile.ci:2 reconcile.pull_request:3 reconcile.repository:1] issue_api=0 git_transport=outside_http_fixture",
     "pagination sent=500 next_request=blocked checkpoint=not_successful",
-    "artifact uploaded_bytes=65536 duplicate_append=1 retry_storage_requests=1 usage={\"window_start\":\"2026-09-08T03:00:00Z\",\"observed_at\":\"2026-09-08T03:09:32.217391Z\",\"relay_bytes\":196608,\"storage_requests\":8,\"retained_bytes\":67115,\"reserved_bytes\":0}",
-    "artifact uploaded_bytes=1024 duplicate_append=1 retry_storage_requests=1 usage={\"window_start\":\"2026-09-08T03:00:00Z\",\"observed_at\":\"2026-09-08T03:09:32.237215Z\",\"relay_bytes\":3072,\"storage_requests\":8,\"retained_bytes\":2599,\"reserved_bytes\":0}",
-    "workload {\"baseline_backup_bytes\":798720,\"elapsed_microseconds\":179563,\"final_backup_bytes\":798720,\"jobs\":0,\"rounds\":10,\"runners\":0,\"usage_delta\":{\"api_mutations\":0,\"http_duration_microseconds\":103312,\"http_requests\":10,\"http_response_bytes\":73490,\"ingested_events\":0},\"workload\":\"idle_baseline\"}",
-    "workload {\"baseline_backup_bytes\":798720,\"elapsed_microseconds\":284201,\"final_backup_bytes\":806912,\"jobs\":0,\"rounds\":10,\"runners\":1,\"usage_delta\":{\"api_mutations\":10,\"heartbeats\":10,\"http_duration_microseconds\":251426,\"http_requests\":30,\"http_response_bytes\":79129,\"ingested_events\":0},\"workload\":\"idle_one_runner\"}",
-    "workload {\"baseline_backup_bytes\":835584,\"elapsed_microseconds\":3703677,\"final_backup_bytes\":835584,\"jobs\":0,\"rounds\":10,\"runners\":16,\"usage_delta\":{\"api_mutations\":160,\"heartbeats\":160,\"http_duration_microseconds\":3352286,\"http_requests\":330,\"http_response_bytes\":163608,\"ingested_events\":0},\"workload\":\"idle_sixteen_runners\"}",
-    "workload {\"baseline_backup_bytes\":798720,\"elapsed_microseconds\":16641000,\"final_backup_bytes\":2748416,\"jobs\":100,\"rounds\":10,\"runners\":1,\"usage_delta\":{\"api_mutations\":510,\"heartbeats\":10,\"http_duration_microseconds\":15869873,\"http_requests\":630,\"http_response_bytes\":338573,\"ingested_events\":400},\"workload\":\"active_one_runner\"}",
+    "artifact uploaded_bytes=65536 duplicate_append=1 retry_storage_requests=1 usage={\"window_start\":\"2026-09-08T03:00:00Z\",\"observed_at\":\"2026-09-08T03:28:33.774819Z\",\"relay_bytes\":196608,\"storage_requests\":8,\"retained_bytes\":67115,\"reserved_bytes\":0}",
+    "artifact uploaded_bytes=1024 duplicate_append=1 retry_storage_requests=1 usage={\"window_start\":\"2026-09-08T03:00:00Z\",\"observed_at\":\"2026-09-08T03:28:33.800557Z\",\"relay_bytes\":3072,\"storage_requests\":8,\"retained_bytes\":2599,\"reserved_bytes\":0}",
+    "workload {\"baseline_backup_bytes\":798720,\"elapsed_microseconds\":82748,\"final_backup_bytes\":798720,\"jobs\":0,\"rounds\":10,\"runners\":0,\"usage_delta\":{\"api_mutations\":0,\"http_duration_microseconds\":69583,\"http_requests\":10,\"http_response_bytes\":73490,\"ingested_events\":0},\"workload\":\"idle_baseline\"}",
+    "workload {\"baseline_backup_bytes\":798720,\"elapsed_microseconds\":292350,\"final_backup_bytes\":806912,\"jobs\":0,\"rounds\":10,\"runners\":1,\"usage_delta\":{\"api_mutations\":10,\"heartbeats\":10,\"http_duration_microseconds\":258932,\"http_requests\":30,\"http_response_bytes\":79129,\"ingested_events\":0},\"workload\":\"idle_one_runner\"}",
+    "workload {\"baseline_backup_bytes\":835584,\"elapsed_microseconds\":4108579,\"final_backup_bytes\":835584,\"jobs\":0,\"rounds\":10,\"runners\":16,\"usage_delta\":{\"api_mutations\":160,\"heartbeats\":160,\"http_duration_microseconds\":3717473,\"http_requests\":330,\"http_response_bytes\":162968,\"ingested_events\":0},\"workload\":\"idle_sixteen_runners\"}",
+    "workload {\"baseline_backup_bytes\":798720,\"elapsed_microseconds\":19954615,\"final_backup_bytes\":2740224,\"jobs\":100,\"rounds\":10,\"runners\":1,\"usage_delta\":{\"api_mutations\":510,\"heartbeats\":10,\"http_duration_microseconds\":18766134,\"http_requests\":630,\"http_response_bytes\":338581,\"ingested_events\":400},\"workload\":\"active_one_runner\"}",
     "fleet runners=0 heartbeat_requests=0 candidate_reads=0 reconciliation_cycles=6 backend_calls=6 disabled_calls=0",
     "fleet runners=1 heartbeat_requests=6 candidate_reads=6 reconciliation_cycles=6 backend_calls=6 disabled_calls=0",
     "fleet runners=16 heartbeat_requests=96 candidate_reads=96 reconciliation_cycles=6 backend_calls=6 disabled_calls=0"
@@ -40,7 +40,7 @@
   "required_tests": 50,
   "schema": 1,
   "source_dirty": true,
-  "source_head": "a2c1e9c57c90d79abfae77a06535918e74067b8e",
+  "source_head": "95b26ab236d9d50bb514cf84a5430baa0cf76e1b",
   "suites": {
     "artifact": [
       "TestPilotArtifactTraffic",
@@ -110,14 +110,14 @@
   "workloads": [
     {
       "baseline_backup_bytes": 798720,
-      "elapsed_microseconds": 179563,
+      "elapsed_microseconds": 82748,
       "final_backup_bytes": 798720,
       "jobs": 0,
       "rounds": 10,
       "runners": 0,
       "usage_delta": {
         "api_mutations": 0,
-        "http_duration_microseconds": 103312,
+        "http_duration_microseconds": 69583,
         "http_requests": 10,
         "http_response_bytes": 73490,
         "ingested_events": 0
@@ -126,7 +126,7 @@
     },
     {
       "baseline_backup_bytes": 798720,
-      "elapsed_microseconds": 284201,
+      "elapsed_microseconds": 292350,
       "final_backup_bytes": 806912,
       "jobs": 0,
       "rounds": 10,
@@ -134,7 +134,7 @@
       "usage_delta": {
         "api_mutations": 10,
         "heartbeats": 10,
-        "http_duration_microseconds": 251426,
+        "http_duration_microseconds": 258932,
         "http_requests": 30,
         "http_response_bytes": 79129,
         "ingested_events": 0
@@ -143,7 +143,7 @@
     },
     {
       "baseline_backup_bytes": 835584,
-      "elapsed_microseconds": 3703677,
+      "elapsed_microseconds": 4108579,
       "final_backup_bytes": 835584,
       "jobs": 0,
       "rounds": 10,
@@ -151,26 +151,26 @@
       "usage_delta": {
         "api_mutations": 160,
         "heartbeats": 160,
-        "http_duration_microseconds": 3352286,
+        "http_duration_microseconds": 3717473,
         "http_requests": 330,
-        "http_response_bytes": 163608,
+        "http_response_bytes": 162968,
         "ingested_events": 0
       },
       "workload": "idle_sixteen_runners"
     },
     {
       "baseline_backup_bytes": 798720,
-      "elapsed_microseconds": 16641000,
-      "final_backup_bytes": 2748416,
+      "elapsed_microseconds": 19954615,
+      "final_backup_bytes": 2740224,
       "jobs": 100,
       "rounds": 10,
       "runners": 1,
       "usage_delta": {
         "api_mutations": 510,
         "heartbeats": 10,
-        "http_duration_microseconds": 15869873,
+        "http_duration_microseconds": 18766134,
         "http_requests": 630,
-        "http_response_bytes": 338573,
+        "http_response_bytes": 338581,
         "ingested_events": 400
       },
       "workload": "active_one_runner"

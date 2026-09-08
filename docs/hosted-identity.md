@@ -46,8 +46,10 @@ not put its value in YAML. Optional `workos.api_url` and `workos.issuer_url`
 support configured provider endpoints; HTTP is accepted only on loopback for
 fixtures. The issuer defaults to `https://api.workos.com`; set `workos.issuer_url`
 to the exact issuer configured for the environment when using a custom domain
-or application-specific issuer. Optional `plan_id`, `storage_quota_bytes` and `event_quota` are reporting
-metadata. They do not establish prices or implement quota enforcement (#2195).
+or application-specific issuer. Hosted resource enforcement uses the versioned
+[pilot allowance configuration](hosted-allowances.md). Legacy `plan_id`,
+`storage_quota_bytes` and `event_quota` initialize the pilot plan when the new
+`entitlements` section is absent. These values do not establish public prices.
 
 `DETENT_HUB_ADMIN_TOKEN` remains required for bootstrap compatibility, but in
 hosted mode it authorizes only the bounded metadata endpoint. It cannot read

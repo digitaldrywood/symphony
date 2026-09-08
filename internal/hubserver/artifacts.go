@@ -137,16 +137,39 @@ func (s *Service) artifactReceipt(c echo.Context) error {
 	if err != nil {
 		return s.nativeAPIError(c, err)
 	}
-	_, err = s.database.db.ExecContext(c.Request().Context(), "INSERT INTO artifact_references(organization_id,project_id,work_item_id,service_id,artifact_id,revision,manifest_id,reference_json) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING", scope.organization, scope.project, ref.WorkItemID, ref.ServiceID, ref.ArtifactID, ref.Revision, ref.ManifestID, raw)
+	ctx := c.Request().Context()
+	tx, err := s.database.db.BeginTx(ctx, nil)
+	if err != nil {
+		return s.nativeAPIError(c, err)
+	}
+	defer tx.Rollback()
+	now := s.config.now()
+	before, err := s.database.hostedConsumption(ctx, tx, now)
+	if err != nil {
+		return s.nativeAPIError(c, err)
+	}
+	inserted, err := tx.ExecContext(ctx, "INSERT INTO artifact_references(organization_id,project_id,work_item_id,service_id,artifact_id,revision,manifest_id,reference_json) VALUES(?,?,?,?,?,?,?,?) ON CONFLICT DO NOTHING", scope.organization, scope.project, ref.WorkItemID, ref.ServiceID, ref.ArtifactID, ref.Revision, ref.ManifestID, raw)
 	if err != nil {
 		return s.nativeAPIError(c, err)
 	}
 	var previous string
-	if err := s.database.db.QueryRowContext(c.Request().Context(), "SELECT reference_json FROM artifact_references WHERE organization_id=? AND project_id=? AND artifact_id=? AND revision=?", scope.organization, scope.project, ref.ArtifactID, ref.Revision).Scan(&previous); err != nil {
+	if err := tx.QueryRowContext(ctx, "SELECT reference_json FROM artifact_references WHERE organization_id=? AND project_id=? AND artifact_id=? AND revision=?", scope.organization, scope.project, ref.ArtifactID, ref.Revision).Scan(&previous); err != nil {
 		return s.nativeAPIError(c, err)
 	}
 	if previous != string(raw) {
 		return s.nativeAPIError(c, nativeConflict(0))
+	}
+	added, err := inserted.RowsAffected()
+	if err != nil {
+		return s.nativeAPIError(c, err)
+	}
+	if added > 0 {
+		if err := s.database.checkHostedGrowth(ctx, tx, before, now, false); err != nil {
+			return s.nativeAPIError(c, err)
+		}
+	}
+	if err := tx.Commit(); err != nil {
+		return s.nativeAPIError(c, err)
 	}
 	return c.NoContent(http.StatusNoContent)
 }

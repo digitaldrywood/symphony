@@ -29,6 +29,7 @@ func TestHubMigrationPreservesExistingData(t *testing.T) {
 		{"onboarding version 18", 18, "1", false, true, false},
 		{"both tables version 18", 18, "1", true, true, false},
 		{"both tables CRLF version 18", 18, "1", true, true, true},
+		{"repaired onboarding version 19", 19, "1", true, true, false},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
@@ -51,6 +52,14 @@ func TestHubMigrationPreservesExistingData(t *testing.T) {
 			}
 			migrations := fstest.MapFS{}
 			for _, file := range files {
+				if test.version == 19 && file.Name() == "00019_project_onboarding.sql" {
+					data, err := migrationFiles.ReadFile("migrations/" + file.Name())
+					if err != nil {
+						t.Fatal(err)
+					}
+					migrations[file.Name()] = &fstest.MapFile{Data: data}
+					continue
+				}
 				if file.Name() >= "00018_" && file.Name() != "00018_change_viewed_files.sql" {
 					continue
 				}
@@ -63,7 +72,7 @@ func TestHubMigrationPreservesExistingData(t *testing.T) {
 				}
 				migrations[file.Name()] = &fstest.MapFile{Data: data}
 			}
-			if test.onboarding {
+			if test.onboarding && test.version == 18 {
 				data, err := os.ReadFile("testdata/migrations/00018_project_onboarding.sql")
 				if err != nil {
 					t.Fatal(err)
@@ -136,6 +145,8 @@ func TestHubMigrationPreservesExistingData(t *testing.T) {
 			for _, check := range []struct{ name, query, want string }{
 				{"schema version", "SELECT max(version_id) FROM hub_schema_version WHERE is_applied = 1", strconv.FormatInt(supportedSchemaVersion, 10)},
 				{"onboarding migration", "SELECT count(*) FROM hub_schema_version WHERE version_id = 19 AND is_applied = 1", "1"},
+				{"allowance migration", "SELECT count(*) FROM hub_schema_version WHERE version_id = 20 AND is_applied = 1", "1"},
+				{"allowance records", "SELECT count(*) FROM hosted_plan_assignments", "0"},
 				{"onboarding progress", "SELECT progress_json FROM project_onboarding", `{"policy_approved":true}`},
 				{"onboarding revision", "SELECT revision FROM project_onboarding", "7"},
 				{"onboarding timestamp", "SELECT updated_at FROM project_onboarding", testTimestamp},

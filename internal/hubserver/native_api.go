@@ -52,6 +52,14 @@ func (s *Service) nativeAPIError(c echo.Context, err error) error {
 	if errors.Is(err, auth.ErrHostedIdentity) || errors.Is(err, auth.ErrInvalidSession) {
 		return c.JSON(http.StatusForbidden, apiErrorResponse{Code: "access_denied", Message: "Access is no longer available"})
 	}
+	var limit *hostedLimitError
+	if errors.As(err, &limit) {
+		return c.JSON(http.StatusTooManyRequests, struct {
+			Code    string `json:"code"`
+			Message string `json:"message"`
+			*hostedLimitError
+		}{"allowance_exhausted", limit.Error(), limit})
+	}
 	var failure *nativeError
 	if errors.As(err, &failure) {
 		if s.config.Hosted != nil {
@@ -251,6 +259,16 @@ func (s *Service) nativeMutation(c echo.Context, command tracker.Mutation, input
 			return s.nativeAPIError(c, err)
 		}
 	}
+	before, err := s.database.hostedConsumption(ctx, tx, now)
+	if err != nil {
+		return s.nativeAPIError(c, err)
+	}
+	completion := hostedCompletionMutation(c, input)
+	if !completion {
+		if err := s.database.requireHostedFeature(ctx, tx, hostedMutationFeature(c), now); err != nil {
+			return s.nativeAPIError(c, err)
+		}
+	}
 	value, err := operation(ctx, tx, scope, now)
 	if err != nil {
 		return s.nativeAPIError(c, err)
@@ -260,6 +278,9 @@ func (s *Service) nativeMutation(c echo.Context, command tracker.Mutation, input
 		return s.nativeAPIError(c, err)
 	}
 	if _, err := tx.ExecContext(ctx, `INSERT INTO native_commands (organization_id, actor_id, operation, command_key, request_hash, response_json, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)`, scope.organization, scope.credential.ID, operationID, command.IdempotencyKey, requestHash, response, formatHubTime(now)); err != nil {
+		return s.nativeAPIError(c, err)
+	}
+	if err := s.database.checkHostedGrowth(ctx, tx, before, now, completion); err != nil {
 		return s.nativeAPIError(c, err)
 	}
 	if err := tx.Commit(); err != nil {

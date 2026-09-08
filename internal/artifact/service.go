@@ -7,11 +7,15 @@ import (
 	"errors"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unicode/utf8"
 )
 
 type Limits struct {
+	RelayBytes       int64 `json:"relay_bytes,omitempty"`
+	WindowSeconds    int64 `json:"window_seconds,omitempty"`
+	TelemetrySeconds int64 `json:"telemetry_seconds,omitempty"`
 	RetainedBytes    int64 `json:"retained_bytes"`
 	ReservedBytes    int64 `json:"reserved_bytes"`
 	ArtifactBytes    int64 `json:"artifact_bytes"`
@@ -57,6 +61,7 @@ type Reservation struct {
 }
 
 type Upload struct {
+	PartLimit  int64  `json:"part_limit"`
 	ArtifactID string `json:"artifact_id"`
 	Reservation
 	State         string    `json:"state"`
@@ -76,17 +81,23 @@ type Part struct {
 }
 
 type Usage struct {
-	RetainedBytes int64 `json:"retained_bytes"`
-	ReservedBytes int64 `json:"reserved_bytes"`
+	WindowStart     time.Time `json:"window_start,omitzero"`
+	ObservedAt      time.Time `json:"observed_at,omitzero"`
+	RelayBytes      int64     `json:"relay_bytes,omitempty"`
+	StorageRequests int64     `json:"storage_requests,omitempty"`
+	RetainedBytes   int64     `json:"retained_bytes"`
+	ReservedBytes   int64     `json:"reserved_bytes"`
 }
 
 type Service struct {
-	config     Config
-	storage    Storage
-	catalog    *catalog
-	allowances Allowances
-	now        func() time.Time
-	mu         sync.Mutex
+	trafficWindow    atomic.Int64
+	trafficRetention atomic.Int64
+	config           Config
+	storage          Storage
+	catalog          *catalog
+	allowances       Allowances
+	now              func() time.Time
+	mu               sync.Mutex
 }
 
 func (cfg Config) Validate() error {
@@ -115,7 +126,17 @@ func NewService(ctx context.Context, cfg Config, storage Storage, allowances All
 	if err != nil {
 		return nil, err
 	}
-	return &Service{config: cfg, storage: storage, catalog: catalog, allowances: allowances, now: time.Now}, nil
+	service := &Service{config: cfg, storage: storage, catalog: catalog, allowances: allowances, now: time.Now}
+	var window, retention int64
+	if err := catalog.db.QueryRowContext(ctx, "SELECT window_seconds,retention_seconds FROM hosted_traffic_settings WHERE singleton=1").Scan(&window, &retention); err != nil {
+		return nil, errors.Join(err, catalog.Close())
+	}
+	service.trafficWindow.Store(window)
+	service.trafficRetention.Store(retention)
+	if cfg.Mode == "hosted" {
+		service.storage = hostedStorage{service: service, storage: storage}
+	}
+	return service, nil
 }
 
 func (s *Service) Close() error { return s.catalog.Close() }
@@ -131,6 +152,13 @@ func (s *Service) limits(ctx context.Context) (Limits, error) {
 	if err != nil || !validLimits(current) {
 		return Limits{}, ErrQuota
 	}
+	if err := s.configureTraffic(ctx, current); err != nil {
+		return Limits{}, err
+	}
+	l.RelayBytes = current.RelayBytes
+	if s.config.Policy.Limits.RelayBytes > 0 {
+		l.RelayBytes = min(l.RelayBytes, s.config.Policy.Limits.RelayBytes)
+	}
 	l.RetainedBytes = min(l.RetainedBytes, current.RetainedBytes)
 	l.ReservedBytes = min(l.ReservedBytes, current.ReservedBytes)
 	l.ArtifactBytes = min(l.ArtifactBytes, current.ArtifactBytes)
@@ -142,6 +170,14 @@ func (s *Service) limits(ctx context.Context) (Limits, error) {
 func (s *Service) Usage(ctx context.Context) (Usage, error) {
 	var usage Usage
 	err := s.catalog.db.QueryRowContext(ctx, "SELECT coalesce(sum(retained_bytes),0),coalesce(sum(reserved_bytes),0) FROM uploads WHERE organization_id=? AND state!='deleted'", s.config.OrganizationID).Scan(&usage.RetainedBytes, &usage.ReservedBytes)
+	if err != nil || s.config.Mode != "hosted" {
+		return usage, err
+	}
+	now := s.now().UTC()
+	seconds := s.trafficWindow.Load()
+	usage.WindowStart = time.Unix(now.Unix()/seconds*seconds, 0).UTC()
+	usage.ObservedAt = now
+	err = s.catalog.db.QueryRowContext(ctx, "SELECT coalesce(sum(upload_bytes+download_bytes),0),coalesce(sum(requests),0) FROM hosted_traffic WHERE minute >= ?", usage.WindowStart.Unix()).Scan(&usage.RelayBytes, &usage.StorageRequests)
 	return usage, err
 }
 
@@ -180,9 +216,12 @@ func (s *Service) Reserve(ctx context.Context, r Reservation) (Upload, error) {
 	if r.Bytes > l.ArtifactBytes || r.Bytes > l.ReservedBytes-u.ReservedBytes || r.Bytes > l.RetainedBytes-u.RetainedBytes-u.ReservedBytes {
 		return Upload{}, ErrQuota
 	}
+	if s.config.Mode == "hosted" && (r.Bytes > (l.RelayBytes-u.RelayBytes)/2-u.ReservedBytes) {
+		return Upload{}, ErrQuota
+	}
 	now := s.now().UTC().Truncate(time.Second)
-	upload := Upload{ArtifactID: NewID("artifact"), Reservation: r, State: "uploading", CreatedAt: now, Deadline: now.Add(time.Duration(s.config.Policy.AbandonedUploadSeconds) * time.Second), ExpiresAt: now.Add(time.Duration(l.RetentionSeconds) * time.Second)}
-	_, err = s.catalog.db.ExecContext(ctx, "INSERT INTO uploads(id,organization_id,project_id,idempotency_key,request_hash,request_json,state,reserved_bytes,created_at,upload_deadline,expires_at) VALUES(?,?,?,?,?,?,'uploading',?,?,?,?)", upload.ArtifactID, r.OrganizationID, r.ProjectID, r.Key, Digest(raw), raw, r.Bytes, now.Unix(), upload.Deadline.Unix(), upload.ExpiresAt.Unix())
+	upload := Upload{PartLimit: l.UploadBytes, ArtifactID: NewID("artifact"), Reservation: r, State: "uploading", CreatedAt: now, Deadline: now.Add(time.Duration(s.config.Policy.AbandonedUploadSeconds) * time.Second), ExpiresAt: now.Add(time.Duration(l.RetentionSeconds) * time.Second)}
+	_, err = s.catalog.db.ExecContext(ctx, "INSERT INTO uploads(id,organization_id,project_id,idempotency_key,request_hash,request_json,state,reserved_bytes,created_at,upload_deadline,expires_at,admitted_upload_bytes) VALUES(?,?,?,?,?,?,'uploading',?,?,?,?,?)", upload.ArtifactID, r.OrganizationID, r.ProjectID, r.Key, Digest(raw), raw, r.Bytes, now.Unix(), upload.Deadline.Unix(), upload.ExpiresAt.Unix(), l.UploadBytes)
 	return upload, err
 }
 
@@ -190,7 +229,7 @@ func (s *Service) loadUpload(ctx context.Context, id string) (Upload, error) {
 	var u Upload
 	var raw []byte
 	var created, deadline, expires int64
-	err := s.catalog.db.QueryRowContext(ctx, "SELECT request_json,state,created_at,upload_deadline,expires_at,retained_bytes FROM uploads WHERE id=?", id).Scan(&raw, &u.State, &created, &deadline, &expires, &u.RetainedBytes)
+	err := s.catalog.db.QueryRowContext(ctx, "SELECT request_json,state,created_at,upload_deadline,expires_at,retained_bytes,admitted_upload_bytes FROM uploads WHERE id=?", id).Scan(&raw, &u.State, &created, &deadline, &expires, &u.RetainedBytes, &u.PartLimit)
 	if errors.Is(err, sql.ErrNoRows) {
 		return u, ErrMissing
 	}
@@ -286,11 +325,11 @@ func (s *Service) Append(ctx context.Context, id string, p Part) (Object, error)
 		if !s.now().Before(u.Deadline) {
 			return Object{}, ErrExpired
 		}
-		limits, err := s.limits(ctx)
-		if err != nil {
-			return Object{}, err
+		partLimit := u.PartLimit
+		if partLimit == 0 {
+			partLimit = s.config.Policy.Limits.UploadBytes
 		}
-		if int64(len(p.Data)) > limits.UploadBytes {
+		if int64(len(p.Data)) > partLimit {
 			return Object{}, ErrQuota
 		}
 		var count int

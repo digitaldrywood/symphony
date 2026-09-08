@@ -68,7 +68,13 @@ func (m *memoryStorage) Delete(_ context.Context, key, _ string) error {
 
 type testAllowances struct{ limits Limits }
 
-func (a *testAllowances) Limits(context.Context, string) (Limits, error) { return a.limits, nil }
+func (a *testAllowances) Limits(context.Context, string) (Limits, error) {
+	limits := a.limits
+	limits.RelayBytes = 1 << 40
+	limits.WindowSeconds = 3600
+	limits.TelemetrySeconds = 86400
+	return limits, nil
+}
 
 func testConfig(t *testing.T) Config {
 	t.Helper()
@@ -591,7 +597,7 @@ func TestReservationCustodyBinding(t *testing.T) {
 				})
 			}
 			usage, err := s.Usage(t.Context())
-			if err != nil || usage != (Usage{}) || len(storage.data) != 0 {
+			if err != nil || usage.RetainedBytes != 0 || usage.ReservedBytes != 0 || usage.RelayBytes != 0 || usage.StorageRequests != 0 || len(storage.data) != 0 {
 				t.Fatal("mismatched custody created stored data", usage, err)
 			}
 			upload, err := s.Reserve(t.Context(), testReservation(s))

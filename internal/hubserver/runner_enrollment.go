@@ -73,9 +73,34 @@ func (s *Service) runnerTransaction(c echo.Context, status int, operation func(c
 			return s.nativeAPIError(c, err)
 		}
 	}
+	before, err := s.database.hostedConsumption(ctx, tx, now)
+	if err != nil {
+		return s.nativeAPIError(c, err)
+	}
 	value, err := operation(ctx, tx, now)
 	if err != nil {
 		return s.nativeAPIError(c, err)
+	}
+	heartbeat := strings.HasSuffix(c.Path(), "/heartbeat")
+	completion := c.Request().Method == http.MethodDelete
+	if s.database.hostedPlans != nil && (heartbeat || strings.HasSuffix(c.Path(), "/machines/register")) {
+		credential, ok := c.Get("hub_api_credential").(apiCredential)
+		if !ok {
+			return s.nativeAPIError(c, runnerUnauthorized())
+		}
+		active, err := countHostedAfter(ctx, tx, "SELECT l.expires_at FROM leases l JOIN lease_runners r ON r.lease_id=l.lease_id WHERE l.released_at IS NULL AND r.runner_id=?", now, credential.Runner.RunnerID)
+		if err != nil {
+			return s.nativeAPIError(c, err)
+		}
+		completion = active > 0
+	}
+	if err := s.database.checkHostedGrowth(ctx, tx, before, now, completion); err != nil {
+		return s.nativeAPIError(c, err)
+	}
+	if heartbeat {
+		if err := s.database.recordHostedUsage(ctx, tx, now, "heartbeats", 1); err != nil {
+			return s.nativeAPIError(c, err)
+		}
 	}
 	if err := tx.Commit(); err != nil {
 		return s.nativeAPIError(c, err)

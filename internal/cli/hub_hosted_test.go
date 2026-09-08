@@ -57,6 +57,51 @@ func TestReadHostedConfig(t *testing.T) {
 	}
 }
 
+func TestReadHostedEntitlementConfig(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name, variable, token string
+		wantError             bool
+	}{
+		{name: "configured", variable: "TEST_ENTITLEMENT_TOKEN", token: strings.Repeat("x", 32)},
+		{name: "missing secret", variable: "TEST_ENTITLEMENT_TOKEN", wantError: true},
+		{name: "short secret", variable: "TEST_ENTITLEMENT_TOKEN", token: "private-sentinel", wantError: true},
+		{name: "invalid variable", variable: "bad-name", wantError: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			body := "organization_id: org_customer\nbootstrap_subject: user_customer\npublic_url: https://tenant.example.test\nworkos:\n  client_id: client_example\nentitlement_administrator: pilot_operator\nentitlement_admin_token_env: " + test.variable + "\nentitlements:\n  base: {id: pilot, version: 2}\n  window_seconds: 3600\n  retention_windows: 24\n  connected_seconds: 90\n  invitation_seconds: 86400\n  plans:\n    - id: pilot\n      version: 2\n      features: [collaboration]\n      allowances: {projects: 3}\n"
+			path := filepath.Join(t.TempDir(), "hosted.yaml")
+			if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			config, enabled, err := readHostedConfig(path, func(name string) string {
+				switch name {
+				case "WORKOS_API_KEY":
+					return "workos-fixture"
+				case "TEST_ENTITLEMENT_TOKEN":
+					return test.token
+				default:
+					t.Errorf("unexpected environment lookup %q", name)
+					return ""
+				}
+			})
+			if (err != nil) != test.wantError {
+				t.Fatalf("error = %v, want error %v", err, test.wantError)
+			}
+			if err != nil {
+				if test.token != "" && strings.Contains(err.Error(), test.token) {
+					t.Fatal("configuration error exposed the credential")
+				}
+				return
+			}
+			if !enabled || config.EntitlementAdministrator != "pilot_operator" || string(config.EntitlementAdminToken) != test.token || config.Plans == nil || config.Plans.Base.ID != "pilot" || config.Plans.Base.Version != 2 || len(config.Plans.Plans) != 1 || config.Plans.Plans[0].Allowances["projects"] != 3 {
+				t.Fatal("entitlement configuration was not preserved")
+			}
+		})
+	}
+}
+
 func TestHubServeIdentityModes(t *testing.T) {
 	t.Parallel()
 	for _, test := range []struct {

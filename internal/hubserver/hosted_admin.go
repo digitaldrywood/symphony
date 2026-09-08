@@ -67,9 +67,16 @@ func (s *Service) inviteHostedMember(c echo.Context) error {
 	if email == "" || len(email) > 254 || !strings.Contains(email, "@") || hostedEmailListed(s.config.Hosted.StaffEmails, email) {
 		return s.hostedError(c, http.StatusUnprocessableEntity, "Enter the customer's email address")
 	}
+	if err := s.reserveHostedInvitation(c.Request().Context(), email); err != nil {
+		var limit *hostedLimitError
+		if errors.As(err, &limit) {
+			return s.hostedError(c, http.StatusTooManyRequests, limit.Error())
+		}
+		return s.hostedError(c, http.StatusServiceUnavailable, "The invitation could not be reserved")
+	}
 	invitation, err := s.config.Hosted.Provider.Invite(c.Request().Context(), credential.Hosted.OrganizationID, email, role, credential.Hosted.Subject)
 	if err != nil || invitation.OrganizationID != credential.Hosted.OrganizationID || !strings.EqualFold(invitation.Email, email) || invitation.State != "pending" {
-		return s.hostedError(c, http.StatusServiceUnavailable, "The invitation could not be sent")
+		return s.hostedInvitationFailure(c, email, err)
 	}
 	_, err = s.database.db.ExecContext(c.Request().Context(), `INSERT INTO hosted_invitations(id,email,organization_id,role,created_at) VALUES (?,?,?,?,?) ON CONFLICT(id) DO NOTHING`, invitation.ID, email, s.config.Hosted.OrganizationID, role, formatHubTime(s.config.now()))
 	if err != nil {
@@ -230,6 +237,10 @@ func (s *Service) createHostedProject(c echo.Context) error {
 	}
 	project, err := s.createHostedProjectRecord(c.Request().Context(), credential, name)
 	if err != nil {
+		var limit *hostedLimitError
+		if errors.As(err, &limit) {
+			return s.hostedError(c, http.StatusTooManyRequests, limit.Error())
+		}
 		return s.hostedError(c, http.StatusConflict, "The project could not be created; check that its name is unique")
 	}
 	return c.Redirect(http.StatusSeeOther, "/projects/"+project)
@@ -255,6 +266,14 @@ func (s *Service) createHostedProjectRecord(ctx context.Context, credential apiC
 	if !errors.Is(err, sql.ErrNoRows) {
 		return "", err
 	}
+	stamp := s.config.now()
+	before, err := s.database.hostedConsumption(ctx, tx, stamp)
+	if err != nil {
+		return "", err
+	}
+	if err := s.database.requireHostedFeature(ctx, tx, "collaboration", stamp); err != nil {
+		return "", err
+	}
 	project = newNativeID("prj")
 	states := []tracker.NativeState{{Name: "Todo", Dispatchable: true, Transitions: []string{"In Progress", "Done"}}, {Name: "In Progress", Dispatchable: true, Transitions: []string{"Todo", "Done"}}, {Name: "Done", Terminal: true, Transitions: []string{"Todo"}}}
 	now := formatHubTime(s.config.now())
@@ -274,6 +293,9 @@ func (s *Service) createHostedProjectRecord(ctx context.Context, credential apiC
 		return "", err
 	}
 	if _, err := tx.ExecContext(ctx, "INSERT INTO token_grants(token_id,organization_id,project_id) VALUES (?,?,?)", credential.ID, s.config.Hosted.OrganizationID, project); err != nil {
+		return "", err
+	}
+	if err := s.database.checkHostedGrowth(ctx, tx, before, stamp, false); err != nil {
 		return "", err
 	}
 	return project, tx.Commit()

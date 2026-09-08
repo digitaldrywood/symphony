@@ -41,6 +41,7 @@ type Authorizer interface {
 }
 
 type RemoteHub struct {
+	Usage          func(context.Context) (Usage, error)
 	Origin         string
 	ServiceID      string
 	OrganizationID string
@@ -78,6 +79,10 @@ func (h *RemoteHub) Publish(ctx context.Context, r Reference) error {
 }
 
 func (h *RemoteHub) request(ctx context.Context, token, target string, input any) error {
+	return h.requestResult(ctx, token, target, input, nil)
+}
+
+func (h *RemoteHub) requestResult(ctx context.Context, token, target string, input, output any) error {
 	if !ValidOrigin(h.Origin) || token == "" {
 		return ErrAuthorization
 	}
@@ -104,7 +109,10 @@ func (h *RemoteHub) request(ctx context.Context, token, target string, input any
 		return ErrDenied
 	}
 	if response.StatusCode < 200 || response.StatusCode >= 300 {
-		return ErrAuthorization
+		return hostedAllowanceStatus(response.StatusCode)
+	}
+	if output != nil {
+		return Decode(response.Body, output, 4096)
 	}
 	return nil
 }

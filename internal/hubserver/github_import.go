@@ -194,6 +194,10 @@ func (s *Service) advanceGitHubImport(c echo.Context) error {
 		return s.nativeAPIError(c, nativeConflict(active.Revision))
 	}
 	now := s.config.now().UTC()
+	before, err := s.database.hostedConsumption(ctx, tx, now)
+	if err != nil {
+		return s.nativeAPIError(c, err)
+	}
 	if fetchErr != nil {
 		retry := now.Add(time.Minute)
 		if page.RetryAt.After(retry) {
@@ -208,6 +212,9 @@ func (s *Service) advanceGitHubImport(c echo.Context) error {
 	}
 	result, err := readGitHubImport(ctx, tx, scope, current.ID)
 	if err != nil {
+		return s.nativeAPIError(c, err)
+	}
+	if err := s.database.checkHostedGrowth(ctx, tx, before, now, false); err != nil {
 		return s.nativeAPIError(c, err)
 	}
 	if err := tx.Commit(); err != nil {

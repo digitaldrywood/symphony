@@ -236,6 +236,7 @@ func (h *HTTPServer) Serve(ctx context.Context, listener net.Listener, publisher
 		case <-ticker.C:
 			maintenanceCtx, cancel := context.WithTimeout(ctx, 30*time.Second)
 			err := h.service.Maintain(maintenanceCtx)
+			err = errors.Join(err, h.service.ReportHostedUsage(maintenanceCtx))
 			if err == nil && publisher != nil {
 				err = h.service.PublishPending(maintenanceCtx, publisher)
 			}

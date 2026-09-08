@@ -1609,7 +1609,10 @@ func (r *Runner) run(ctx context.Context, req RunRequest) (RunResult, error) {
 	}
 	if hasResumeIdentity(req) {
 		runtimeIdentity = req.ResumeState.RuntimeIdentity.ObserveAt(startedAt)
-		effort = runtimeIdentity.ReasoningEffort.Value
+		runtimeIdentity.Selection = resolvedOverride.Selection
+		if effort != runtimeIdentity.ReasoningEffort.Value {
+			runtimeIdentity.ReasoningEffort = agentidentity.NewValue(effort, agentidentity.ProvenanceConfigured)
+		}
 		modelProvider = runtimeIdentity.Provider.Value
 		serviceTier = runtimeIdentity.ServiceTier.Value
 	}

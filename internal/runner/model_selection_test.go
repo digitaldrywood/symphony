@@ -126,21 +126,21 @@ func TestAutomaticModelSelection(t *testing.T) {
 		{name: "very complex", label: "complexity:very-complex", model: "gpt-6-astra", effort: "high"},
 		{name: "model only", body: "model: gpt-6-astra", model: "gpt-6-astra", effort: "medium"},
 		{name: "explicit low", body: "effort: low", label: "complexity:very-complex", model: "gpt-6-astra", effort: "low"},
-		{name: "xhigh signal", body: "effort: xhigh", model: "gpt-6-astra", effort: "xhigh"},
-		{name: "max signal", body: "effort: max", model: "gpt-6-astra", effort: "max"},
-		{name: "both explicit", body: "model: gpt-5.6-sol\neffort: max", label: "complexity:very-complex", model: "gpt-5.6-sol", effort: "max"},
+		{name: "xhigh signal", body: "effort: xhigh", model: "gpt-6-astra", effort: "medium"},
+		{name: "max signal", body: "effort: max", model: "gpt-6-astra", effort: "medium"},
+		{name: "both explicit", body: "model: gpt-5.6-sol\neffort: max", label: "complexity:very-complex", model: "gpt-5.6-sol", effort: "high"},
 		{name: "role fields", body: "model: gpt-6-astra\neffort: high\ncode:\n  model: gpt-5.6-sol\n  effort: low", model: "gpt-5.6-sol", effort: "low"},
-		{name: "role model issue effort", body: "effort: xhigh\ncode:\n  model: gpt-5.6-sol", model: "gpt-5.6-sol", effort: "xhigh"},
-		{name: "role effort issue model", body: "model: gpt-5.6-sol\ncode:\n  effort: xhigh", model: "gpt-5.6-sol", effort: "xhigh"},
+		{name: "role model issue effort", body: "effort: xhigh\ncode:\n  model: gpt-5.6-sol", model: "gpt-5.6-sol", effort: "medium"},
+		{name: "role effort issue model", body: "model: gpt-5.6-sol\ncode:\n  effort: xhigh", model: "gpt-5.6-sol", effort: "medium"},
 		{name: "code inherited in rework", role: RoleRework, body: "code:\n  model: gpt-6-astra\n  effort: low", model: "gpt-6-astra", effort: "low"},
 		{name: "entering rework", role: RoleRework, model: "gpt-5.6-sol", effort: "medium"},
-		{name: "routine stays normal", role: RoleRoutine, label: "complexity:very-complex", body: "effort: xhigh", model: "gpt-5.6-sol", effort: "xhigh"},
+		{name: "routine stays normal", role: RoleRoutine, label: "complexity:very-complex", body: "effort: xhigh", model: "gpt-5.6-sol", effort: "medium"},
 		{name: "merge stays normal", role: RoleMerge, label: "complexity:very-complex", model: "gpt-5.6-sol", effort: "medium"},
 		{name: "validator stays normal", role: RoleValidator, label: "complexity:complex", model: "gpt-5.6-sol", effort: "medium"},
-		{name: "role specific merge signal", role: RoleMerge, body: "merge:\n  effort: xhigh", model: "gpt-6-astra", effort: "xhigh"},
+		{name: "role specific merge signal", role: RoleMerge, body: "merge:\n  effort: xhigh", model: "gpt-6-astra", effort: "medium"},
 		{name: "route pin", base: "gpt-5.6-sol", label: "complexity:very-complex", model: "gpt-5.6-sol", effort: "high"},
 		{name: "issue wins route", base: "gpt-6-astra", body: "model: gpt-5.6-sol", model: "gpt-5.6-sol", effort: "medium"},
-		{name: "project effort not complexity", projectEffort: "xhigh", model: "gpt-5.6-sol", effort: "xhigh"},
+		{name: "project effort not complexity", projectEffort: "xhigh", model: "gpt-5.6-sol", effort: "medium"},
 		{name: "issue effort wins project", projectEffort: "high", body: "effort: low", model: "gpt-5.6-sol", effort: "low"},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
@@ -213,6 +213,138 @@ func TestAutomaticModelSelectionFailures(t *testing.T) {
 			}
 			if got.Err != nil && strings.Contains(got.Err.Error(), "secret") {
 				t.Fatal("catalog details leaked")
+			}
+		})
+	}
+}
+
+func TestConfiguredEffortCeiling(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name   string
+		effort string
+		resume bool
+		want   string
+	}{
+		{name: "legacy xhigh", effort: "xhigh", want: "medium"},
+		{name: "legacy max", effort: "max", want: "medium"},
+		{name: "supported high", effort: "high", want: "high"},
+		{name: "resumed legacy xhigh", effort: "xhigh", resume: true, want: "medium"},
+		{name: "resumed operator reduction", effort: "medium", resume: true, want: "medium"},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			cfg := config.Default()
+			cfg.Agents.ModelSelection = config.ModelSelection{Preset: new("sol_first"), NormalModel: new("gpt-6-astra"), Levels: map[string]config.ModelSelectionDefaults{"normal": {Effort: new("low")}}}
+			req := RunRequest{Issue: connector.Issue{Description: "```detent-agent\nschema: 1\neffort: " + test.effort + "\n```"}}
+			if test.resume {
+				identity := agentidentity.Configured("codex", "codex", "default", RoleCode, "gpt-6-astra", "", "xhigh", "", time.Now())
+				req.RetryMode = RetryModeResume
+				req.ResumeState = store.AgentResumeState{ProviderThreadID: "thread-1", RuntimeIdentity: identity}
+			}
+			backend := &catalogAgentBackend{models: selectionCatalog()}
+			got := resolveRequestAgentSelection(t.Context(), req, "", "", RoleCode, cfg, config.AgentBackend{Kind: config.AgentBackendCodex}, backend)
+			if got.Err != nil || got.Model != "gpt-6-astra" || got.Effort != test.want {
+				t.Fatalf("selection = %+v, want Astra effort %s", got, test.want)
+			}
+		})
+	}
+}
+
+func TestRunnerResumeUsesBoundedEffort(t *testing.T) {
+	cfg := config.Default()
+	cfg.Agents.ModelSelection = config.ModelSelection{Preset: new("sol_first")}
+	backend := &fakeCodexClient{models: selectionCatalog(), result: AgentTurnResult{ThreadID: "thread-1", TurnID: "turn-2", SessionID: "thread-1-turn-2"}}
+	sessionStore := &fakeSessionStore{sessionID: 1}
+	runner, err := NewRunner(Dependencies{
+		ProjectID:    "detent",
+		Workflow:     config.Workflow{Config: cfg, Prompt: "Work"},
+		Workspace:    &fakeWorkspaceBackend{info: workspace.Info{Path: t.TempDir()}},
+		AgentBackend: backend,
+		Store:        sessionStore,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	identity := agentidentity.Configured("codex", "codex", "default", RoleCode, "gpt-6-astra", "", "xhigh", "", time.Now())
+	_, err = runner.Run(t.Context(), RunRequest{
+		Issue:       connector.Issue{ID: "issue-1", Identifier: "repo#1", Description: "```detent-agent\nschema: 1\neffort: medium\n```"},
+		RetryMode:   RetryModeResume,
+		ResumeState: store.AgentResumeState{ProviderThreadID: "thread-1", RuntimeIdentity: identity},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if backend.request.Model != "gpt-6-astra" || backend.request.ReasoningEffort != "medium" || backend.request.Resume.ThreadID != "thread-1" {
+		t.Fatalf("resumed request model=%s effort=%s thread=%s", backend.request.Model, backend.request.ReasoningEffort, backend.request.Resume.ThreadID)
+	}
+	if sessionStore.started.RuntimeIdentity.ReasoningEffort.Value != "medium" {
+		t.Fatalf("persisted start effort=%+v", sessionStore.started.RuntimeIdentity.ReasoningEffort)
+	}
+}
+
+func TestEffortCeilingPolicyBoundaries(t *testing.T) {
+	t.Parallel()
+	for _, test := range []struct {
+		name       string
+		mutate     func(*config.ModelSelection)
+		body       string
+		role       string
+		kind       string
+		catalog    []AgentModel
+		resume     bool
+		catalogErr error
+		want       string
+		wantError  bool
+	}{
+		{name: "policy permits xhigh", mutate: func(p *config.ModelSelection) {
+			p.Levels = map[string]config.ModelSelectionDefaults{"complex": {Effort: new("xhigh")}}
+		}, body: "effort: xhigh", want: "xhigh"},
+		{name: "stage permits xhigh", mutate: func(p *config.ModelSelection) {
+			p.Stages = map[string]config.ModelSelectionStage{RoleMerge: {Effort: new("xhigh")}}
+		}, role: RoleMerge, body: "effort: xhigh", want: "xhigh"},
+		{name: "other stage does not raise ceiling", mutate: func(p *config.ModelSelection) {
+			p.Stages = map[string]config.ModelSelectionStage{RoleMerge: {Effort: new("xhigh")}}
+		}, body: "effort: xhigh", want: "medium"},
+		{name: "disabled", mutate: func(p *config.ModelSelection) { p.Enabled = new(false) }, body: "model: gpt-6-astra\neffort: max", want: "max"},
+		{name: "excluded backend", kind: config.AgentBackendClaudeCode, body: "model: gpt-6-astra\neffort: xhigh", want: "xhigh"},
+		{name: "fallback stays bounded", catalog: selectionCatalog()[:1], body: "effort: xhigh", want: "medium"},
+		{name: "resume no issue override", resume: true, want: "medium"},
+		{name: "resume role override", resume: true, body: "code:\n  effort: low", want: "low"},
+		{name: "resume malformed override", resume: true, body: "effort: unknown", wantError: true},
+		{name: "resume changed effort catalog unavailable", resume: true, catalogErr: errors.New("unavailable"), wantError: true},
+		{name: "resume changed effort unsupported", resume: true, catalog: []AgentModel{{ID: "gpt-6-astra", Model: "gpt-6-astra", SupportedReasoningEfforts: []string{"xhigh"}}}, wantError: true},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			cfg := config.Default()
+			cfg.Agents.ModelSelection = config.ModelSelection{Preset: new("sol_first")}
+			if test.mutate != nil {
+				test.mutate(&cfg.Agents.ModelSelection)
+			}
+			req := RunRequest{}
+			if test.body != "" {
+				req.Issue.Description = "```detent-agent\nschema: 1\n" + test.body + "\n```"
+			}
+			if test.resume {
+				req.RetryMode = RetryModeResume
+				req.ResumeState = store.AgentResumeState{ProviderThreadID: "thread-1", RuntimeIdentity: agentidentity.Configured("codex", "codex", "default", RoleCode, "gpt-6-astra", "", "xhigh", "", time.Now())}
+			}
+			catalog := test.catalog
+			if catalog == nil {
+				catalog = selectionCatalog()
+			}
+			role, kind := test.role, test.kind
+			if role == "" {
+				role = RoleCode
+			}
+			if kind == "" {
+				kind = config.AgentBackendCodex
+			}
+			backend := &catalogAgentBackend{models: catalog, err: test.catalogErr}
+			got := resolveRequestAgentSelection(t.Context(), req, "", "", role, cfg, config.AgentBackend{Kind: kind}, backend)
+			if (got.Err != nil) != test.wantError || !test.wantError && got.Effort != test.want {
+				t.Fatalf("selection=%+v want effort=%s error=%v", got, test.want, test.wantError)
 			}
 		})
 	}

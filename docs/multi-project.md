@@ -616,7 +616,9 @@ global:
 This is opt-in. Existing pinned models remain pinned. The preset sets normal
 work to `gpt-5.6-sol` at medium effort; complex work to `gpt-6-astra` at medium;
 and very complex work to Astra at high. It never automatically assigns max.
-Explicit issue effort, including low, xhigh, and max, is retained when supported.
+Explicit issue effort is retained when supported and within the configured
+effort ceiling. Legacy xhigh/max requests select complex work but use medium
+effort under this preset; very complex work uses high.
 A provider default changing to Astra does not affect enabled automatic selection.
 
 Host backend and route defaults use the same schema as project `agents`. For
@@ -737,7 +739,7 @@ make a classification-model call:
 | Missing metadata, simple/basic work, or generic `enhancement` alone | Sol | medium |
 | `complexity:complex` for substantive feature/implementation work | Astra | medium |
 | `complexity:very-complex` for subsystems, difficult architecture, state, concurrency, or recovery | Astra | high |
-| Explicit applicable issue xhigh/max, with model omitted | Astra | explicit effort retained |
+| Explicit applicable issue xhigh/max, with model omitted | Astra | medium, bounded by the policy |
 
 Priority, entering Rework, waiting for CI, provider errors, and host/backend
 effort defaults are not complexity signals in the preset. Label substantive work
@@ -773,7 +775,19 @@ The independent security auditor retains its trusted gate model and does not
 consume issue-body model or effort overrides; its unpinned defaults use the
 configured `security_audit` policy stage.
 A model-only override still receives an effort default; an effort-only override
-still receives an automatic model. Explicit values are never clamped by defaults.
+still receives an automatic model.
+
+The highest effort among configured levels and the applicable stage is the
+policy ceiling. Issue, role, project, and backend effort overrides above that
+ceiling use the selected level/stage effort, with `:ceiling` recorded in the
+effort source. Lower supported overrides remain unchanged. To deliberately
+permit xhigh, configure an applicable policy level or stage at xhigh. Disabled
+policies and excluded backends retain their existing override behavior.
+
+For an Astra fleet, set both model aliases to `gpt-6-astra` and configure normal,
+complex, and very_complex effort as low, medium, and high. Existing xhigh/max
+complexity signals then request medium instead of passing the legacy effort to
+the provider. No issue-body migration is required for this protection.
 
 With the policy enabled on an eligible backend, invalid explicit model/effort
 values are reported and dispatch fails; they are never replaced by automatic
@@ -789,8 +803,12 @@ sources, plus backend/route provenance without commands or environment values.
 Session runtime identity and session diagnostics record the policy, matched rule
 or default reason, requested automatic model, actual requested/runtime models,
 effort, source fields, and fallback reason. Runtime updates preserve the decision.
-Policy reload affects new dispatches; active snapshots and explicit resumed
-sessions retain their established identity. Missing resume backends require
+Policy reload affects new dispatches. Active turns keep their original snapshot;
+stop and restart an active turn when an immediate cost reduction is needed.
+Resumed sessions preserve their established thread, model, backend, and route,
+but recheck the current effort ceiling and honor lower current issue overrides.
+A changed resume effort requires catalog validation before another provider turn.
+Missing resume backends require
 restoring that backend or starting fresh. Legacy sessions without stored full
 identity retain legacy recovery checks. Invalid reload retains the last valid
 agent configuration. Hub-approved execution continues to require its approved

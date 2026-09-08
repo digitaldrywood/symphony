@@ -18,6 +18,67 @@ import (
 	"github.com/digitaldrywood/detent/internal/workpad"
 )
 
+func TestCompletedDependencyWaitReleasesOwnedMergeReservation(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name          string
+		foreignOwner  bool
+		completionErr error
+		wantBlocked   bool
+	}{
+		{name: "saved wait releases repository"},
+		{name: "another issue retains reservation", foreignOwner: true, wantBlocked: true},
+		{name: "failed persistence retains reservation", completionErr: errors.New("attempt store unavailable"), wantBlocked: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			now := time.Date(2026, 9, 8, 0, 10, 33, 0, time.UTC)
+			issue := nativeMergeQueueTestIssue(2279, "success")
+			issue.Comments = []connector.IssueComment{{Body: implementProgressWorkpadComment("digitaldrywood/detent#2282", "")}}
+			tracker := &implementProgressConnector{refreshed: issue, resolvedBlockers: []connector.Issue{{ID: "blocker", Identifier: "digitaldrywood/detent#2282", State: "Todo"}}}
+			attempts := &implementProgressAttemptStore{completionErr: tt.completionErr}
+			cfg := normalizeConfig(Config{MaxConcurrentAgents: 1, ActiveStates: []string{"Todo", "Merging"}, TerminalStates: []string{"Done"}})
+			o := &Orchestrator{cfg: cfg, connector: tracker, workAttempts: attempts}
+			state := newState(cfg)
+			owner := issue
+			if tt.foreignOwner {
+				owner = nativeMergeQueueTestIssue(2200, "success")
+			}
+			original := reserveMergeCandidate(&state, owner, now)
+			state.Running[issue.ID] = Running{Issue: issue, WorkAttemptID: 1, Mode: runpkg.RunModeImplement}
+			state.Claimed[issue.ID] = Claimed{Issue: issue}
+			o.handleRunResult(t.Context(), &state, runpkg.Completion{IssueID: issue.ID, CompletedAt: now, Result: runpkg.RunResult{FinalState: FinalStateCompleted, DiffStats: DiffStats{Status: "clean", HeadSHA: issue.PullRequest.HeadSHA}}})
+			if tt.completionErr == nil {
+				record := implementProgressRecordFromCompletion(t, attempts.completions[0])
+				if !record.DependencyDeferral {
+					t.Fatal("completion did not persist the dependency wait")
+				}
+			}
+			next := nativeMergeQueueTestIssue(2282, "success")
+			later := now.Add(time.Minute)
+			reconcileMergeReservations(&state, []connector.Issue{next}, cfg, later)
+			reservation, blocked := mergeReservationBlocks(&state, next, later)
+			if blocked != tt.wantBlocked {
+				t.Fatalf("next merge blocked = %v, want %v; reservation = %+v", blocked, tt.wantBlocked, reservation)
+			}
+			if tt.wantBlocked {
+				if reservation != original {
+					t.Fatalf("unreleased reservation changed: %+v, want %+v", reservation, original)
+				}
+				return
+			}
+			plan := newDispatchPlanner(cfg).plan(&state, []connector.Issue{next}, later, dispatchPlanHooks{})
+			if len(plan.Dispatches) != 1 || plan.Dispatches[0].IssueID != next.ID {
+				t.Fatalf("dispatches = %+v, want prerequisite merge", plan.Dispatches)
+			}
+			resumed := reserveMergeCandidate(&state, issue, later)
+			if !resumed.StartedAt.Equal(later) || resumed.ReleasedReason != "" {
+				t.Fatalf("resumed issue did not acquire a fresh reservation: %+v", resumed)
+			}
+		})
+	}
+}
+
 func TestCompletedDependencyWaitRequiresCurrentMachineSignal(t *testing.T) {
 	t.Parallel()
 	for _, tt := range []struct {

@@ -1135,6 +1135,10 @@ func (o *Orchestrator) finishImplementDependencyDeferral(
 		o.logger.Warn("implement dependency deferral claim release failed", "issue_id", issue.ID, "identifier", issue.Identifier, "error", err)
 	}
 	o.releaseClaim(state, issue.ID)
+	repository := mergeWorkerRepositoryKey(issue)
+	if reservation := state.mergeReservations[repository]; reservation.IssueID == issue.ID {
+		delete(state.mergeReservations, repository)
+	}
 	recordStateEvent(state, telemetry.ActivityEvent{
 		At:      completedAt,
 		Event:   "implement_dependency_deferred",

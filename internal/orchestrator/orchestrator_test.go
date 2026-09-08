@@ -500,7 +500,10 @@ func TestTickPlanReviewGateTransitionsIssues(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			tracker := newFakeConnector()
+			tracker := &planReviewFeedbackConnector{
+				fakeConnector: newFakeConnector(),
+				release:       make(chan struct{}),
+			}
 			tracker.setStateIssues(tt.issue)
 			cfg := orchestrator.Config{
 				PollInterval:        time.Minute,
@@ -525,6 +528,20 @@ func TestTickPlanReviewGateTransitionsIssues(t *testing.T) {
 
 			waitForState(t, orch, func(orchestrator.State) bool {
 				return len(tracker.stateUpdateCalls()) >= len(tt.wantUpdates)
+			})
+
+			if comments := tracker.commentCalls(); len(comments) != 0 {
+				t.Fatalf("comments = %#v, want none before feedback publication is released", comments)
+			}
+			close(tracker.release)
+
+			wantComments := 0
+			if len(tt.wantCommentFragments) > 0 {
+				wantComments = 1
+			}
+			waitForState(t, orch, func(orchestrator.State) bool {
+				return len(tracker.stateUpdateCalls()) >= len(tt.wantUpdates) &&
+					len(tracker.commentCalls()) >= wantComments
 			})
 
 			if got := tracker.stateUpdateCalls(); !stateUpdatesEqual(got, tt.wantUpdates) {
@@ -2823,6 +2840,20 @@ func rankedTestIssue(issue connector.Issue, priority int, createdAt time.Time) c
 	issue.Priority = &priority
 	issue.CreatedAt = &createdAt
 	return issue
+}
+
+type planReviewFeedbackConnector struct {
+	*fakeConnector
+	release chan struct{}
+}
+
+func (c *planReviewFeedbackConnector) CreateComment(ctx context.Context, issueID string, body string) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-c.release:
+		return c.fakeConnector.CreateComment(ctx, issueID, body)
+	}
 }
 
 type fakeConnector struct {

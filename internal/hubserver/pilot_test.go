@@ -81,7 +81,7 @@ func TestPilotIdleRunnerReconciliation(t *testing.T) {
 
 func pilotHostedRunner(t *testing.T, f *browserHostedFixture, index int) runnerauth.Redemption {
 	t.Helper()
-	base := "/api/v2/organizations/org_browser_preview"
+	base := "/api/v2/organizations/" + f.service.config.Hosted.OrganizationID
 	binding := runnerauth.NewBinding()
 	response := f.setupRequest(t, "owner", http.MethodPost, base+"/runner-enrollments", runnerauth.EnrollmentRequest{Binding: binding, ProjectIDs: []tracker.ProjectID{tracker.ProjectID(f.project), tracker.ProjectID(f.privateProject)}, Operations: []string{runnerauth.Read, runnerauth.Claim, runnerauth.Heartbeat, runnerauth.Events, runnerauth.Collaborate}, TTLSeconds: 900})
 	requireNativeStatus(t, response, http.StatusCreated)

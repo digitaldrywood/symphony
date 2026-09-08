@@ -205,7 +205,12 @@ func TestOnboardingCustomerBindingValidation(t *testing.T) {
 func seedOnboardingBrowserJourney(t *testing.T) *browserHostedFixture {
 	t.Helper()
 	f := newBrowserHostedFixture(t, true)
-	organization := "/api/v2/organizations/org_browser_preview"
+	return seedHostedOnboardingJourney(t, f)
+}
+
+func seedHostedOnboardingJourney(t *testing.T, f *browserHostedFixture) *browserHostedFixture {
+	t.Helper()
+	organization := "/api/v2/organizations/" + f.service.config.Hosted.OrganizationID
 	for _, project := range []string{f.project, f.privateProject} {
 		requireNativeStatus(t, f.form(t, "owner", "/organization/grants", url.Values{"user": {"user_browser_owner"}, "project": {project}, "write": {"true"}, "runner": {"true"}}), http.StatusSeeOther)
 	}

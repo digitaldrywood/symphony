@@ -9,14 +9,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/digitaldrywood/detent/internal/artifact"
 	"github.com/digitaldrywood/detent/internal/tracker"
+	"github.com/digitaldrywood/detent/internal/web/templates"
 )
 
 func pilotHostedJourney(t *testing.T) (*browserHostedFixture, string, string) {
 	t.Helper()
-	f := seedOnboardingBrowserJourney(t)
-	pilotHostedRunner(t, f, 2)
-	base := "/api/v2/organizations/org_browser_preview/projects/" + f.project
+	f := seedHostedOnboardingJourney(t, newBrowserHostedOrganizationFixture(t, true, artifact.NewID("org")))
+	runner := pilotHostedRunner(t, f, 2)
+	base := "/api/v2/organizations/" + f.service.config.Hosted.OrganizationID + "/projects/" + f.project
 	response := f.page(t, "owner", base+"/work-items")
 	requireNativeStatus(t, response, http.StatusOK)
 	var issues tracker.Page[tracker.NativeIssue]
@@ -36,17 +38,23 @@ func pilotHostedJourney(t *testing.T) (*browserHostedFixture, string, string) {
 	requireNativeStatus(t, response, http.StatusOK)
 	var change tracker.ChangeRequest
 	decodeHubResponse(t, response, &change)
+	pilotUploadArtifact(t, f, issue, runner)
 	return f, path, path + "/changes/" + change.ID
 }
 
-func TestPilotHostedHistoryAfterRunnerLossAndRestart(t *testing.T) {
-	t.Parallel()
-	f, issue, change := pilotHostedJourney(t)
+func pilotExpireRunners(t *testing.T, f *browserHostedFixture) {
+	t.Helper()
 	for _, query := range []string{"UPDATE runner_identities SET last_heartbeat_at = '2000-01-01T00:00:00Z'", "UPDATE machines SET last_heartbeat_at = '2000-01-01T00:00:00Z'"} {
 		if _, err := f.service.database.db.ExecContext(t.Context(), query); err != nil {
 			t.Fatal(err)
 		}
 	}
+}
+
+func TestPilotHostedHistoryAfterRunnerLossAndRestart(t *testing.T) {
+	t.Parallel()
+	f, issue, change := pilotHostedJourney(t)
+	pilotExpireRunners(t, f)
 	for _, restart := range []bool{false, true} {
 		if restart {
 			config := f.service.config
@@ -72,6 +80,7 @@ func TestPilotHostedHistoryAfterRunnerLossAndRestart(t *testing.T) {
 			{issue + "/comments", "Pilot discussion remains available"},
 			{issue + "/history", "run.finished"},
 			{change, "Pilot native Change Request"},
+			{templates.NativeIssuePath(f.project, tracker.NativeWorkItemID(strings.Split(issue, "/")[8])), "First native run"},
 			{"/projects/" + f.project, "Latest execution: succeeded"},
 		} {
 			response := f.page(t, "owner", test.path)
@@ -96,7 +105,19 @@ func TestPilotBrowserPreview(t *testing.T) {
 		t.Skip("isolated pilot browser preview")
 	}
 	f, issue, change := pilotHostedJourney(t)
-	info := map[string]string{"login": f.server.URL + "/login", "owner": f.server.URL + "/__preview/account/owner", "organization": f.server.URL + "/organization", "human_review": f.server.URL + "/projects/" + f.project, "automatic": f.server.URL + "/projects/" + f.privateProject, "issue": f.server.URL + issue, "change": f.server.URL + change, "usage": f.server.URL + "/organization/plan", "stop": f.server.URL + "/__preview/stop"}
+	versions := pilotReviewVersions(t, f)
+	pilotExpireRunners(t, f)
+	item := tracker.NativeWorkItemID(strings.Split(issue, "/")[8])
+	info := map[string]string{"login": f.server.URL + "/login", "owner": f.server.URL + "/__preview/account/owner", "organization": f.server.URL + "/organization", "human_review": f.server.URL + "/projects/" + f.project, "automatic": f.server.URL + "/projects/" + f.privateProject, "issue": f.server.URL + templates.NativeIssuePath(f.project, item), "change": f.server.URL + templates.ChangePath(f.project, item, change[strings.LastIndex(change, "/")+1:]), "issue_api": f.server.URL + issue, "change_api": f.server.URL + change, "usage": f.server.URL + "/organization/plan", "stop": f.server.URL + "/__preview/stop"}
+	for _, version := range versions {
+		key := "automatic_change"
+		if version.human {
+			key = "human_change"
+		}
+		parts := strings.Split(version.path, "/")
+		info[key] = f.server.URL + templates.ChangePath(parts[6], tracker.NativeWorkItemID(parts[8]), parts[10])
+		info[key+"_api"] = f.server.URL + version.path
+	}
 	raw, err := json.Marshal(info)
 	if err != nil {
 		t.Fatal(err)

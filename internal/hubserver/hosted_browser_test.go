@@ -186,16 +186,21 @@ type browserHostedFixture struct {
 
 func newBrowserHostedFixture(t *testing.T, allocated bool) *browserHostedFixture {
 	t.Helper()
+	return newBrowserHostedOrganizationFixture(t, allocated, "org_browser_preview")
+}
+
+func newBrowserHostedOrganizationFixture(t *testing.T, allocated bool, organization string) *browserHostedFixture {
+	t.Helper()
 	server := httptest.NewUnstartedServer(http.NotFoundHandler())
 	base := "http://" + server.Listener.Addr().String()
 	provider := &browserHostedProvider{
-		base: base, organization: auth.Organization{ID: "org_browser_provider", ExternalID: "org_browser_preview", Name: "Browser organization"},
+		base: base, organization: auth.Organization{ID: "org_browser_provider", ExternalID: organization, Name: "Browser organization"},
 		members: make(map[string]auth.Membership), sessions: make(map[string]auth.HostedIdentity), invitations: make(map[string]auth.Invitation), inviteRoles: make(map[string]string), authorizations: make(map[string]string), codes: make(map[string]auth.Identity),
 	}
 	cfg := Config{DatabasePath: filepath.Join(t.TempDir(), "hosted-browser.db"), GitHubDisabled: true, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), Hosted: &HostedConfig{
-		OrganizationID: "org_browser_preview", BootstrapSubject: "user_browser_owner", PublicURL: base, Provider: provider,
+		OrganizationID: organization, BootstrapSubject: "user_browser_owner", PublicURL: base, Provider: provider,
 		StaffEmails: []string{"staff@example.test", "support@example.test"}, SupportActors: []string{"support@example.test"},
-		Directory: []HostedDestination{{OrganizationID: "org_browser_preview", WorkOSOrganizationID: "org_browser_provider", PublicURL: base}},
+		Directory: []HostedDestination{{OrganizationID: organization, WorkOSOrganizationID: "org_browser_provider", PublicURL: base}},
 	}}
 	if allocated {
 		cfg.Hosted.WorkOSOrganizationID = provider.organization.ID
@@ -302,7 +307,7 @@ func newBrowserHostedFixture(t *testing.T, allocated bool) *browserHostedFixture
 		if err != nil {
 			t.Fatal(err)
 		}
-		request := httptest.NewRequest(http.MethodPost, base+"/api/v2/organizations/org_browser_preview/projects/"+fixture.project+"/work-items", strings.NewReader(string(payload)))
+		request := httptest.NewRequest(http.MethodPost, base+"/api/v2/organizations/"+organization+"/projects/"+fixture.project+"/work-items", strings.NewReader(string(payload)))
 		request.Header.Set("Content-Type", "application/json")
 		cookie := fixture.cookies["owner"]
 		if cookie == nil {

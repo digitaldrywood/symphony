@@ -1,9 +1,10 @@
 # Cloud pilot evidence and release checklist
 
 This is a reproducible readiness assessment for #2199, not a pilot launch
-declaration. **The complete hosted journey is not ready.** Two reproduced
-software gaps remain: [hosted native work navigation #2290](https://github.com/digitaldrywood/detent/issues/2290)
-and [hosted Change review-policy authorization #2291](https://github.com/digitaldrywood/detent/issues/2291).
+declaration. **The complete hosted journey is not ready.** Hosted navigation
+(#2290/#2294) and review-policy authorization (#2291/#2293) are merged and
+verified. The resumed two-repository journey reproduced a remaining gap:
+[approved independent CI principals cannot submit hosted Change checks #2299](https://github.com/digitaldrywood/detent/issues/2299).
 Hosted infrastructure costs and operational restore objectives also remain
 unmeasured. No deployment, invitations, billing, DNS or live identity changes
 were performed or authorized. Native diff delivery remains independent of this
@@ -14,6 +15,8 @@ first-release gate; billing is not a prerequisite for free access.
 Start from the issue branch or its merged successor. Prerequisites #2194,
 #2195 and #2197 were closed, with closing PRs #2278 (`4d3871bb`), #2284
 (`a2c1e9c5`) and #2269 (`1d94a9a1`) verified as ancestors of `origin/main`.
+The continuation also verified #2290/#2294 (`4ea87c17`) and #2291/#2293
+(`e905e6f8`) merged into `origin/main` before incorporating them.
 
 ```sh
 PYTHONDONTWRITEBYTECODE=1 python3 scripts/pilot_evidence_test.py
@@ -27,17 +30,20 @@ Choose a new output path for each run. The collector refuses to overwrite
 evidence and fails if any required test is missing, skipped or failing. It
 selects the toolchain declared in `go.mod`, removes ambient `DETENT_API_TOKEN`,
 and records the source revision, working-tree state, pilot test hashes, platform,
-toolchain, workload counters and required test names. Compilation/dependency
-downloads are outside the measured workloads. Tests use synthetic customer
+toolchain, workload counters, known readiness gaps and required test names.
+Compilation/dependency downloads are outside the measured workloads. Tests use synthetic customer
 content and provider fixtures, temporary SQLite files, and ephemeral listeners.
 They never bind to the live dogfood port 4000.
 
-The recorded [evidence JSON](../.detent/validation/2199/evidence.json) contains
-50 passing required tests and their subtests. It is a local protocol sample;
+The recorded [resumed evidence JSON](../.detent/validation/2199/resumed-evidence.json) contains
+55 passing required tests and their subtests. It is a local protocol sample;
 elapsed time is descriptive, never a cross-machine performance assertion.
 The local release gate is `make check`, including build, generated-file checks,
 lint, vet, NilAway, race tests, aggregate coverage and configured package/file
-coverage floors. Current-head CI is a separate PR gate.
+coverage floors. Current-head CI is a separate PR gate. A passing known-gap
+test confirms a release blocker; it does not turn missing capability into successful acceptance.
+The earlier `evidence.json`, `evidence-race.json` and screenshots remain historical
+evidence from before the hosted fixes. Resumed files use the `resumed-` prefix.
 
 ## Evidence coverage and limits
 
@@ -47,10 +53,10 @@ production deployment or an actual model executing a customer repository.
 
 | Requirement | Reproducible evidence | Remaining limit |
 | --- | --- | --- |
-| Sign in, create/join organization, create project, enroll runners, run native work | `TestHostedBrowserFirstOrganization`, `TestHostedLoginInvitationIntentAndReplay`, `TestHostedOnboardingFirstRun`, `TestPilotHostedHistoryAfterRunnerLossAndRestart` | Provider fixtures; local doctor/provider readiness is user-reported. Hosted work links return JSON (#2290). |
+| Sign in, create/join organization, create project, enroll runners, run native work | `TestHostedBrowserFirstOrganization`, `TestHostedLoginInvitationIntentAndReplay`, `TestHostedOnboardingFirstRun`, `TestPilotHostedHistoryAfterRunnerLossAndRestart` | Provider fixtures; local doctor/provider readiness is user-reported. Hosted issue/Change HTML navigation now verified at 390×844. |
 | Read history with execution runners stopped | `TestPilotHostedHistoryAfterRunnerLossAndRestart` reads issue, comments, run history and draft Change after expired runner heartbeats and Hub reopen | Completed execution does not imply reviewed Change. |
-| Durable uploaded logs/artifacts | `TestHTTPArtifactAccessWithoutRunners`, `TestHostedArtifactReadPermissions`, `TestHostedArtifactGrantRevocation` | Customer gateway and object store remain required and independently available; the hosted onboarding browser fixture uses local history and explicitly has no gateway. |
-| Human/automatic policies on one fleet | `TestProjectPolicyIsolationAndRestart`, `TestChangeInvalidVersionAndReviewPolicy`, `TestChangeApprovalPreservesProtectedMerge`, `TestChangeCIRejectsForgedAndReplayedResults` | Constituent tests prove policy isolation and protected-merge denial. A full hosted two-repository approve/publish/merge journey awaits #2291 and #2290. No live GitHub merge was attempted. |
+| Durable uploaded logs/artifacts | `TestPilotHostedArtifactGatewayWithoutRunners`, `TestHTTPArtifactAccessWithoutRunners`, hosted artifact permission/revocation tests | The resumed hosted browser fixture uses a real HTTP gateway and Hub authorizer with synthetic in-memory storage. Real provider compatibility remains an operator prerequisite. |
+| Human/automatic policies on one fleet | `TestPilotHostedTwoRepositoryReadinessGap`, `TestHostedChangePolicyJourney`, `TestProjectPolicyIsolationAndRestart`, `TestChangeApprovalPreservesProtectedMerge`, `TestChangeCIRejectsForgedAndReplayedResults` | Two projects execute on the same tagged runner and publish distinct policies. Human approval succeeds; both retain missing checks because hosted independent CI submission returns 404 (#2299). Protected external merge denial remains component evidence; no complete hosted merge or live GitHub merge is claimed. |
 | Explicit host, tags, no-match/offline waits | `TestRunnerRoutingClaims`, `TestRunnerSharedHostConcurrentClaimsAndRestart`, `TestRunnerRoutingRevocationAndDrain` | Routing authorization is tested independently of browser navigation. |
 | GitHub issue independence after cutover | `TestGitHubImportCheckpointCutoverAndNativeIsolation`, `TestNativeSchedulerAndConnectorWithoutGitHub` | The latter's transport rejects non-native network requests; optional import, PR/CI and Git traffic remain separate. |
 | Idle fleet request scaling | `TestPilotIdleRunnerReconciliation`, `TestPilotGitHubRequestBudgets`, `TestPilotGitHubImportBudget`, `TestPilotGitHubBackoffAndOperationBound` | Counts and scope are described below; these are not all customer GitHub requests. |
@@ -214,36 +220,56 @@ DETENT_PILOT_BROWSER_MANIFEST="$TMPDIR/pilot-browser.json" \
 
 Read the manifest from the temporary directory, open `login`, and click the
 mocked WorkOS sign-in. Inspect `organization`, `human_review`, `automatic`,
-`usage`, `issue` and `change`. Create a synthetic native issue through the actual
-project form. Stop only this fixture with POST to its manifest's `stop` URL.
+`usage`, `issue`, `change`, `human_change` and `automatic_change`. The manifest
+also provides API URLs; it contains no session or runner credentials. Create a
+synthetic native issue through the actual project form. Stop only this fixture with POST to its manifest's `stop` URL.
 It times out if abandoned. It never starts or manipulates live Detent.
 
 [Screenshots](../.detent/validation/2199/) use 390×844, DPR 1, viewport capture.
-Login, organization, policy, completed execution, issue creation and usage were
-verified. Following the issue link and opening its Change shows JSON; these
-screenshots deliberately record the limitation. An owner with all project
-grants and valid CSRF received 404 approving `/change-review-policy` because
-the hosted administrative allowlist excludes that route. Browser evidence does
-not claim a complete issue/review/artifact journey. Prior onboarding, allowance
-and native-review suites remain relevant component evidence.
+The resumed provider fixture uses a generated valid organization ID, real scoped
+runner enrollment, native claims/events, and a customer-mode artifact gateway.
+It uploads a synthetic log through the production HTTP upload path while the
+lease is active, publishes its receipt to the Hub, releases the lease and
+expires runner heartbeats before exposing browser URLs. Object storage is an
+in-memory provider fixture; no source checkout, model call or live S3 bucket is
+involved. The gateway and Hub remain independent of execution runners.
+
+The resumed Chrome run verified provider sign-in, form-based native issue
+creation, issue discussion, Change creation and discussion, stored run history,
+and uploaded log access. Manifest/object hashes were verified; script-looking
+log text remained inert. Revoking the viewer's project grant changed an already
+issued gateway grant from HTTP 200 to 403. Cross-tenant HTML access returned 403
+without issue content. Checked pages had no horizontal overflow. Exact sanitized
+browser results and screenshots are in the [browser record](../.detent/validation/2199/resumed-browser.md).
+
+Hosted owner review-policy approval and immutable version publication now
+succeed for both repositories. One shared tagged runner executes both jobs.
+Human native approval returned 200 and changed review from pending to approved;
+automatic mode reports review not required. Both show checks missing and needs
+evidence: the project-granted operator credential pinned as an independent CI
+principal receives 404 on the version checks endpoint. `TestPilotHostedTwoRepositoryReadinessGap`
+records this limitation explicitly. Ordinary workers cannot substitute for an
+independent validator. Resume the complete checks/merge journey after #2299
+merges; do not weaken authentication or mark this pilot gate complete.
 
 ## Release decision checklist
 
 - [x] Prerequisite implementation merges verified against current tracker/main.
 - [x] Reproducible synthetic integration/failure and budget evidence collected.
 - [x] Measured quantities distinguished from unmeasured costs and promises.
-- [x] Partial browser journey and concrete limitations recorded.
-- [ ] #2290 merged; complete hosted issue/discussion/history/Change navigation verified.
-- [ ] #2291 merged; hosted review-policy approval and version publication verified.
-- [ ] Complete two-repository hosted review/merge journey and offline uploaded
-  artifact browser journey verified against the approved test deployment.
+- [x] #2290 merged; hosted issue/discussion/history/Change navigation verified.
+- [x] #2291 merged; hosted review-policy approval and version publication verified.
+- [x] Uploaded artifact browser read, integrity and live revocation verified with
+  execution runners offline against the isolated provider fixture.
+- [ ] #2299 merged; complete two-repository hosted check/review/merge journey
+  verified without bypassing external branch protections.
 - [ ] Hosted idle/active infrastructure, retention, backup, network and support
   measurements recorded; operator approves pilot allowances.
 - [ ] Operator records gateway/provider configuration, TLS/proxy trust,
   identity/grant policy, retention/export/deletion rules and a restore rehearsal
   with recovery objectives and responsible owners.
 - [ ] Final `make check` and exact-head PR CI pass; repeat journey evidence after
-  the remaining software dependencies merge.
+  #2299 merges.
 - [ ] Human explicitly authorizes any later deployment or customer invitation.
 
 A green component suite is evidence for the tested contracts. It does not clear

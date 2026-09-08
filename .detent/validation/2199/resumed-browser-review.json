@@ -1,0 +1,23 @@
+{
+  "approval_status": 200,
+  "before": {
+    "native_review": "pending",
+    "external_review": "not_linked",
+    "checks": "missing",
+    "status": "needs_evidence",
+    "messages": [
+      "Current version checks are missing. Missing or stale evidence does not pass review."
+    ]
+  },
+  "after": {
+    "native_review": "approved",
+    "external_review": "not_linked",
+    "checks": "missing",
+    "status": "needs_evidence",
+    "messages": [
+      "Current version checks are missing. Missing or stale evidence does not pass review."
+    ]
+  },
+  "overflow": false,
+  "captured_at_utc": "2026-09-08T04:35:04.827Z"
+}

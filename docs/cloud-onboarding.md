@@ -90,3 +90,67 @@ returns 422, access failures require account/grant correction, and service failu
 require retrying the existing operation. The first native issue uses the ordinary
 idempotent work-item API. Its state determines whether it queues; policy and runner
 checks remain authoritative for execution.
+
+## Independent Change checks
+
+Hosted admission permits a dedicated `operator` bearer to submit only
+`POST /api/v2/organizations/ORG/projects/PROJECT/work-items/ITEM/changes/CHANGE/versions/VERSION/checks`.
+The credential must be active, belong to the hosted organization through an
+explicit current project grant, and be named by an `independent` required check
+in that project's current approved Change review policy. An administrator bearer,
+execution worker, hosted user cookie, or unapproved operator cannot substitute.
+This exception grants no reads, publication, review decisions, policy changes,
+imports, or token administration.
+
+Enrolled runners retain their existing `collaborate` operation for expected
+`customer` checks. They cannot satisfy an `independent` check or change the
+source pinned by the immutable version.
+
+Provision through the existing instance-administrator token APIs before enabling
+hosted serving, or during an explicitly authorized private maintenance window.
+For maintenance, the hosted process must be stopped and the sole database-owning
+Hub process must expose its non-hosted administration API only on private
+loopback. Never run a second process against the live database. Hosted serving
+intentionally does not expose these generic administration APIs.
+
+1. Create a dedicated token with `POST /api/v1/tokens`, using
+   `{"name":"project-independent-ci","scope":"operator"}`. Deliver the returned
+   secret once through the CI secret store; retain its public `id` for policy.
+2. Grant exactly the intended project with `POST /api/v2/tokens/ID/grants`, using
+   `{"organization_id":"ORG","project_id":"PROJECT"}`. This also marks the
+   token native-only. Use a separate principal per project when independent
+   revocation is needed. Restore hosted serving after maintenance.
+3. An organization owner/admin with project write access approves
+   `PUT /api/v2/organizations/ORG/projects/PROJECT/change-review-policy` using
+   their hosted session and CSRF token. Include `idempotency_key`, the current
+   `expected_review_policy_id` when replacing a policy, and `policy` containing
+   the approved repository `policy_id`, `require_review`, and `required_checks`.
+   Each check pins `name`, the credential ID as `principal_id`, `workflow_id`,
+   `workflow_sha256`, `source: "independent"`, and `max_age_seconds` (60–604800).
+   Repository review and check floors still apply.
+4. Publish a version, then deliver its exact check expectation and immutable
+   head, run, policy/configuration and workflow identities to the CI job through
+   the publishing integration. The result bearer cannot fetch them itself.
+   Submit a terminal result and evidence references with a unique idempotency
+   key to the exact version's `/checks` route.
+
+To revoke submission access immediately, the hosted project administrator
+replaces the approved review policy with an eligible replacement CI principal,
+using its current policy identity. The removed principal cannot submit or replay
+results, even for old versions. Publish a new version after policy replacement;
+old versions retain their immutable policy and display stale-policy readiness.
+For permanent credential revocation use `DELETE /api/v1/tokens/ID` through the
+private maintenance administration path. Rotation uses
+`POST /api/v1/tokens/ID/rotate`, invalidates the old secret, and preserves the
+principal ID and grants; distribute the replacement only to the authorized CI.
+A removed project grant also immediately denies submissions.
+
+Credential activity, hash, expiry, scope, project grant and current policy pin
+are rechecked within the mutation transaction before returning cached results.
+Results still validate the version's expected principal, head/run, policy/config,
+check-run ID, workflow digest, independent source and completion timestamp.
+Changed terminal results conflict; retries cannot approve another version.
+Evidence loses readiness at its freshness bound. Human-review repositories also
+need current-version human approval; automatic repositories need passing checks.
+Native `reviewed` status preserves the separate GitHub branch-protection gate and
+does not authorize an external merge.

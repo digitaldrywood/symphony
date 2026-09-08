@@ -126,6 +126,7 @@ func TestHostedChangePolicyJourney(t *testing.T) {
 			if version.PolicyID != descriptor.ID || version.ReviewPolicy.ID != rules.ID || len(version.Checks) != 1 || version.Checks[0].PrincipalID != principal {
 				t.Fatalf("published policy snapshot = %+v", version)
 			}
+			requireNativeStatus(t, performHubAPIRequest(t, f.service, http.MethodPost, path+"/versions/"+version.ID+"/checks", "credential-"+project, changeTestResult(version)), http.StatusOK)
 			approve.IdempotencyKey, approve.ExpectedID = "update", rules.ID
 			approve.Policy.RequiredChecks[0].MaxAgeSeconds = 7200
 			requireNativeStatus(t, f.setupRequest(t, "owner", http.MethodPut, base+"/change-review-policy", approve), http.StatusOK)

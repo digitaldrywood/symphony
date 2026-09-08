@@ -59,6 +59,9 @@ func (s *Service) submitChangeCheck(c echo.Context) error {
 	if err := decodeAPIJSON(c, &request); err != nil {
 		return invalidAPIRequest(c, err)
 	}
+	if s.config.Hosted != nil && nativeRequestScope(c).credential.Runner.RunnerID == "" && request.Source != "independent" {
+		return s.nativeAPIError(c, nativeNotFound())
+	}
 	return s.nativeMutation(c, request.Mutation, request, func(ctx context.Context, tx *sql.Tx, scope nativeScope, now time.Time) (any, error) {
 		change, err := readChange(ctx, tx, scope, c.Param("item"), c.Param("change"))
 		if err != nil {

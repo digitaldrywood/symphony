@@ -234,6 +234,11 @@ func (s *Service) nativeMutation(c echo.Context, command tracker.Mutation, input
 	if err := s.recheckHostedMutation(ctx, tx, scope); err != nil {
 		return s.nativeAPIError(c, err)
 	}
+	if s.config.Hosted != nil && scope.credential.Hosted == nil && scope.credential.Runner.RunnerID == "" && changeCheckRequest(c) {
+		if err := s.requireHostedChangeCheckPrincipal(ctx, tx, scope); err != nil {
+			return s.nativeAPIError(c, err)
+		}
+	}
 	var storedHash, response string
 	err = tx.QueryRowContext(ctx, `SELECT request_hash, response_json FROM native_commands WHERE organization_id = ? AND actor_id = ? AND operation = ? AND command_key = ?`, scope.organization, scope.credential.ID, operationID, command.IdempotencyKey).Scan(&storedHash, &response)
 	if err == nil {

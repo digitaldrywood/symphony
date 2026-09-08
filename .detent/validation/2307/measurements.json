@@ -1,0 +1,289 @@
+{
+  "schema": 1,
+  "environment": {
+    "go": "go1.26.6",
+    "os": "linux",
+    "architecture": "arm64",
+    "cpu_quota": 2,
+    "GOMAXPROCS": 2,
+    "memory_bytes": 6442450944,
+    "fixture_filesystem": "container-local executable tmpfs",
+    "command": "testgate -race -parallel=2 -timeout=15m ./internal/hubserver",
+    "selection": "complete package, no run filter, race count=1",
+    "selection_normalization": "replace randomized prj_/wi_ 32-hex synthetic IDs; preserve test multiplicity",
+    "fixture_data": "synthetic only"
+  },
+  "pilot_test_sha256": "902a2c2343fb8306e608907789b612046f5184ae1e1b67fd590b3495a724c788",
+  "samples": [
+    {
+      "sample": "measured-1",
+      "source_revision": "7c5396d9",
+      "source_change": "only shared fixture timing logs in Hub tests",
+      "outcome": "pass",
+      "package_elapsed_seconds": 209.454,
+      "selected_tests": 1180,
+      "passed_tests": 1177,
+      "skipped_tests": [
+        "TestHostedBrowserPreview",
+        "TestHostedWorkBrowserPreview",
+        "TestOnboardingBrowserPreview"
+      ],
+      "normalized_selection_sha256": "b60c367f4400846f49c049bce1a69a9606335cfd1c15b988abecab63d333b961",
+      "fixture_opens": 467,
+      "fixture_open_seconds_overlapping": 308.58901,
+      "max_queue_seconds": 118.770416,
+      "p95_queue_seconds": 116.973362,
+      "longest_elapsed_test": "TestProviderStartRevalidation",
+      "longest_elapsed_seconds": 5.68,
+      "completed_tests_by_30_second_bucket": {
+        "0": 339,
+        "30": 172,
+        "60": 95,
+        "90": 194,
+        "120": 169,
+        "150": 48,
+        "180": 160
+      },
+      "pilot_workloads": [],
+      "raw_jsonl_sha256": "b604410b4b2b605e69f870c3ffadab02f6707e0ea88cb11ba3b948473bdd6732"
+    },
+    {
+      "sample": "measured-2",
+      "source_revision": "7c5396d9",
+      "source_change": "only shared fixture timing logs in Hub tests",
+      "outcome": "pass",
+      "package_elapsed_seconds": 226.833,
+      "selected_tests": 1180,
+      "passed_tests": 1177,
+      "skipped_tests": [
+        "TestHostedBrowserPreview",
+        "TestHostedWorkBrowserPreview",
+        "TestOnboardingBrowserPreview"
+      ],
+      "normalized_selection_sha256": "b60c367f4400846f49c049bce1a69a9606335cfd1c15b988abecab63d333b961",
+      "fixture_opens": 467,
+      "fixture_open_seconds_overlapping": 319.810399,
+      "max_queue_seconds": 138.202105,
+      "p95_queue_seconds": 129.409332,
+      "longest_elapsed_test": "TestProviderStartRevalidation",
+      "longest_elapsed_seconds": 5.4,
+      "completed_tests_by_30_second_bucket": {
+        "0": 103,
+        "30": 128,
+        "60": 379,
+        "90": 160,
+        "120": 43,
+        "150": 153,
+        "180": 138,
+        "210": 73
+      },
+      "pilot_workloads": [],
+      "raw_jsonl_sha256": "57c42f482480a44562a3ab7036223c64ae16082f5c1894102fb15f3cb9539bde"
+    },
+    {
+      "sample": "pr2292-1",
+      "source_revision": "3ac09f851bfc1c491be4c94e7ab32e7c07275f2b",
+      "source_change": "only shared fixture timing logs in Hub tests",
+      "outcome": "pass",
+      "package_elapsed_seconds": 239.159,
+      "selected_tests": 1020,
+      "passed_tests": 1016,
+      "skipped_tests": [
+        "TestHostedBrowserPreview",
+        "TestHostedWorkBrowserPreview",
+        "TestOnboardingBrowserPreview",
+        "TestPilotBrowserPreview"
+      ],
+      "normalized_selection_sha256": "da4e060dd58ce6081e94b550cdd4af037997034e9d3a09a76abf452ac45629f8",
+      "fixture_opens": 467,
+      "fixture_open_seconds_overlapping": 319.099106,
+      "max_queue_seconds": 144.786924,
+      "p95_queue_seconds": 126.883678,
+      "longest_elapsed_test": "TestPilotHostedWorkloads",
+      "longest_elapsed_seconds": 28.95,
+      "completed_tests_by_30_second_bucket": {
+        "0": 5,
+        "30": 103,
+        "60": 100,
+        "90": 278,
+        "120": 158,
+        "150": 47,
+        "180": 155,
+        "210": 170
+      },
+      "pilot_workloads": [
+        {
+          "baseline_backup_bytes": 798720,
+          "elapsed_microseconds": 77186,
+          "final_backup_bytes": 798720,
+          "jobs": 0,
+          "rounds": 10,
+          "runners": 0,
+          "usage_delta": {
+            "api_mutations": 0,
+            "http_duration_microseconds": 64465,
+            "http_requests": 10,
+            "http_response_bytes": 73490,
+            "ingested_events": 0
+          },
+          "workload": "idle_baseline"
+        },
+        {
+          "baseline_backup_bytes": 798720,
+          "elapsed_microseconds": 313858,
+          "final_backup_bytes": 806912,
+          "jobs": 0,
+          "rounds": 10,
+          "runners": 1,
+          "usage_delta": {
+            "api_mutations": 10,
+            "heartbeats": 10,
+            "http_duration_microseconds": 279573,
+            "http_requests": 30,
+            "http_response_bytes": 79189,
+            "ingested_events": 0
+          },
+          "workload": "idle_one_runner"
+        },
+        {
+          "baseline_backup_bytes": 835584,
+          "elapsed_microseconds": 4022197,
+          "final_backup_bytes": 839680,
+          "jobs": 0,
+          "rounds": 10,
+          "runners": 16,
+          "usage_delta": {
+            "api_mutations": 160,
+            "heartbeats": 160,
+            "http_duration_microseconds": 3666376,
+            "http_requests": 330,
+            "http_response_bytes": 164568,
+            "ingested_events": 0
+          },
+          "workload": "idle_sixteen_runners"
+        },
+        {
+          "baseline_backup_bytes": 798720,
+          "elapsed_microseconds": 19796915,
+          "final_backup_bytes": 2756608,
+          "jobs": 100,
+          "rounds": 10,
+          "runners": 1,
+          "usage_delta": {
+            "api_mutations": 510,
+            "heartbeats": 10,
+            "http_duration_microseconds": 19010880,
+            "http_requests": 630,
+            "http_response_bytes": 341046,
+            "ingested_events": 400
+          },
+          "workload": "active_one_runner"
+        }
+      ],
+      "raw_jsonl_sha256": "7fd1bf0d6db8e833cff4acd47372e7cd9b06b36e76ce715539860c2999465d81"
+    },
+    {
+      "sample": "pr2292-2",
+      "source_revision": "3ac09f851bfc1c491be4c94e7ab32e7c07275f2b",
+      "source_change": "only shared fixture timing logs in Hub tests",
+      "outcome": "pass",
+      "package_elapsed_seconds": 244.616,
+      "selected_tests": 1020,
+      "passed_tests": 1016,
+      "skipped_tests": [
+        "TestHostedBrowserPreview",
+        "TestHostedWorkBrowserPreview",
+        "TestOnboardingBrowserPreview",
+        "TestPilotBrowserPreview"
+      ],
+      "normalized_selection_sha256": "da4e060dd58ce6081e94b550cdd4af037997034e9d3a09a76abf452ac45629f8",
+      "fixture_opens": 467,
+      "fixture_open_seconds_overlapping": 329.007734,
+      "max_queue_seconds": 153.319156,
+      "p95_queue_seconds": 127.724574,
+      "longest_elapsed_test": "TestPilotHostedWorkloads",
+      "longest_elapsed_seconds": 31.61,
+      "completed_tests_by_30_second_bucket": {
+        "0": 5,
+        "30": 75,
+        "60": 73,
+        "90": 228,
+        "120": 195,
+        "150": 105,
+        "180": 106,
+        "210": 163,
+        "240": 66
+      },
+      "pilot_workloads": [
+        {
+          "baseline_backup_bytes": 798720,
+          "elapsed_microseconds": 80395,
+          "final_backup_bytes": 798720,
+          "jobs": 0,
+          "rounds": 10,
+          "runners": 0,
+          "usage_delta": {
+            "api_mutations": 0,
+            "http_duration_microseconds": 67150,
+            "http_requests": 10,
+            "http_response_bytes": 73490,
+            "ingested_events": 0
+          },
+          "workload": "idle_baseline"
+        },
+        {
+          "baseline_backup_bytes": 798720,
+          "elapsed_microseconds": 341936,
+          "final_backup_bytes": 806912,
+          "jobs": 0,
+          "rounds": 10,
+          "runners": 1,
+          "usage_delta": {
+            "api_mutations": 10,
+            "heartbeats": 10,
+            "http_duration_microseconds": 303553,
+            "http_requests": 30,
+            "http_response_bytes": 79189,
+            "ingested_events": 0
+          },
+          "workload": "idle_one_runner"
+        },
+        {
+          "baseline_backup_bytes": 835584,
+          "elapsed_microseconds": 4383521,
+          "final_backup_bytes": 839680,
+          "jobs": 0,
+          "rounds": 10,
+          "runners": 16,
+          "usage_delta": {
+            "api_mutations": 160,
+            "heartbeats": 160,
+            "http_duration_microseconds": 3990091,
+            "http_requests": 330,
+            "http_response_bytes": 164568,
+            "ingested_events": 0
+          },
+          "workload": "idle_sixteen_runners"
+        },
+        {
+          "baseline_backup_bytes": 798720,
+          "elapsed_microseconds": 21414586,
+          "final_backup_bytes": 2752512,
+          "jobs": 100,
+          "rounds": 10,
+          "runners": 1,
+          "usage_delta": {
+            "api_mutations": 510,
+            "heartbeats": 10,
+            "http_duration_microseconds": 20553612,
+            "http_requests": 630,
+            "http_response_bytes": 341060,
+            "ingested_events": 400
+          },
+          "workload": "active_one_runner"
+        }
+      ],
+      "raw_jsonl_sha256": "0a9570d75c27e9151c44efdb7cb8c66566b507fa6eab96692e5dcaab96259e7f"
+    }
+  ]
+}

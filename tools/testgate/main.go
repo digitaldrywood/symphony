@@ -18,24 +18,27 @@ import (
 )
 
 type testEvent struct {
-	Action      string  `json:"Action"`
-	Package     string  `json:"Package"`
-	ImportPath  string  `json:"ImportPath"`
-	FailedBuild string  `json:"FailedBuild"`
-	Test        string  `json:"Test"`
-	Output      string  `json:"Output"`
-	Elapsed     float64 `json:"Elapsed"`
+	Time        time.Time `json:"Time"`
+	Action      string    `json:"Action"`
+	Package     string    `json:"Package"`
+	ImportPath  string    `json:"ImportPath"`
+	FailedBuild string    `json:"FailedBuild"`
+	Test        string    `json:"Test"`
+	Output      string    `json:"Output"`
+	Elapsed     float64   `json:"Elapsed"`
 }
 
 type packageResult struct {
-	Package        string  `json:"package"`
-	Outcome        string  `json:"outcome"`
-	Classification string  `json:"classification,omitempty"`
-	Elapsed        float64 `json:"elapsed_seconds,omitempty"`
-	EvidenceFile   string  `json:"evidence_file"`
+	Package        string        `json:"package"`
+	Outcome        string        `json:"outcome"`
+	Classification string        `json:"classification,omitempty"`
+	Elapsed        float64       `json:"elapsed_seconds,omitempty"`
+	EvidenceFile   string        `json:"evidence_file"`
+	Tests          []*testTiming `json:"tests,omitempty"`
 
 	packageTimeout bool
 	testTimeouts   map[string]bool
+	timings        map[string]*testTiming
 }
 
 type gateSummary struct {
@@ -43,6 +46,7 @@ type gateSummary struct {
 	PackageParallelism int             `json:"package_parallelism"`
 	TestParallelism    int             `json:"test_parallelism"`
 	PackageTimeout     string          `json:"package_timeout"`
+	Race               bool            `json:"race"`
 	Packages           []packageResult `json:"packages"`
 }
 
@@ -67,6 +71,7 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	outputDir := flags.String("output", filepath.Join("tmp", "windows-test-evidence"), "test evidence output directory")
 	testParallelism := flags.Int("parallel", 4, "maximum parallel tests within one package")
 	packageTimeout := flags.Duration("timeout", 10*time.Minute, "timeout for each test package")
+	race := flags.Bool("race", false, "enable the race detector")
 
 	if err := flags.Parse(args); err != nil {
 		return 2
@@ -100,11 +105,13 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	}
 
 	collector := newEvidenceCollector(*outputDir, combined, stdout)
-	commandErr := runGoTest(ctx, packages, *testParallelism, *packageTimeout, collector)
+	commandErr := runGoTest(ctx, packages, *testParallelism, *packageTimeout, *race, collector)
 	closeErr := errors.Join(collector.close(), combined.Close())
-	summaryErr := writeSummary(*outputDir, collector.summary(*testParallelism, *packageTimeout))
+	summary := collector.summary(*testParallelism, *packageTimeout)
+	summary.Race = *race
+	summaryErr := writeSummary(*outputDir, summary)
 	if commandErr != nil {
-		fmt.Fprintf(stderr, "Windows test gate failed: %v\n", commandErr)
+		fmt.Fprintf(stderr, "Test gate failed: %v\n", commandErr)
 	}
 	if closeErr != nil {
 		fmt.Fprintf(stderr, "close test evidence: %v\n", closeErr)
@@ -118,15 +125,9 @@ func run(ctx context.Context, args []string, stdout, stderr io.Writer) int {
 	return 0
 }
 
-func runGoTest(ctx context.Context, packages []string, parallel int, timeout time.Duration, collector *evidenceCollector) error {
+func runGoTest(ctx context.Context, packages []string, parallel int, timeout time.Duration, race bool, collector *evidenceCollector) error {
 	cmd := exec.CommandContext(ctx, "go", "test")
-	cmd.Args = append(cmd.Args,
-		"-json",
-		"-p=1",
-		"-parallel="+strconv.Itoa(parallel),
-		"-timeout="+timeout.String(),
-	)
-	cmd.Args = append(cmd.Args, packages...)
+	cmd.Args = append(cmd.Args, goTestArgs(packages, parallel, timeout, race)...)
 	output, err := cmd.StdoutPipe()
 	if err != nil {
 		return fmt.Errorf("capture go test output: %w", err)
@@ -141,10 +142,20 @@ func runGoTest(ctx context.Context, packages []string, parallel int, timeout tim
 	if scanErr != nil {
 		return errors.Join(fmt.Errorf("collect go test evidence: %w", scanErr), waitErr)
 	}
-	if waitErr != nil {
-		return waitErr
+	return waitErr
+}
+
+func goTestArgs(packages []string, parallel int, timeout time.Duration, race bool) []string {
+	args := []string{
+		"-json",
+		"-p=1",
+		"-parallel=" + strconv.Itoa(parallel),
+		"-timeout=" + timeout.String(),
 	}
-	return nil
+	if race {
+		args = append(args, "-race", "-count=1")
+	}
+	return append(args, packages...)
 }
 
 func newEvidenceCollector(dir string, combined, console io.Writer) *evidenceCollector {
@@ -270,6 +281,7 @@ func (c *evidenceCollector) summary(parallel int, timeout time.Duration) gateSum
 }
 
 func (r *packageResult) apply(event testEvent) {
+	r.recordTiming(event)
 	if (event.Action == "pass" || event.Action == "skip") && event.Test == "" {
 		r.Outcome = event.Action
 		r.Elapsed = event.Elapsed
@@ -291,6 +303,11 @@ func (r *packageResult) apply(event testEvent) {
 }
 
 func (r *packageResult) finalize() {
+	r.Tests = nil
+	for _, timing := range r.timings {
+		r.Tests = append(r.Tests, timing)
+	}
+	sort.Slice(r.Tests, func(i, j int) bool { return r.Tests[i].Test < r.Tests[j].Test })
 	if r.Outcome != "fail" {
 		return
 	}

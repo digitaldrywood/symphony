@@ -28,10 +28,10 @@ var requiredPRStatusChecks = []requiredStatusCheck{
 	},
 	{
 		name:     "Verify (ubuntu-latest)",
-		budget:   "4m",
+		budget:   "30m",
 		jobStart: "  verify:",
 		jobEnd:   "  test-cover:",
-		markers:  []string{"name: Verify (ubuntu-latest)", "runs-on: ubuntu-latest"},
+		markers:  []string{"name: Verify (ubuntu-latest)", "runs-on: ubuntu-latest", "timeout-minutes: 30"},
 	},
 	{
 		name:     "Test Coverage",
@@ -119,7 +119,8 @@ func TestMakeTestTargetsIsolateAPIToken(t *testing.T) {
 		want string
 	}{
 		{name: "test", want: "$(GO_TEST) ./..."},
-		{name: "test-race", want: "$(GO_TEST) -race ./..."},
+		{name: "test-race", want: "$(GO_TEST) -race $$packages"},
+		{name: "test-race-hub", want: "env -u DETENT_API_TOKEN go run ./tools/testgate -race"},
 		{name: "test-cover", want: "$(GO_TEST) -coverprofile=$(COVERPROFILE_RAW) ./..."},
 	}
 	for _, tt := range tests {

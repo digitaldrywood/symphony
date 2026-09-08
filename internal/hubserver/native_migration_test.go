@@ -21,12 +21,14 @@ func TestHubMigrationPreservesExistingData(t *testing.T) {
 		hostedSessions string
 		viewed         bool
 		onboarding     bool
+		crlf           bool
 	}{
-		{"artifacts", 16, "0", false, false},
-		{"hosted identity", 17, "1", false, false},
-		{"viewed files version 18", 18, "1", true, false},
-		{"onboarding version 18", 18, "1", false, true},
-		{"both tables version 18", 18, "1", true, true},
+		{"artifacts", 16, "0", false, false, false},
+		{"hosted identity", 17, "1", false, false, false},
+		{"viewed files version 18", 18, "1", true, false, false},
+		{"onboarding version 18", 18, "1", false, true, false},
+		{"both tables version 18", 18, "1", true, true, false},
+		{"both tables CRLF version 18", 18, "1", true, true, true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
@@ -66,8 +68,15 @@ func TestHubMigrationPreservesExistingData(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
+				data = []byte(strings.ReplaceAll(string(data), "\r\n", "\n"))
+				if test.crlf {
+					data = []byte(strings.ReplaceAll(string(data), "\n", "\r\n"))
+				}
 				if test.viewed {
-					migrations["00018_change_viewed_files.sql"].Data = append(migrations["00018_change_viewed_files.sql"].Data, []byte(strings.TrimPrefix(strings.Split(string(data), "-- +goose Down")[0], "-- +goose Up\n"))...)
+					up, _, _ := strings.Cut(string(data), "-- +goose Down")
+					up = strings.TrimPrefix(up, "-- +goose Up")
+					viewed := migrations["00018_change_viewed_files.sql"]
+					viewed.Data = append(viewed.Data, []byte(up)...)
 				} else {
 					migrations["00018_project_onboarding.sql"] = &fstest.MapFile{Data: data}
 				}

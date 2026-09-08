@@ -24,7 +24,10 @@ silently stamp versions or drop persisted tables.
 Freeze the historical migration as a test fixture. Seed meaningful data before
 upgrading each branch variant, then check schema versions, row contents, foreign
 keys, integrity and restart behavior. Test fresh startup and the valid shared
-prior schema too. Document backup and recovery through the supported binary.
+prior schema too. Parse Goose fixture headers independently of LF/CRLF line
+endings and exercise both: Windows checkout conversion can otherwise leave a
+second Up directive in combined historical fixtures. Document backup and
+recovery through the supported binary.
 
 Reject numeric duplicates within each schema namespace before expensive gates.
 Use a real conflict-free Git merge regression with two independently valid

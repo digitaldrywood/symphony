@@ -18,6 +18,7 @@ import (
 	"github.com/digitaldrywood/detent/internal/scheduler"
 	"github.com/digitaldrywood/detent/internal/store"
 	"github.com/digitaldrywood/detent/internal/telemetry"
+	"github.com/digitaldrywood/detent/internal/workspace"
 )
 
 func TestLaneRevocationPreservesTrackerDestination(t *testing.T) {
@@ -145,6 +146,7 @@ func TestLaneRevocationPreservesPushedWork(t *testing.T) {
 	orch := &Orchestrator{
 		cfg:                    cfg,
 		connector:              tracker,
+		reaper:                 &laneRetentionProbe{t: t, result: workspace.Preservation{Preserved: true, LocalChangesVerified: true, Delivery: &workspace.DeliverableState{CommitsAhead: 1, Remote: "origin", RemoteRef: "refs/heads/detent/1998", LocalHeadSHA: "abc123", RemoteHeadSHA: "abc123", RemoteBranchExists: true}}},
 		workAttempts:           attempts,
 		pendingLaneRevocations: map[string]*pendingLaneRevocation{},
 		logger:                 slog.New(slog.NewTextHandler(io.Discard, nil)),
@@ -278,7 +280,7 @@ func TestClassifyLaneRevocationDrivesAllOutcomeSurfaces(t *testing.T) {
 	}{
 		{
 			name:         "pushed work with rejected finalization",
-			receipt:      &laneRevocationDeliveryReceipt{Schema: 1, Kind: laneRevocationDeliveryReceiptKind},
+			receipt:      &laneRevocationDeliveryReceipt{Schema: 1, Kind: laneRevocationDeliveryReceiptKind, Remote: "origin", RemoteRef: "refs/heads/detent/1998", RemoteHeadSHA: "abc123"},
 			workProduced: true,
 			wantClass:    laneRevocationDeliveredClassification,
 			wantTerminal: store.WorkAttemptTerminalDelivered,

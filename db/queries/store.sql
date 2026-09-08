@@ -422,6 +422,11 @@ WITH issue_sessions AS (
   FROM codex_sessions
   WHERE started_at IS NOT NULL
     AND completed_at IS NOT NULL
+    AND NOT EXISTS (
+      SELECT 1 FROM work_attempts AS attempt
+      WHERE attempt.id = codex_sessions.work_attempt_id
+        AND (attempt.phase = 'completion_deferred' OR NOT (COALESCE(json_extract(CASE WHEN json_valid(attempt.worker_metadata_json) THEN attempt.worker_metadata_json ELSE '{}' END, '$.historical_completion_fence.excluded_from_worker_outcomes'), 0) = 0))
+    )
 ),
 successful_issues AS (
   SELECT
@@ -651,6 +656,8 @@ LEFT JOIN work_attempts AS attempt ON attempt.id = session.work_attempt_id
 WHERE usage_events.project_id = sqlc.arg(project_id)
   AND usage_events.started_at > sqlc.arg(since)
   AND lower(trim(COALESCE(attempt.terminal_state, ''))) != 'capacity'
+  AND COALESCE(attempt.phase, '') != 'completion_deferred'
+  AND COALESCE(json_extract(CASE WHEN json_valid(attempt.worker_metadata_json) THEN attempt.worker_metadata_json ELSE '{}' END, '$.historical_completion_fence.excluded_from_worker_outcomes'), 0) = 0
   AND (
     (sqlc.arg(issue_id) != '' AND COALESCE(usage_events.issue_id, '') = sqlc.arg(issue_id))
     OR (sqlc.arg(identifier) != '' AND COALESCE(usage_events.identifier, '') = sqlc.arg(identifier))
@@ -931,6 +938,7 @@ SELECT *
 FROM work_attempts
 WHERE completed_at IS NOT NULL
   AND status = 'terminal'
+  AND COALESCE(json_extract(CASE WHEN json_valid(worker_metadata_json) THEN worker_metadata_json ELSE '{}' END, '$.historical_completion_fence.excluded_from_worker_outcomes'), 0) = 0
   AND (sqlc.arg(filter_project_id) = '' OR project_id = sqlc.arg(filter_project_id))
   AND (sqlc.arg(filter_worker_type) = '' OR worker_type = sqlc.arg(filter_worker_type))
   AND (
@@ -1416,6 +1424,7 @@ FROM work_attempts
 WHERE completed_at >= sqlc.arg(from_at)
   AND completed_at < sqlc.arg(to_at)
   AND lower(trim(COALESCE(terminal_state, ''))) IN ('failure', 'timed_out', 'no_progress', 'capacity')
+  AND COALESCE(json_extract(CASE WHEN json_valid(worker_metadata_json) THEN worker_metadata_json ELSE '{}' END, '$.historical_completion_fence.excluded_from_worker_outcomes'), 0) = 0
 GROUP BY COALESCE(NULLIF(trim(error_class), ''), 'unknown')
 ORDER BY failures DESC, error_class
 LIMIT 1;

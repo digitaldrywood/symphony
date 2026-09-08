@@ -429,6 +429,12 @@ func TestMergeWorkerDurationCeilingHonorsLatestTerminalState(t *testing.T) {
 			if _, ok := state.Blocked[issue.ID]; ok {
 				t.Fatalf("Blocked[%q] present after latest state became terminal", issue.ID)
 			}
+			if tt.name == "pull request merged" {
+				if len(state.deferredCompletions) != 1 || len(orch.pendingLaneRevocations) != 0 {
+					t.Fatal("PR-only terminal evidence must defer until the lane changes")
+				}
+				return
+			}
 			if _, ok := state.Completed[issue.ID]; !ok {
 				t.Fatalf("Completed[%q] missing after latest state became terminal", issue.ID)
 			}

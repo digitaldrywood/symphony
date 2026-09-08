@@ -3611,3 +3611,124 @@ func tableIdentifier(t *testing.T, table string) string {
 		return ""
 	}
 }
+
+func TestCompletionFenceRevocationMigrationAndAccounting(t *testing.T) {
+	ctx := t.Context()
+	db, err := sql.Open("sqlite", filepath.Join(t.TempDir(), "detent.db"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	db.SetMaxOpenConns(1)
+	t.Cleanup(func() {
+		if err := db.Close(); err != nil {
+			t.Error(err)
+		}
+	})
+	if err := configureSQLite(ctx, db, 0); err != nil {
+		t.Fatal(err)
+	}
+	migrationMu.Lock()
+	defer migrationMu.Unlock()
+	goose.SetBaseFS(migrationsFS)
+	defer goose.SetBaseFS(nil)
+	if err := goose.SetDialect("sqlite3"); err != nil {
+		t.Fatal(err)
+	}
+	if err := goose.UpToContext(ctx, db, "migrations", 54); err != nil {
+		t.Fatal(err)
+	}
+	cases := []struct {
+		name, terminal, message, metadata string
+		flagged, active                   bool
+	}{
+		{name: "legacy error", terminal: "lane_revoked", message: "completion_fence_unavailable", metadata: `{}`, flagged: true},
+		{name: "delivered metadata", terminal: "delivered", metadata: `{"lane_revocation":{"reason":"completion_fence_unavailable"},"delivery_receipt":{"schema":1,"kind":"pushed_work_product"}}`, flagged: true},
+		{name: "revoked metadata", terminal: "lane_revoked", metadata: `{"lane_revocation":{"reason":"completion_fence_unavailable"}}`, flagged: true},
+		{name: "earlier migration", terminal: "delivered", metadata: `{"historical_lane_revocation":{"original_error_message":"completion_fence_unavailable"}}`, flagged: true},
+		{name: "receipt backfill", terminal: "delivered", metadata: `{"lane_revocation_receipt_backfill":{"original_error_message":"completion_fence_unavailable"}}`, flagged: true},
+		{name: "malformed legacy metadata", terminal: "lane_revoked", message: "completion_fence_unavailable", metadata: `{broken`, flagged: true},
+		{name: "verified lane change", terminal: "lane_revoked", message: "tracker_lane_changed", metadata: `{}`},
+		{name: "ordinary success", terminal: "success", metadata: `{}`},
+		{name: "active completion wait", metadata: `{}`, active: true},
+	}
+	for i, tc := range cases {
+		status, phase := "terminal", "lane_revoked"
+		var completed any = "2026-09-07T11:00:00Z"
+		if tc.active {
+			status, phase, completed = "active", "completion_deferred", nil
+		}
+		if _, err := db.ExecContext(ctx, `INSERT INTO work_attempts
+		(id, project_id, issue_id, worker_type, status, started_at, completed_at, terminal_state, error_message, phase, worker_metadata_json)
+		VALUES (?, 'detent', 'issue', 'implementation', ?, '2026-09-07T10:00:00Z', ?, ?, ?, ?, ?)`, i+1, status, completed, tc.terminal, tc.message, phase, tc.metadata); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := db.ExecContext(ctx, `INSERT INTO codex_sessions (id, work_attempt_id, project_id, issue_id, started_at, completed_at, final_state)
+		VALUES (?, ?, 'detent', 'issue', '2026-09-07T10:00:00Z', '2026-09-07T11:00:00Z', 'completed')`, i+1, i+1); err != nil {
+			t.Fatal(err)
+		}
+	}
+	backend := &sqliteStore{db: db, queries: sqlc.New(db)}
+	startedAt := time.Date(2026, 9, 7, 10, 0, 0, 0, time.UTC)
+	for i := range cases {
+		if _, err := backend.RecordUsageEvent(ctx, UsageEvent{ProjectID: "detent", IssueID: "issue", SessionID: int64(i + 1), CostUSD: 50, TotalTokens: 5000, StartedAt: startedAt, FinishedAt: startedAt.Add(time.Hour), Outcome: "completed"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := goose.UpToContext(ctx, db, "migrations", 55); err != nil {
+		t.Fatal(err)
+	}
+	for i, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			var metadata string
+			if err := db.QueryRowContext(ctx, "SELECT worker_metadata_json FROM work_attempts WHERE id = ?", i+1).Scan(&metadata); err != nil {
+				t.Fatal(err)
+			}
+			if got := strings.Contains(metadata, `"historical_completion_fence"`); got != tc.flagged {
+				t.Fatalf("metadata = %s, flagged = %v", metadata, tc.flagged)
+			}
+		})
+	}
+	spend, err := backend.IssueSpendSince(ctx, IssueSpendSinceQuery{ProjectID: "detent", IssueID: "issue", Since: startedAt.Add(-time.Second)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if spend.CostUSD != 100 || spend.TotalTokens != 10000 || spend.Sessions != 2 {
+		t.Fatalf("progress spend = %#v, want only ordinary attempts", spend)
+	}
+	history, err := backend.ListRecentTerminalWorkAttempts(ctx, WorkAttemptHistoryQuery{ProjectID: "detent", IssueID: "issue"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(history) != 2 {
+		t.Fatalf("progress history = %#v, want two ordinary attempts", history)
+	}
+	cycles, err := backend.CycleTimeReport(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(cycles.Issues) != 1 || cycles.Issues[0].Sessions != 2 {
+		t.Fatalf("completed cycles = %#v", cycles)
+	}
+	costs, err := backend.BudgetCostEvents(ctx, BudgetCostQuery{ProjectIDs: []string{"detent"}, From: startedAt.Add(-time.Second), To: startedAt.Add(2 * time.Hour)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(costs) != len(cases) {
+		t.Fatalf("billing events = %d, want %d", len(costs), len(cases))
+	}
+	if got := queryInt(t, db, "SELECT COUNT(*) FROM codex_sessions WHERE final_state = 'completed'"); got != int64(len(cases)) {
+		t.Fatal("migration rewrote session history")
+	}
+	if err := goose.DownToContext(ctx, db, "migrations", 54); err != nil {
+		t.Fatal(err)
+	}
+	for i, tc := range cases {
+		var metadata string
+		if err := db.QueryRowContext(ctx, "SELECT worker_metadata_json FROM work_attempts WHERE id = ?", i+1).Scan(&metadata); err != nil {
+			t.Fatal(err)
+		}
+		if metadata != tc.metadata {
+			t.Fatalf("restored metadata = %s, want %s", metadata, tc.metadata)
+		}
+	}
+}

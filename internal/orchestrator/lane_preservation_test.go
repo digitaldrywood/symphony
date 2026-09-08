@@ -44,11 +44,14 @@ func TestLaneRevocationRetainsWorkspaceForEveryWriter(t *testing.T) {
 			tracker := &autoPromoteTickConnector{stateIssues: []connector.Issue{parked}}
 			attempts := &recordingWorkAttemptStore{}
 			retention := &laneRetentionProbe{t: t, result: workspace.Preservation{
-				Path: "/retained/workspace", Branch: "detent/2138", HeadSHA: "abc123", Preserved: true,
+				Path: "/retained/workspace", Branch: "detent/2138", HeadSHA: "abc123", Preserved: true, LocalChangesVerified: true,
 				UnpushedCommits: 1, TrackedPaths: []string{"implementation.go"},
 			}}
+			if tt.pushed {
+				retention.result.Delivery = &workspace.DeliverableState{CommitsAhead: 1, Remote: "origin", RemoteRef: "refs/heads/detent/2138", LocalHeadSHA: "abc123", RemoteHeadSHA: "abc123", RemoteBranchExists: true}
+			}
 			if tt.filesystem {
-				retention.result = workspace.Preservation{Path: "/retained/workspace", Preserved: true, Files: 1}
+				retention.result = workspace.Preservation{Path: "/retained/workspace", Preserved: true, LocalChangesVerified: true, Files: 1}
 			}
 			cfg := laneMutationTestConfig()
 			orch := &Orchestrator{cfg: cfg, connector: tracker, workAttempts: attempts, reaper: retention,
@@ -121,14 +124,14 @@ func TestLaneRevocationRetriesFailedRetentionBeforeReleasingOwnership(t *testing
 	running := Running{Issue: issue, WorkAttemptID: 2138, Generation: 38}
 	state.Running[issue.ID] = running
 	state.Claimed[issue.ID] = Claimed{Issue: issue}
-	pending := &pendingLaneRevocation{issue: issue, running: running, reapDone: true, mutationRead: true,
+	pending := &pendingLaneRevocation{issue: issue, running: running, fromState: "In Progress", toState: "Blocked", reapDone: true, mutationRead: true,
 		completion: &runpkg.Completion{IssueID: issue.ID, CompletedAt: now}}
 	orch.pendingLaneRevocations = map[string]*pendingLaneRevocation{issue.ID: pending}
 	orch.finishLaneRevocation(t.Context(), &state, pending)
 	if len(attempts.completions) != 0 || len(state.Running) != 1 || len(state.Claimed) != 1 {
 		t.Fatal("failed retention released durable ownership")
 	}
-	retention.result = workspace.Preservation{Path: "/retained/retry", Preserved: true, UnpushedCommits: 1}
+	retention.result = workspace.Preservation{Path: "/retained/retry", Preserved: true, LocalChangesVerified: true, UnpushedCommits: 1}
 	retention.err = nil
 	orch.finishLaneRevocation(t.Context(), &state, pending)
 	if len(attempts.completions) != 1 || len(state.Running) != 0 || len(state.Claimed) != 0 || retention.preserveCalls != 2 {
@@ -160,4 +163,46 @@ func (p *laneRetentionProbe) ReapWorkspace(context.Context, connector.Issue) (Wo
 	}
 	p.reapCalls++
 	return WorkspaceReapResult{}, workspace.ErrWorkspacePreserved
+}
+
+func TestLaneRevocationRequiresVerifiedWork(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name         string
+		preservation *workspace.Preservation
+		pushed       bool
+		want         string
+	}{
+		{name: "output alone", want: laneRevocationUnverifiedClassification},
+		{name: "clean base", preservation: &workspace.Preservation{Preserved: true, LocalChangesVerified: true, HeadSHA: "base"}, want: laneRevocationEmptyClassification},
+		{name: "clean base with push signal", pushed: true, preservation: &workspace.Preservation{Preserved: true, LocalChangesVerified: true, HeadSHA: "base"}, want: laneRevocationEmptyClassification},
+		{name: "dirty files", preservation: &workspace.Preservation{Preserved: true, LocalChangesVerified: true, TrackedPaths: []string{"main.go"}}, want: laneRevocationPreservedClassification},
+		{name: "local commits", preservation: &workspace.Preservation{Preserved: true, LocalChangesVerified: true, UnpushedCommits: 1}, want: laneRevocationPreservedClassification},
+		{name: "failed local inspection", preservation: &workspace.Preservation{Preserved: true, HeadSHA: "base"}, want: laneRevocationUnverifiedClassification},
+		{name: "push signal only", pushed: true, want: laneRevocationUnverifiedClassification},
+		{name: "verified push", pushed: true, preservation: &workspace.Preservation{Preserved: true, LocalChangesVerified: true, Delivery: &workspace.DeliverableState{RemoteBranchExists: true, CommitsAhead: 1, Remote: "origin", RemoteRef: "refs/heads/worker", LocalHeadSHA: "work", RemoteHeadSHA: "work"}}, want: laneRevocationDeliveredClassification},
+		{name: "base pushed", pushed: true, preservation: &workspace.Preservation{Preserved: true, LocalChangesVerified: true, Delivery: &workspace.DeliverableState{RemoteBranchExists: true, Remote: "origin", RemoteRef: "refs/heads/worker", LocalHeadSHA: "base", RemoteHeadSHA: "base"}}, want: laneRevocationEmptyClassification},
+		{name: "different remote head", pushed: true, preservation: &workspace.Preservation{Preserved: true, LocalChangesVerified: true, UnpushedCommits: 1, Delivery: &workspace.DeliverableState{RemoteBranchExists: true, CommitsAhead: 1, Remote: "origin", RemoteRef: "refs/heads/worker", LocalHeadSHA: "work", RemoteHeadSHA: "old"}}, want: laneRevocationPreservedClassification},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			running := Running{WorkProductPushed: tt.pushed}
+			event := runpkg.Completion{Result: runpkg.RunResult{TurnStarted: true, Output: "completed", Tokens: TokenTotals{TotalTokens: 100}}}
+			receipt := laneRevocationReceipt(event, running, tt.preservation, time.Now())
+			outcome := classifyLaneRevocation(receipt, tt.preservation, true, laneRevocationDetentStateChanged, provenance.OriginDetent)
+			if outcome.classification != tt.want {
+				t.Fatalf("classification = %s, want %s", outcome.classification, tt.want)
+			}
+			if !outcome.comment {
+				return
+			}
+			pending := &pendingLaneRevocation{fromState: "In Progress", toState: "Blocked", reason: laneRevocationDetentStateChanged, origin: provenance.OriginDetent}
+			body := laneRevocationOutcomeComment(pending, event, running, event.Result.Tokens, outcome)
+			if !strings.Contains(body, "verified detent lane change from In Progress to Blocked") || strings.Contains(body, "the tracker moved") {
+				t.Fatalf("misleading provenance: %s", body)
+			}
+			if strings.Contains(body, "work was pushed") != (tt.want == laneRevocationDeliveredClassification) {
+				t.Fatalf("unverified delivery claim: %s", body)
+			}
+		})
+	}
 }

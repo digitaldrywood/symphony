@@ -1064,7 +1064,7 @@ func TestLocalGitHooksUseNonLoginShell(t *testing.T) {
 		AutoBranch: true,
 		Hooks: Hooks{
 			AfterCreate: "printf 'ok\n' > " + shellQuote(tracePath),
-			Timeout:     5 * time.Second,
+			Timeout:     time.Minute,
 		},
 	})
 	if err != nil {

@@ -111,3 +111,47 @@ func TestTurnStateDoesNotRepeatPartialToolStart(t *testing.T) {
 		t.Fatalf("updates = %#v, want one tool start and one result", updates)
 	}
 }
+
+func TestTurnStatePreservesShellCommands(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name, tool, input, want string
+		partial                 bool
+	}{
+		{name: "complete", tool: "Bash", input: `{"command":"go test ./..."}`, want: "go test ./..."},
+		{name: "partial input completes", tool: "Bash", input: `{"command":"go test ./..."}`, want: "go test ./...", partial: true},
+		{name: "non-command tool", tool: "Read", input: `{"command":"not a shell invocation"}`},
+		{name: "missing command", tool: "Bash", input: `{}`},
+		{name: "invalid command", tool: "Bash", input: `{"command":42}`},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			state := turnState{sessionID: "session"}
+			block := contentBlock{ID: "tool-1", Type: "tool_use", Name: tt.tool, Input: json.RawMessage(tt.input)}
+			var commands []string
+			handler := func(update runner.AgentUpdate) error {
+				if update.Command != "" {
+					commands = append(commands, update.Command)
+				}
+				return nil
+			}
+			if tt.partial {
+				start := block
+				start.Input = json.RawMessage(`{}`)
+				if err := state.apply(claudeEvent{Type: "stream_event", StreamEvent: &streamEvent{ContentBlock: &start}}, true, handler); err != nil {
+					t.Fatal(err)
+				}
+			}
+			if err := state.apply(claudeEvent{Type: "assistant", Message: &claudeMessage{Content: []contentBlock{block}}}, tt.partial, handler); err != nil {
+				t.Fatal(err)
+			}
+			if tt.want == "" {
+				if len(commands) != 0 {
+					t.Fatalf("unexpected commands: %v", commands)
+				}
+			} else if len(commands) != 1 || commands[0] != tt.want {
+				t.Fatalf("commands = %v, want %q once", commands, tt.want)
+			}
+		})
+	}
+}

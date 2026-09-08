@@ -87,6 +87,7 @@ type claudeUsage struct {
 }
 
 type turnState struct {
+	commandItems    map[string]bool
 	sessionID       string
 	model           string
 	partialItemID   string
@@ -245,11 +246,12 @@ func (s *turnState) applyAssistant(
 	if event.Message.ID != "" {
 		s.partialItemID = event.Message.ID
 	}
-	if !includePartialMessages {
-		for _, block := range event.Message.Content {
-			if err := s.emitContentBlock(block, event.Message.ID, onUpdate); err != nil {
-				return err
-			}
+	for _, block := range event.Message.Content {
+		if includePartialMessages && (claudeBlockCommand(block) == "" || s.commandItems[strings.TrimSpace(block.ID)]) {
+			continue
+		}
+		if err := s.emitContentBlock(block, event.Message.ID, onUpdate); err != nil {
+			return err
 		}
 	}
 	if event.Message.Usage != nil && !event.Message.Usage.empty() {
@@ -330,7 +332,15 @@ func (s *turnState) emitContentBlock(block contentBlock, fallbackItemID string, 
 			Model:    s.model,
 		})
 	case "tool_use":
+		command := claudeBlockCommand(block)
+		if command != "" {
+			if s.commandItems == nil {
+				s.commandItems = make(map[string]bool)
+			}
+			s.commandItems[itemID] = true
+		}
 		return emitUpdate(onUpdate, runner.AgentUpdate{
+			Command:  command,
 			Type:     runner.AgentUpdateToolStarted,
 			ThreadID: s.sessionID,
 			TurnID:   s.sessionID,
@@ -354,6 +364,19 @@ func (s *turnState) emitContentBlock(block contentBlock, fallbackItemID string, 
 	default:
 		return nil
 	}
+}
+
+func claudeBlockCommand(block contentBlock) string {
+	if block.Type != "tool_use" || !strings.EqualFold(strings.TrimSpace(block.Name), "Bash") {
+		return ""
+	}
+	var input struct {
+		Command string `json:"command"`
+	}
+	if err := json.Unmarshal(block.Input, &input); err != nil {
+		return ""
+	}
+	return strings.TrimSpace(input.Command)
 }
 
 func claudeBlockContent(raw json.RawMessage) string {

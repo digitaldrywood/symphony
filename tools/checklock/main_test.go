@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -210,5 +211,162 @@ func waitForPath(t *testing.T, ctx context.Context, path string) {
 			t.Fatalf("wait for release signal: %v", ctx.Err())
 		case <-ticker.C:
 		}
+	}
+}
+
+func TestValidationWaiterCannotBeOvertaken(t *testing.T) {
+	t.Parallel()
+	for _, arrivals := range []int{1, 8} {
+		t.Run(fmt.Sprintf("%d new arrivals", arrivals), func(t *testing.T) {
+			t.Parallel()
+			ctx, cancel := context.WithTimeout(t.Context(), validationIntegrationTimeout)
+			defer cancel()
+			path := filepath.Join(t.TempDir(), "validation.lock")
+			holder, err := instancelock.Acquire(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			t.Cleanup(func() { holder.Close() })
+			paused := &pausedWriter{ready: make(chan struct{}), resume: make(chan struct{})}
+			t.Cleanup(func() { paused.release() })
+			older := startValidationWaiter(ctx, path, paused)
+			select {
+			case <-paused.ready:
+			case <-ctx.Done():
+				t.Fatal(ctx.Err())
+			}
+			if err := holder.Close(); err != nil {
+				t.Fatal(err)
+			}
+			newcomers := make([]<-chan validationResult, 0, arrivals)
+			for range arrivals {
+				writer := newNotifyingWriter()
+				newcomer := startValidationWaiter(ctx, path, writer)
+				select {
+				case <-writer.notified:
+				case result := <-newcomer:
+					if result.lock != nil {
+						result.lock.Close()
+					}
+					t.Fatalf("new arrival overtook a registered older waiter: %v", result.err)
+				case <-ctx.Done():
+					t.Fatal(ctx.Err())
+				}
+				newcomers = append(newcomers, newcomer)
+			}
+			paused.release()
+			for _, waiter := range append([]<-chan validationResult{older}, newcomers...) {
+				select {
+				case result := <-waiter:
+					if result.err != nil {
+						t.Fatal(result.err)
+					}
+					if _, err := instancelock.Acquire(path); !errors.Is(err, instancelock.ErrHeld) {
+						t.Fatalf("active owner lost exclusivity: %v", err)
+					}
+					if err := result.lock.Close(); err != nil {
+						t.Fatal(err)
+					}
+				case <-ctx.Done():
+					t.Fatal(ctx.Err())
+				}
+			}
+		})
+	}
+}
+
+type validationResult struct {
+	lock *instancelock.Lock
+	err  error
+}
+
+func startValidationWaiter(ctx context.Context, path string, writer io.Writer) <-chan validationResult {
+	done := make(chan validationResult, 1)
+	go func() {
+		lock, _, err := acquireValidationLock(ctx, path, writer)
+		done <- validationResult{lock: lock, err: err}
+	}()
+	return done
+}
+
+type pausedWriter struct {
+	ready  chan struct{}
+	resume chan struct{}
+	once   sync.Once
+	closed sync.Once
+}
+
+func (w *pausedWriter) Write(data []byte) (int, error) {
+	w.once.Do(func() {
+		close(w.ready)
+		<-w.resume
+	})
+	return len(data), nil
+}
+
+func (w *pausedWriter) release() {
+	w.closed.Do(func() { close(w.resume) })
+}
+
+func TestRunCancellationStopsActiveValidation(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithTimeout(t.Context(), validationIntegrationTimeout)
+	defer cancel()
+	path := filepath.Join(t.TempDir(), "validation.lock")
+	criticalPath := filepath.Join(t.TempDir(), "critical.lock")
+	reader, writer, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		reader.Close()
+		writer.Close()
+	})
+	ready := newNotifyingWriter()
+	var stderr bytes.Buffer
+	commandCtx, stopCommand := context.WithCancel(ctx)
+	defer stopCommand()
+	done := make(chan int, 1)
+	go func() {
+		done <- run(commandCtx, []string{
+			"-lock", path, "--", os.Args[0], "-test.run=^TestValidationCancellationHelper$",
+			"--", "checklock-cancel-child", criticalPath,
+		}, reader, ready, &stderr)
+	}()
+	select {
+	case <-ready.notified:
+	case code := <-done:
+		t.Fatalf("command exited before readiness: %d: %s", code, &stderr)
+	case <-ctx.Done():
+		t.Fatal(ctx.Err())
+	}
+	for _, heldPath := range []string{path, criticalPath} {
+		inspection, err := instancelock.Inspect(heldPath)
+		if err != nil || inspection.Status != instancelock.StatusHeld {
+			t.Fatalf("validation was not active before cancellation: %+v, %v", inspection, err)
+		}
+	}
+	stopCommand()
+	select {
+	case code := <-done:
+		if code == 0 {
+			t.Fatalf("canceled command returned success: %s", &stderr)
+		}
+	case <-ctx.Done():
+		t.Fatal("active validation ignored cancellation")
+	}
+	for _, releasedPath := range []string{path, criticalPath} {
+		acquireTestLock(t, releasedPath)
+	}
+}
+
+func TestValidationCancellationHelper(t *testing.T) {
+	if len(os.Args) < 3 || os.Args[len(os.Args)-2] != "checklock-cancel-child" {
+		t.Skip("helper process")
+	}
+	acquireTestLock(t, os.Args[len(os.Args)-1])
+	fmt.Fprintln(os.Stdout, "ready")
+	if _, err := io.ReadFull(os.Stdin, make([]byte, 1)); err != nil {
+		t.Fatal(err)
 	}
 }

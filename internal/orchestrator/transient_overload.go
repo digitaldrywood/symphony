@@ -89,6 +89,7 @@ func (o *Orchestrator) handleTransientOverload(
 		running.Mode,
 		running.DiffStats,
 		event.CompletedAt,
+		terminalAttemptFailureEvidence(running, terminalState, errorClass, event.Err.Error(), event.CompletedAt),
 	)
 	if parked {
 		return

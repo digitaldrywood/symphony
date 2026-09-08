@@ -33,12 +33,22 @@ func TestHandleRunResultRoutesTerminalRetryByWorkProduct(t *testing.T) {
 		name            string
 		limit           *int
 		wantBlocked     bool
+		completionErr   bool
+		noStore         bool
+		noAttemptID     bool
 		issue           connector.Issue
 		result          runpkg.RunResult
 		runError        error
 		wantState       string
 		wantTransitions []string
 	}{
+		{name: "zero parks failed persistence", limit: new(0), issue: terminalRetryTestIssue("zero-store-error"), runError: errors.New("runner failed"), completionErr: true, wantBlocked: true},
+		{name: "zero parks missing store", limit: new(0), issue: terminalRetryTestIssue("zero-no-store"), runError: errors.New("runner failed"), noStore: true, wantBlocked: true},
+		{name: "zero parks missing attempt ID", limit: new(0), issue: terminalRetryTestIssue("zero-no-id"), runError: errors.New("runner failed"), noAttemptID: true, wantBlocked: true},
+		{name: "zero parks overload without store", limit: new(0), issue: terminalRetryTestIssue("zero-overload-no-store"), runError: backendcapacity.NewError(scope, backendcapacity.Details{Type: backendcapacity.ErrorTypeTransientOverload, Kind: "serverOverloaded"}, errors.New("provider overloaded")), noStore: true, wantBlocked: true},
+		{name: "zero preserves capacity without store", limit: new(0), issue: terminalRetryTestIssue("zero-capacity-no-store"), runError: backendcapacity.NewError(scope, backendcapacity.Details{Kind: "usageLimitExceeded", ResetAt: &capacityReset}, errors.New("provider usage limit reached")), noStore: true, wantState: "Todo", wantTransitions: []string{"Todo"}},
+		{name: "zero preserves pushed work without store", limit: new(0), issue: terminalRetryTestIssue("zero-pushed-no-store"), result: runpkg.RunResult{PullRequestHeadPushed: true}, runError: errors.New("runner failed"), noStore: true, wantState: "In Progress"},
+		{name: "default preserves failed persistence retry", issue: terminalRetryTestIssue("default-store-error"), runError: errors.New("runner failed"), completionErr: true, wantState: "Todo", wantTransitions: []string{"Todo"}},
 		{name: "zero parks runner failure", limit: new(0), issue: terminalRetryTestIssue("zero-failure"), runError: errors.New("runner failed"), wantBlocked: true},
 		{name: "zero parks transient overload", limit: new(0), issue: terminalRetryTestIssue("zero-overload"), runError: backendcapacity.NewError(scope, backendcapacity.Details{Type: backendcapacity.ErrorTypeTransientOverload, Kind: "serverOverloaded"}, errors.New("provider overloaded")), wantBlocked: true},
 		{name: "zero preserves capacity wait", limit: new(0), issue: terminalRetryTestIssue("zero-capacity"), runError: backendcapacity.NewError(scope, backendcapacity.Details{Kind: "usageLimitExceeded", ResetAt: &capacityReset}, errors.New("provider usage limit reached")), wantState: "Todo", wantTransitions: []string{"Todo"}},
@@ -94,6 +104,9 @@ func TestHandleRunResultRoutesTerminalRetryByWorkProduct(t *testing.T) {
 			now := time.Date(2026, 7, 18, 12, 0, 0, 0, time.UTC)
 			tracker := &terminalRetryConnector{issues: map[string]connector.Issue{tt.issue.ID: cloneIssue(tt.issue)}}
 			attempts := &terminalRetryWorkAttemptStore{}
+			if tt.completionErr {
+				attempts.completionErr = errors.New("store unavailable")
+			}
 			cfg := normalizeConfig(Config{
 				Recovery:              workflowconfig.Recovery{TerminalAttemptRetryLimit: tt.limit},
 				ActiveStates:          []string{"Todo", "In Progress"},
@@ -102,6 +115,9 @@ func TestHandleRunResultRoutesTerminalRetryByWorkProduct(t *testing.T) {
 				FailureRetryBaseDelay: time.Second,
 			})
 			o := &Orchestrator{cfg: cfg, connector: tracker, workAttempts: attempts}
+			if tt.noStore {
+				o.workAttempts = nil
+			}
 			state := newState(cfg)
 			state.Running[tt.issue.ID] = Running{
 				Issue:         cloneIssue(tt.issue),
@@ -111,6 +127,11 @@ func TestHandleRunResultRoutesTerminalRetryByWorkProduct(t *testing.T) {
 				StartedAt:     now.Add(-time.Minute),
 			}
 			state.Claimed[tt.issue.ID] = Claimed{Issue: cloneIssue(tt.issue), ClaimedAt: now.Add(-time.Minute)}
+			if tt.noAttemptID {
+				running := state.Running[tt.issue.ID]
+				running.WorkAttemptID = 0
+				state.Running[tt.issue.ID] = running
+			}
 
 			o.handleRunResult(t.Context(), &state, runpkg.Completion{
 				IssueID:      tt.issue.ID,
@@ -143,6 +164,12 @@ func TestHandleRunResultRoutesTerminalRetryByWorkProduct(t *testing.T) {
 			}
 			if got := tracker.transitionStates(); !slices.Equal(got, tt.wantTransitions) {
 				t.Fatalf("state transitions = %v, want %v", got, tt.wantTransitions)
+			}
+			if tt.noStore || tt.noAttemptID {
+				if len(attempts.completions) != 0 {
+					t.Fatal("unexpected completion persistence")
+				}
+				return
 			}
 			if len(attempts.completions) != 1 {
 				t.Fatalf("work attempt completions = %d, want 1", len(attempts.completions))
@@ -1169,6 +1196,7 @@ func (c *terminalRetryConnector) transitionStates() []string {
 }
 
 type terminalRetryWorkAttemptStore struct {
+	completionErr  error
 	completions    []store.WorkAttemptCompletion
 	history        []store.WorkAttempt
 	historyErr     error
@@ -1189,7 +1217,7 @@ func (s *terminalRetryWorkAttemptStore) RecordWorkAttemptHeartbeat(context.Conte
 
 func (s *terminalRetryWorkAttemptStore) CompleteWorkAttempt(_ context.Context, completion store.WorkAttemptCompletion) error {
 	s.completions = append(s.completions, completion)
-	return nil
+	return s.completionErr
 }
 
 func (s *terminalRetryWorkAttemptStore) TimeoutExpiredWorkAttempts(context.Context, store.WorkAttemptTimeout) ([]store.WorkAttempt, error) {

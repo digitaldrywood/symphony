@@ -39,7 +39,8 @@ park on that numbered failure. Negative values are rejected. This compatibility
 rule keeps the existing default at two redispatches before parking.
 
 The zero policy persists an operator-owned hold, including the latest failure
-evidence. Restarting Detent or waiting for the breaker cooldown does not release
+evidence. It also enforces the hold from the current completion when saving the
+attempt fails or no durable attempt record is available. Restarting Detent or waiting for the breaker cooldown does not release
 that hold. If the tracker rejects the Blocked transition, Detent holds the issue
 locally and retries that transition during reconciliation without starting a worker.
 Changing the setting alone does not authorize release of an existing

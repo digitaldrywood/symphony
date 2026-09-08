@@ -38,6 +38,7 @@ func (o *Orchestrator) demoteTerminalAttemptRetry(
 	runMode string,
 	diffStats DiffStats,
 	at time.Time,
+	currentAttempts ...telemetry.WorkAttempt,
 ) (connector.Issue, bool, bool) {
 	if o == nil || o.connector == nil ||
 		normalizeState(issue.State) != normalizeState(planImplementationState) ||
@@ -46,9 +47,18 @@ func (o *Orchestrator) demoteTerminalAttemptRetry(
 		o.terminalAttemptClaimBlocksDemotion(ctx, issue, at) {
 		return issue, false, false
 	}
-	if durable {
+	operatorReview := retryCause == terminalAttemptRetryLimitCause && o.cfg.Recovery.EffectiveTerminalAttemptRetryLimit() == 0
+	if !durable && operatorReview && state != nil && len(currentAttempts) > 0 {
+		current := currentAttempts[0]
+		if current.AttemptID > 0 {
+			o.upsertWorkAttemptSnapshot(state, current)
+		} else {
+			state.WorkAttempts = append([]telemetry.WorkAttempt{current}, state.WorkAttempts...)
+		}
+	}
+	if durable || operatorReview && len(currentAttempts) > 0 {
 		historyReader := o
-		if retryCause == terminalAttemptRetryLimitCause && o.cfg.Recovery.EffectiveTerminalAttemptRetryLimit() == 0 {
+		if operatorReview {
 			historyReader = &Orchestrator{cfg: o.cfg}
 		}
 		count, latest, known := historyReader.consecutiveRetryCycleCount(ctx, state, issue, retryCause, at)
@@ -111,6 +121,21 @@ func (o *Orchestrator) demoteTerminalAttemptRetry(
 		)
 	}
 	return issue, true, false
+}
+
+func terminalAttemptFailureEvidence(running Running, terminalState store.WorkAttemptTerminalState, errorClass, errorMessage string, at time.Time) telemetry.WorkAttempt {
+	return telemetry.WorkAttempt{
+		AttemptID:          running.WorkAttemptID,
+		AttemptNumber:      running.Attempt,
+		IssueID:            running.Issue.ID,
+		Identifier:         running.Issue.Identifier,
+		Status:             string(store.WorkAttemptStatusTerminal),
+		TerminalState:      string(terminalState),
+		ErrorClass:         errorClass,
+		ErrorMessage:       errorMessage,
+		CompletedAt:        &at,
+		WorkerMetadataJSON: runningWorkAttemptMetadataJSON(running, nil),
+	}
 }
 
 func (o *Orchestrator) retryCycleFailureLimit(cause string) int {

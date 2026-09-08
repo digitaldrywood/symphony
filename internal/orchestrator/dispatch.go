@@ -795,6 +795,7 @@ func (o *Orchestrator) dispatchIssueWithAdmission(
 		OnActivityUpdate:    o.activityUpdateHandler(runCtx, issue),
 		OnOverrideRejected:  o.agentOverrideRejectionHandler(runCtx, issue),
 		ProgressProbe:       o.sessionProgressProbe(issue),
+		CheckpointValidate:  o.checkpointValidator(issue.ID, workAttemptID, generation),
 		MergePrecheck:       cloneMergePrecheck(queuedRetry.MergePrecheck),
 		MergeRefreshHeadSHA: reservation.RefreshHeadSHA,
 		ForgeRetry:          cloneForgeRetry(queuedRetry.ForgeRetry),

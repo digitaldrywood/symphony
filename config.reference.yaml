@@ -627,6 +627,8 @@
 #   max_session_duration_ms: 7200000
 #   # agent.no_progress_timeout_ms | type: integer | default: 5400000 | required: No | validation: must be greater than or equal to 0
 #   no_progress_timeout_ms: 5400000
+#   # agent.checkpoint_interval_ms | type: integer | default: 0 | required: No | validation: must be greater than or equal to 0
+#   checkpoint_interval_ms: 0
 #   # agent.merge_worker_startup_timeout_ms | type: integer | default: 240000 | required: No | validation: must be greater than 0
 #   merge_worker_startup_timeout_ms: 240000
 #   # agent.merge_worker_max_duration_ms | type: integer | default: 21600000 | required: No | validation: must be greater than 0

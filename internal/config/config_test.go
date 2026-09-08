@@ -4513,3 +4513,27 @@ func TestReleaseConfigValidation(t *testing.T) {
 		})
 	}
 }
+
+func TestCheckpointIntervalConfiguration(t *testing.T) {
+	t.Parallel()
+	for _, interval := range []int{-1, 0, 60000} {
+		t.Run(strconv.Itoa(interval), func(t *testing.T) {
+			t.Parallel()
+			workflow, err := ParseWorkflow(fmt.Appendf(nil, "---\nagent:\n  checkpoint_interval_ms: %d\n---\n", interval))
+			if err != nil {
+				t.Fatal(err)
+			}
+			var problems []string
+			workflow.Config.Agent.validate("agent", &problems)
+			if interval < 0 {
+				if !strings.Contains(strings.Join(problems, "\n"), "agent.checkpoint_interval_ms") {
+					t.Fatalf("negative interval accepted: %v", problems)
+				}
+				return
+			}
+			if len(problems) != 0 || workflow.Config.Agent.CheckpointIntervalMS != interval {
+				t.Fatalf("interval = %d, problems = %v", workflow.Config.Agent.CheckpointIntervalMS, problems)
+			}
+		})
+	}
+}

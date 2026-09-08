@@ -19,6 +19,7 @@ import (
 	"github.com/digitaldrywood/detent/internal/selector"
 	"github.com/digitaldrywood/detent/internal/store"
 	"github.com/digitaldrywood/detent/internal/telemetry"
+	"github.com/digitaldrywood/detent/internal/workspace"
 )
 
 const (
@@ -592,6 +593,7 @@ type RunRequest struct {
 	OnActivityUpdate          AgentActivityUpdateHandler
 	OnOverrideRejected        AgentOverrideRejectionHandler
 	ProgressProbe             SessionProgressProbe
+	CheckpointValidate        func(context.Context) error
 	Routine                   *RoutineRequest
 	Admission                 *AdmissionRequest
 	AgentTools                []AgentTool
@@ -604,6 +606,8 @@ type RunRequest struct {
 	workerGitHubActor         connector.IssueActor
 	deliverableRecoveryBranch string
 	sessionTurnOffset         int
+	sessionTokenOffset        int64
+	retainCheckpoint          bool
 }
 
 type ForgeRetry struct {
@@ -720,6 +724,7 @@ type SecurityAuditExecution struct {
 }
 
 type RunResult struct {
+	Checkpoint              *workspace.CheckpointRecord
 	FinalState              string
 	Output                  string
 	Model                   string

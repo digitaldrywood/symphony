@@ -7,6 +7,9 @@ github.com/digitaldrywood/detent/internal/orchestrator/backend_capacity.go 90 # 
 github.com/digitaldrywood/detent/internal/connector/human.go 90
 github.com/digitaldrywood/detent/internal/orchestrator/dependency_autounblock.go 90
 github.com/digitaldrywood/detent/internal/orchestrator/dispatch.go 90
+github.com/digitaldrywood/detent/internal/orchestrator/checkpoint.go 90
+github.com/digitaldrywood/detent/internal/runner/checkpoint.go 90
+github.com/digitaldrywood/detent/internal/workspace/checkpoint.go 90
 github.com/digitaldrywood/detent/internal/orchestrator/dispatch_planner.go 90
 github.com/digitaldrywood/detent/internal/orchestrator/human_prerequisite.go 90
 github.com/digitaldrywood/detent/internal/orchestrator/implement_dependency_deferral.go 90

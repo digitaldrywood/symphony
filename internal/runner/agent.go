@@ -1167,14 +1167,16 @@ func (r *Runner) runAgentTurn(
 		if err := r.publishRunUpdate(updateCtx, runRequest, info, workspaceIssue, progress, result, eventAt, runStartedAt, detentSessionID); err != nil {
 			return err
 		}
-		if err := r.enforceSessionTokenCeiling(agentConfig, runRequest.Issue, info.Path, update, eventAt); err != nil {
+		ceilingUpdate := update
+		ceilingUpdate.Tokens.TotalTokens += runRequest.sessionTokenOffset
+		if err := r.enforceSessionTokenCeiling(agentConfig, runRequest.Issue, info.Path, ceilingUpdate, eventAt); err != nil {
 			return err
 		}
 		observedModel := effectiveModel(result.RuntimeIdentity.ResolvedModel.Value, result.Model, sessionModel)
 		if err := r.enforceSessionBudgetProjection(budgetProjection, budgetCostOffsetUSD, observedModel, backendKind, update); err != nil {
 			return err
 		}
-		if err := runRequest.sessionBrake.observe(updateCtx, progress.turnCount(), result.Tokens.TotalTokens); err != nil {
+		if err := runRequest.sessionBrake.observe(updateCtx, progress.turnCount(), result.Tokens.TotalTokens+runRequest.sessionTokenOffset); err != nil {
 			return err
 		}
 		return nil
@@ -1706,6 +1708,7 @@ func (r *Runner) run(ctx context.Context, req RunRequest) (RunResult, error) {
 			return result, fmt.Errorf("acquire model permit: %w", err)
 		}
 	}
+	checkpoint := r.prepareWorkerCheckpoint(ctx, req, runWorkspace, info, workspaceIssue)
 	sessionID, sessionStarted, err := r.startSession(ctx, req, startedAt, runtimeIdentity, resumeState, orphanRecoveryOutcome, orphanRecoveryFallbackReason)
 	if err != nil {
 		return RunResult{}, err
@@ -1797,7 +1800,14 @@ func (r *Runner) run(ctx context.Context, req RunRequest) (RunResult, error) {
 			turnRequest.ToolInstructions = admissionToolInstructions
 		}
 	}
-	execution := r.runAgentTurn(sessionCtx, backend, turnRequest, req, info, workspaceIssue, workflow.Config.Agent, workflow.Config.Gate.CITriggerLabel, targetRefObserver, runStartedAt, sessionID, runtimeIdentity, budgetProjection, 0, sessionModel, backendConfig.Kind)
+	runWithCheckpoint := func(request AgentTurnRequest, runReq RunRequest, identity agentidentity.Identity, costOffsetUSD float64) agentTurnExecution {
+		return r.runCheckpointedTurn(ctx, sessionCtx, checkpoint, workflow.Config.Agent, backend, request, runReq, func(turnCtx context.Context, request AgentTurnRequest, runReq RunRequest) agentTurnExecution {
+			execution := r.runAgentTurn(turnCtx, backend, request, runReq, info, workspaceIssue, workflow.Config.Agent, workflow.Config.Gate.CITriggerLabel, targetRefObserver, runStartedAt, sessionID, identity, budgetProjection, costOffsetUSD, sessionModel, backendConfig.Kind)
+			costOffsetUSD += r.usageCostUSD(sessionModel, execution.result.Tokens.InputTokens, execution.result.Tokens.CachedInputTokens, execution.result.Tokens.OutputTokens, backendConfig.Kind)
+			return execution
+		})
+	}
+	execution := runWithCheckpoint(turnRequest, req, runtimeIdentity, 0)
 	execution.err = sessionBrake.wrapTurnLimit(ctx, execution.err)
 	execution.err = sessionBrake.wrapDuration(ctx, execution.err, durationFromMillis(workflow.Config.Agent.MaxSessionDurationMS))
 	execution.err = classifyAgentCapacityError(backend, selection, backendConfig, execution.result.RuntimeIdentity, execution.err, execution.result.RateLimits, runStartedAt)
@@ -1826,7 +1836,7 @@ func (r *Runner) run(ctx context.Context, req RunRequest) (RunResult, error) {
 		if targetRefObserver != nil {
 			initialDeliverableState = r.observeWorkspaceDeliverableState(runWorkspace, sessionCtx, info, workspaceIssue, "resume_fallback_initial")
 		}
-		execution = r.runAgentTurn(sessionCtx, backend, turnRequest, req, info, workspaceIssue, workflow.Config.Agent, workflow.Config.Gate.CITriggerLabel, targetRefObserver, runStartedAt, sessionID, runtimeIdentity, budgetProjection, 0, sessionModel, backendConfig.Kind)
+		execution = runWithCheckpoint(turnRequest, req, runtimeIdentity, 0)
 		execution.err = sessionBrake.wrapTurnLimit(ctx, execution.err)
 		execution.err = sessionBrake.wrapDuration(ctx, execution.err, durationFromMillis(workflow.Config.Agent.MaxSessionDurationMS))
 		execution.err = classifyAgentCapacityError(backend, selection, backendConfig, execution.result.RuntimeIdentity, execution.err, execution.result.RateLimits, runStartedAt)
@@ -1865,7 +1875,8 @@ func (r *Runner) run(ctx context.Context, req RunRequest) (RunResult, error) {
 		if targetRefObserver != nil {
 			initialDeliverableState = r.observeWorkspaceDeliverableState(runWorkspace, sessionCtx, info, workspaceIssue, "deliverable_recovery_initial")
 		}
-		recovery := r.runAgentTurn(sessionCtx, backend, recoveryRequest, recoveryRunRequest, info, workspaceIssue, workflow.Config.Agent, workflow.Config.Gate.CITriggerLabel, targetRefObserver, runStartedAt, sessionID, execution.result.RuntimeIdentity, budgetProjection, budgetCostOffsetUSD, sessionModel, backendConfig.Kind)
+		recoveryRunRequest.sessionTokenOffset = execution.result.Tokens.TotalTokens
+		recovery := runWithCheckpoint(recoveryRequest, recoveryRunRequest, execution.result.RuntimeIdentity, budgetCostOffsetUSD)
 		recovery.err = sessionBrake.wrapTurnLimit(ctx, recovery.err)
 		recovery.err = sessionBrake.wrapDuration(ctx, recovery.err, durationFromMillis(workflow.Config.Agent.MaxSessionDurationMS))
 		recovery.err = classifyAgentCapacityError(backend, selection, backendConfig, recovery.result.RuntimeIdentity, recovery.err, recovery.result.RateLimits, runStartedAt)
@@ -1906,6 +1917,10 @@ func (r *Runner) run(ctx context.Context, req RunRequest) (RunResult, error) {
 		}
 	}
 	sessionBrake.Stop()
+	var checkpointBrake *SessionBrakeError
+	if errors.As(execution.err, &checkpointBrake) {
+		checkpointBrake.Checkpoint = execution.result.Checkpoint
+	}
 	turnResult := execution.turnResult
 	turnErr := execution.err
 	cleanupErr := execution.cleanupErr
@@ -1975,6 +1990,7 @@ func (r *Runner) run(ctx context.Context, req RunRequest) (RunResult, error) {
 	}
 
 	afterRunPending = false
+	req.retainCheckpoint = result.Checkpoint != nil && turnErr != nil
 	if err := r.afterExecution(ctx, req, runWorkspace, info, workspaceIssue); err != nil {
 		return result, errors.Join(turnErr, err)
 	}

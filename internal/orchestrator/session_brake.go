@@ -113,6 +113,7 @@ func (o *Orchestrator) handleSessionBrake(
 
 	issue := cloneIssue(running.Issue)
 	metadata := workflowLaneMetadata{
+		LessonEvidence: reworkLessonEvidence{LastCommand: running.LastCommand},
 		BlockedRecovery: &workflowLaneBlockedRecoveryMetadata{
 			Owner:            blockedRecoveryOwnerOrchestrator,
 			Cause:            brake.Reason,

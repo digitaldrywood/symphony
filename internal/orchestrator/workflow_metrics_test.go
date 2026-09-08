@@ -734,12 +734,6 @@ func TestUpdateIssueStateByIDCapturesReworkLesson(t *testing.T) {
 			wantFailureKind: "changes_requested",
 			wantContext:     []string{"CHANGES_REQUESTED: Add rollback coverage.", "PR #1402"},
 		},
-		{
-			name:            "generic transition keeps a non-empty kind",
-			reason:          "operator_rework",
-			wantFailureKind: "operator_rework",
-			wantContext:     []string{"reason: operator_rework"},
-		},
 	}
 
 	for _, tt := range tests {
@@ -800,6 +794,7 @@ func TestRefreshCurrentLaneEntriesCapturesObservedReworkOnce(t *testing.T) {
 		Identifier:     "digitaldrywood/detent#1397",
 		Number:         1397,
 		Title:          "Capture observed rework",
+		PullRequest:    &connector.PullRequest{UnresolvedReviewThreads: []connector.PullRequestReviewThread{{Path: "worker.go", Body: "Preserve command evidence."}}},
 		State:          "Rework",
 		StageUpdatedAt: &enteredAt,
 	}

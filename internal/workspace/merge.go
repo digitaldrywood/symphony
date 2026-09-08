@@ -55,6 +55,11 @@ func (l *LocalGit) PrepareMerge(
 		)
 	}
 	if _, err := runGitAt(ctx, normalized.Path, "rebase", targetRef); err != nil {
+		conflicts, conflictErr := runGitAt(ctx, normalized.Path, "diff", "--name-only", "--diff-filter=U", "-z")
+		var conflictPaths []string
+		if conflictErr == nil && conflicts != "" {
+			conflictPaths = strings.Split(strings.TrimSuffix(conflicts, "\x00"), "\x00")
+		}
 		abortErr := abortRebaseIfInProgress(ctx, normalized.Path)
 		if abortErr != nil {
 			return MergePrepareResult{}, errors.Join(
@@ -63,8 +68,9 @@ func (l *LocalGit) PrepareMerge(
 			)
 		}
 		return MergePrepareResult{
-			Status:  MergePrepareStatusConflict,
-			Message: commandErrorOutput(err),
+			ConflictPaths: conflictPaths,
+			Status:        MergePrepareStatusConflict,
+			Message:       commandErrorOutput(err),
 		}, nil
 	}
 

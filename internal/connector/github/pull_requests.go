@@ -62,7 +62,7 @@ query DetentGitHubPullRequestReviewThreads($owner: String!, $name: String!, $num
 			headRefOid
 			reviewThreads(first: 100, after: $after) {
 				pageInfo { hasNextPage endCursor }
-				nodes { isResolved isOutdated path line originalLine }
+				nodes { isResolved isOutdated path line originalLine comments(first: 1) { nodes { body } } }
 			}
 		}
 	}
@@ -1327,7 +1327,12 @@ func (c *Connector) fetchPullRequestReviewThreads(
 			if line <= 0 {
 				line = thread.OriginalLine
 			}
+			body := ""
+			if len(thread.Comments.Nodes) > 0 {
+				body = thread.Comments.Nodes[0].Body
+			}
 			threads = append(threads, connector.PullRequestReviewThread{
+				Body: body,
 				Path: strings.TrimSpace(thread.Path),
 				Line: line,
 			})

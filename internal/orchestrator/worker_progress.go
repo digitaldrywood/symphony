@@ -63,6 +63,9 @@ func applyRunningUsage(running Running, update runpkg.UsageUpdate) Running {
 	if update.LastEvent != "" {
 		running.LastEvent = update.LastEvent
 	}
+	if update.LastCommand != "" {
+		running.LastCommand = update.LastCommand
+	}
 	if update.LastMessage != "" {
 		running.LastMessage = update.LastMessage
 		running.LastMessageTruncation = runtimeoutput.CloneTruncation(update.LastMessageTruncation)
@@ -110,6 +113,7 @@ func (r Running) withProgress() Running {
 		TurnCount:             p.TurnCount,
 		LastEventAt:           p.LastEventAt,
 		LastEvent:             p.LastEvent,
+		LastCommand:           p.LastCommand,
 		LastMessage:           p.LastMessage,
 		LastMessageTruncation: p.LastMessageTruncation,
 		RecentEvents:          p.RecentEvents,

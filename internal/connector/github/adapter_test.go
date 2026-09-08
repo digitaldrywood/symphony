@@ -5168,7 +5168,7 @@ func TestConnectorFetchPullRequestReviewThreads(t *testing.T) {
 		{
 			method: http.MethodPost,
 			path:   "/",
-			body:   `{"data":{"repository":{"pullRequest":{"headRefOid":"head-sha","reviewThreads":{"pageInfo":{"hasNextPage":true,"endCursor":"cursor-1"},"nodes":[{"isResolved":false,"path":"internal/orchestrator/autopromote.go","line":181,"originalLine":180},{"isResolved":true,"path":"internal/connector/issue.go","line":107,"originalLine":107}]}}}}}`,
+			body:   `{"data":{"repository":{"pullRequest":{"headRefOid":"head-sha","reviewThreads":{"pageInfo":{"hasNextPage":true,"endCursor":"cursor-1"},"nodes":[{"isResolved":false,"path":"internal/orchestrator/autopromote.go","line":181,"originalLine":180,"comments":{"nodes":[{"body":"Preserve cancellation evidence."}]}},{"isResolved":true,"path":"internal/connector/issue.go","line":107,"originalLine":107}]}}}}}`,
 		},
 		{
 			method: http.MethodPost,
@@ -5183,7 +5183,7 @@ func TestConnectorFetchPullRequestReviewThreads(t *testing.T) {
 		t.Fatalf("fetchPullRequestReviewThreads() error = %v", err)
 	}
 	want := []connector.PullRequestReviewThread{
-		{Path: "internal/orchestrator/autopromote.go", Line: 181},
+		{Path: "internal/orchestrator/autopromote.go", Line: 181, Body: "Preserve cancellation evidence."},
 		{Path: "internal/connector/github/pull_requests.go", Line: 1092},
 	}
 	if !reflect.DeepEqual(got, want) {
@@ -7055,5 +7055,28 @@ func TestProjectFieldsRefreshUsesTargetedQueryOnlyForChangedCard(t *testing.T) {
 	query, _ := requests[0]["query"].(string)
 	if !strings.Contains(query, "DetentGitHubProjectItemForIssue") {
 		t.Fatalf("query = %q, want targeted refresh", query)
+	}
+}
+
+func TestCheckRunFailureEvidence(t *testing.T) {
+	for _, tt := range []struct {
+		name, annotations, text, want string
+	}{
+		{name: "first assertion", annotations: `[{"annotation_level":"warning","message":"not a failure"},{"annotation_level":"failure","path":"worker_test.go","message":"want released slot"},{"annotation_level":"failure","message":"later assertion"}]`, want: "worker_test.go: want released slot"},
+		{name: "output fallback", annotations: `[]`, text: "Run make check: TestWorker failed", want: "Run make check: TestWorker failed"},
+		{name: "no evidence", annotations: `[]`},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			server := newGraphQLTestServer(t, []graphqlTestResponse{{method: http.MethodGet, path: "/repos/example/repo/check-runs/1/annotations?per_page=100", body: tt.annotations}})
+			c := newGitHubTestConnector(t, server, Config{})
+			runs := []restCheckRun{{ID: 1, Name: "test", Status: "completed", Conclusion: "failure", Output: checkRunOutput{Text: tt.text}}}
+			if _, err := c.transientCheckRunFailures(t.Context(), pullRequestRepo{Owner: "example", Name: "repo"}, runs); err != nil {
+				t.Fatal(err)
+			}
+			inventory := pullRequestCheckInventory(runs, nil)
+			if len(inventory) != 1 || inventory[0].FailureDetail != tt.want {
+				t.Fatalf("failure evidence = %#v, want %q", inventory, tt.want)
+			}
+		})
 	}
 }

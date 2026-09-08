@@ -167,6 +167,7 @@ const (
 )
 
 type PullRequestCheck struct {
+	FailureDetail   string `json:"failure_detail,omitempty" yaml:"failure_detail,omitempty"`
 	ID              int64  `json:"id,omitempty" yaml:"id,omitempty"`
 	WorkflowRunID   int64  `json:"workflow_run_id,omitempty" yaml:"workflow_run_id,omitempty"`
 	Name            string `json:"name,omitempty" yaml:"name,omitempty"`
@@ -185,6 +186,7 @@ type PullRequestFinding struct {
 }
 
 type PullRequestReviewThread struct {
+	Body string `json:"body,omitempty" yaml:"body,omitempty"`
 	Path string `json:"path,omitempty" yaml:"path,omitempty"`
 	Line int    `json:"line,omitempty" yaml:"line,omitempty"`
 }

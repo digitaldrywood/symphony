@@ -1,11 +1,13 @@
 package lessons
 
 import (
+	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 )
 
 func TestReadAllAndRecentTreatMissingFileAsEmpty(t *testing.T) {
@@ -135,8 +137,6 @@ func TestAppendRendersFallbacksAndEscapesTitleQuotes(t *testing.T) {
 		"- **Issue:** issue MT-9",
 		"- **Pull request:** <unavailable>",
 		"- **Symptom:** command failed before diff",
-		"- **Hypothesis (Detent):** <unavailable>",
-		"- **Hint for next time:** <unavailable>",
 	} {
 		if !strings.Contains(entry, want) {
 			t.Fatalf("entry missing %q:\n%s", want, entry)
@@ -257,5 +257,77 @@ func TestReadAllReturnsReadErrors(t *testing.T) {
 	}
 	if err := Append(root, Entry{Title: "cannot append"}, AppendOptions{}); err == nil {
 		t.Fatal("Append() error = nil, want error")
+	}
+}
+
+func TestAppendBoundsRetainedContent(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name       string
+		count      int
+		maxEntries int
+		body       string
+		wantCount  int
+	}{
+		{name: "entry count", count: 5, maxEntries: 3, body: "specific failure", wantCount: 3},
+		{name: "default count", count: 60, body: "specific failure", wantCount: DefaultMaxEntries},
+		{name: "byte limit", count: 10, maxEntries: 100, body: strings.Repeat("failure ", 400), wantCount: 4},
+		{name: "oversized unicode", count: 1, body: strings.Repeat("界", MaxFileBytes), wantCount: 1},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			path := filepath.Join(t.TempDir(), "lessons.md")
+			for index := range tt.count {
+				entry := Entry{IssueNumber: strconv.Itoa(index), Evidence: []string{tt.body}, CaptureKey: "key-" + strconv.Itoa(index)}
+				if err := Append(path, entry, AppendOptions{MaxEntries: tt.maxEntries}); err != nil {
+					t.Fatal(err)
+				}
+			}
+			data, err := os.ReadFile(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(data) > MaxFileBytes || !utf8.Valid(data) || !strings.Contains(string(data), "truncated") {
+				t.Fatalf("retained file: bytes=%d valid=%t marker=%t", len(data), utf8.Valid(data), strings.Contains(string(data), "truncated"))
+			}
+			entries, err := ReadAll(path)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if len(entries) != tt.wantCount || !strings.Contains(entries[0], "issue #"+strconv.Itoa(tt.count-1)) {
+				t.Fatalf("retained entries = %d, want %d and newest first", len(entries), tt.wantCount)
+			}
+			for _, entry := range entries {
+				if len(entry) > MaxEntryBytes {
+					t.Fatalf("entry bytes = %d", len(entry))
+				}
+			}
+			appended, err := AppendUnique(path, Entry{CaptureKey: "key-" + strconv.Itoa(tt.count-1)}, AppendOptions{})
+			if err != nil || appended {
+				t.Fatalf("retained newest deduplication = %t, %v", appended, err)
+			}
+		})
+	}
+}
+
+func TestAppendOmitsEmptyAdvice(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name, hypothesis, hint string
+		want                   bool
+	}{
+		{name: "absent"},
+		{name: "whitespace", hypothesis: " \n ", hint: "\t"},
+		{name: "explicit advice", hypothesis: "The assertion lacks an await", hint: "Wait for the event", want: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			text := renderEntry(Entry{Hypothesis: tt.hypothesis, Hint: tt.hint}, time.Now())
+			for _, label := range []string{"Hypothesis (Detent)", "Hint for next time"} {
+				if strings.Contains(text, label) != tt.want {
+					t.Fatalf("unexpected %s in %s", label, text)
+				}
+			}
+		})
 	}
 }

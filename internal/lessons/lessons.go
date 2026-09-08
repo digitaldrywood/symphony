@@ -8,11 +8,15 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/digitaldrywood/detent/internal/runtimeoutput"
 )
 
 const (
 	DefaultPath       = ".detent/lessons.md"
 	DefaultMaxEntries = 50
+	MaxFileBytes      = 16 * 1024
+	MaxEntryBytes     = 4 * 1024
 )
 
 type Entry struct {
@@ -25,6 +29,7 @@ type Entry struct {
 	Hypothesis  string
 	Hint        string
 	CaptureKey  string
+	Evidence    []string
 }
 
 type AppendOptions struct {
@@ -110,11 +115,12 @@ func appendEntryTo(path string, entry Entry, opts AppendOptions, entries []strin
 
 	rendered := renderEntry(entry, date)
 	entries = append([]string{rendered}, entries...)
+	truncated := len(entries) > maxEntries
 	if len(entries) > maxEntries {
 		entries = entries[:maxEntries]
 	}
 
-	return writeEntries(path, entries)
+	return writeEntries(path, entries, truncated)
 }
 
 func Recent(path string, count int) ([]string, error) {
@@ -206,8 +212,17 @@ func renderEntry(entry Entry, date time.Time) string {
 		"- **Issue:** " + field(entry.IssueRef, issueRef(entry)),
 		"- **Pull request:** " + field(entry.PullRequest, "<unavailable>"),
 		"- **Symptom:** " + field(entry.Symptom, "<unavailable>"),
-		"- **Hypothesis (Detent):** " + field(entry.Hypothesis, "<unavailable>"),
-		"- **Hint for next time:** " + field(entry.Hint, "<unavailable>"),
+	}
+	for _, evidence := range entry.Evidence {
+		if value := field(evidence, ""); value != "" {
+			lines = append(lines, "- **Evidence:** "+value)
+		}
+	}
+	if value := field(entry.Hypothesis, ""); value != "" {
+		lines = append(lines, "- **Hypothesis (Detent):** "+value)
+	}
+	if value := field(entry.Hint, ""); value != "" {
+		lines = append(lines, "- **Hint for next time:** "+value)
 	}
 	if captureKey := strings.TrimSpace(entry.CaptureKey); captureKey != "" {
 		lines = append(lines, "- **Capture key:** "+field(captureKey, ""))
@@ -303,10 +318,26 @@ func renderedEntryCapturedAt(entry string) (time.Time, bool) {
 	return capturedAt.UTC(), true
 }
 
-func writeEntries(path string, entries []string) error {
+func writeEntries(path string, entries []string, truncated bool) error {
+	const marker = "> [truncated: older lessons omitted]\n\n"
+	size := len(marker)
+	for index, entry := range entries {
+		entry = runtimeoutput.Truncate(entry, MaxEntryBytes).Value
+		if size+len(entry)+2 > MaxFileBytes {
+			entries = entries[:index]
+			truncated = true
+			break
+		}
+		entries[index] = entry
+		size += len(entry) + 2
+	}
+	content := strings.Join(entries, "\n\n") + "\n"
+	if truncated {
+		content = marker + content
+	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return err
 	}
 
-	return os.WriteFile(path, []byte(strings.Join(entries, "\n\n")+"\n"), 0o600)
+	return os.WriteFile(path, []byte(content), 0o600)
 }

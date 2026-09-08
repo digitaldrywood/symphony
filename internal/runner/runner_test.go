@@ -7188,3 +7188,39 @@ func writeSkill(t *testing.T, workspacePath, name, skillName, description, whenT
 		t.Fatalf("write skill: %v", err)
 	}
 }
+
+func TestAgentRunProgressRetainsLastCommand(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name    string
+		updates []AgentUpdate
+		want    string
+	}{
+		{name: "no command", updates: []AgentUpdate{{Type: AgentUpdateMessageDelta, Delta: "go test ./..."}}},
+		{name: "latest command survives messages", updates: []AgentUpdate{
+			{Type: AgentUpdateToolStarted, Command: "go build ./..."},
+			{Type: AgentUpdateToolStarted, Command: "go test ./..."},
+			{Type: AgentUpdateMessageDelta, Delta: "waiting for tests"},
+			{Type: AgentUpdateTokenUsage},
+			{Type: AgentUpdateToolStarted, Tool: "read_file"},
+		}, want: "go test ./..."},
+		{name: "bounded command", updates: []AgentUpdate{{Type: AgentUpdateToolStarted, Command: strings.Repeat("x", 8192)}}, want: runtimeoutput.Truncate(strings.Repeat("x", 8192), 2048).Value},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			progress := newAgentRunProgress(runtimeoutput.Policy{}, "", "", 0, "", 0)
+			for _, update := range tt.updates {
+				progress.apply(update, time.Now())
+			}
+			var usage UsageUpdate
+			runner := &Runner{}
+			err := runner.publishRunUpdate(t.Context(), RunRequest{Admission: &AdmissionRequest{}, OnUsageUpdate: func(update UsageUpdate) error { usage = update; return nil }}, workspace.Info{}, workspace.Issue{}, progress, RunResult{}, time.Now(), time.Now(), 1)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if usage.LastCommand != tt.want {
+				t.Fatalf("last command = %q, want %q", usage.LastCommand, tt.want)
+			}
+		})
+	}
+}

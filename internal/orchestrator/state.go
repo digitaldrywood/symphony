@@ -164,6 +164,7 @@ type Running struct {
 	TurnCount                   int
 	LastEventAt                 time.Time
 	LastEvent                   string
+	LastCommand                 string
 	LastMessage                 string
 	LastMessageTruncation       *runtimeoutput.Truncation
 	RecentEvents                []telemetry.ActivityEvent
@@ -620,6 +621,7 @@ func cloneMergePrecheck(precheck *runpkg.MergePrecheck) *runpkg.MergePrecheck {
 		return nil
 	}
 	cloned := *precheck
+	cloned.ConflictPaths = append([]string(nil), precheck.ConflictPaths...)
 	return &cloned
 }
 

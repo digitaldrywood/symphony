@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/digitaldrywood/detent/internal/connector"
+	"github.com/digitaldrywood/detent/internal/runtimeoutput"
 )
 
 type checkRunTelemetrySummary struct {
@@ -91,6 +92,7 @@ func pullRequestCheckInventory(checkRuns []restCheckRun, statuses []restCommitSt
 		}
 		seen[key] = struct{}{}
 		checks = append(checks, connector.PullRequestCheck{
+			FailureDetail: checkRun.FailureDetail,
 			ID:            checkRun.ID,
 			WorkflowRunID: checkRunWorkflowRunID(checkRun),
 			Name:          name,
@@ -125,6 +127,7 @@ func (c *Connector) transientCheckRunFailures(ctx context.Context, repo pullRequ
 			continue
 		}
 		text := checkRunTransientText(checkRun)
+		detail := firstNonBlank(checkRun.Output.Text, checkRun.Output.Summary, checkRun.Output.Title)
 		if checkRun.ID > 0 {
 			annotations, err := fetchRESTCheckRunAnnotations(ctx, c.client, restCheckRunAnnotationsPath(repo, checkRun.ID))
 			if err != nil {
@@ -136,6 +139,17 @@ func (c *Connector) transientCheckRunFailures(ctx context.Context, repo pullRequ
 				}
 			} else {
 				text = strings.TrimSpace(text + "\n" + checkRunAnnotationTransientText(annotations))
+				for _, annotation := range annotations {
+					if strings.EqualFold(annotation.AnnotationLevel, "failure") && strings.TrimSpace(annotation.Message) != "" {
+						detail = strings.TrimSpace(annotation.Path + ": " + annotation.Message)
+						break
+					}
+				}
+			}
+		}
+		for index := range checkRuns {
+			if checkRuns[index].ID == checkRun.ID && checkRuns[index].Name == checkRun.Name {
+				checkRuns[index].FailureDetail = runtimeoutput.Truncate(detail, 2048).Value
 			}
 		}
 		if !transientCheckFailureText(text) && !transientCheckConclusion(checkRun.Conclusion) {

@@ -216,7 +216,11 @@ func boundSelectionEffort(result agentSelection, policy config.ModelSelection, l
 }
 
 func selectionEffortRank(effort string) int {
-	return slices.Index([]string{"none", "minimal", "low", "medium", "high", "xhigh", "max"}, strings.ToLower(strings.TrimSpace(effort)))
+	effort = strings.ToLower(strings.TrimSpace(effort))
+	if effort == "ultracode" {
+		effort = "max"
+	}
+	return slices.Index([]string{"none", "minimal", "low", "medium", "high", "xhigh", "max"}, effort)
 }
 
 func selectionValue(value *string) string {

@@ -283,6 +283,26 @@ func TestRunnerResumeUsesBoundedEffort(t *testing.T) {
 	}
 }
 
+func TestUltracodeEffortCeiling(t *testing.T) {
+	t.Parallel()
+	for _, resume := range []bool{false, true} {
+		cfg := config.Default()
+		cfg.Agents.ModelSelection = config.ModelSelection{Preset: new("sol_first")}
+		cfg.Agent.Effort.Code = "ultracode"
+		req := RunRequest{}
+		if resume {
+			req.RetryMode = RetryModeResume
+			req.ResumeState = store.AgentResumeState{ProviderThreadID: "thread-1", RuntimeIdentity: agentidentity.Configured("codex", "codex", "default", RoleCode, "gpt-5.6-sol", "", "ultracode", "", time.Now())}
+		}
+		catalog := selectionCatalog()
+		catalog[0].SupportedReasoningEfforts = append(catalog[0].SupportedReasoningEfforts, "ultracode")
+		got := resolveRequestAgentSelection(t.Context(), req, "", "", RoleCode, cfg, config.AgentBackend{Kind: config.AgentBackendCodex}, &catalogAgentBackend{models: catalog})
+		if got.Err != nil || got.Effort != "medium" {
+			t.Fatalf("resume=%t selection=%+v, want medium effort", resume, got)
+		}
+	}
+}
+
 func TestEffortCeilingPolicyBoundaries(t *testing.T) {
 	t.Parallel()
 	for _, test := range []struct {

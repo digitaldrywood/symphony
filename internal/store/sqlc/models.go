@@ -447,6 +447,11 @@ type SecurityAuditRun struct {
 	RecordedAt         string         `json:"recorded_at"`
 }
 
+type SessionProgress struct {
+	SessionID       int64  `json:"session_id"`
+	ObservationJson string `json:"observation_json"`
+}
+
 type StalenessWarningState struct {
 	ProjectID      string         `json:"project_id"`
 	WarningID      string         `json:"warning_id"`

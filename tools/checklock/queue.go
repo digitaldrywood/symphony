@@ -22,6 +22,10 @@ type validationWaiter struct {
 }
 
 func acquireValidationLock(ctx context.Context, path string, stderr io.Writer) (*instancelock.Lock, bool, error) {
+	return acquireValidationLockWithPosition(ctx, path, stderr, validationPosition)
+}
+
+func acquireValidationLockWithPosition(ctx context.Context, path string, stderr io.Writer, lookupPosition func(context.Context, string, string) (int, int, error)) (*instancelock.Lock, bool, error) {
 	started := time.Now()
 	waiter, err := registerValidationWaiter(ctx, path)
 	if err != nil {
@@ -37,12 +41,12 @@ func acquireValidationLock(ctx context.Context, path string, stderr io.Writer) (
 	lastDiagnostic := ""
 	lastReport := time.Time{}
 	for {
-		position, size, err := validationPosition(ctx, path, waiter.name)
+		position, size, err := lookupPosition(ctx, path, waiter.name)
 		if err != nil {
 			return nil, waited, fmt.Errorf("wait for validation queue after %s: %w", time.Since(started).Round(time.Millisecond), err)
 		}
 		if err := ctx.Err(); err != nil {
-			return nil, waited, err
+			return nil, waited, fmt.Errorf("validation queue wait ended (position=%d queued=%d waited=%s; validation has not started): %w", position, size, time.Since(started).Round(time.Millisecond), err)
 		}
 		if position == 1 {
 			lock, err := instancelock.Acquire(path)

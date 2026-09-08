@@ -135,12 +135,19 @@ func TestHeartbeatManagerRequiresMatchingLiveProcessIdentity(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			attempts := &recordingWorkAttemptStore{}
 			cfg := normalizeConfig(Config{Claiming: ClaimingConfig{LeaseTTL: time.Minute, HeartbeatInterval: 5 * time.Millisecond}})
-			manager := newHeartbeatManager(cfg, nil, attempts, time.Now, nil)
-			result := runHeartbeatManagerOnce(t, manager, heartbeatTarget{
+			now := time.Now()
+			manager := newHeartbeatManager(cfg, nil, attempts, func() time.Time { return now }, nil)
+			manager.upsert(heartbeatTarget{
 				issueID:              tt.name,
 				workAttemptHeartbeat: store.WorkAttemptHeartbeat{AttemptID: 1433},
 				workerProcess:        tt.identity,
 			})
+			due := manager.due(now.Add(cfg.Claiming.HeartbeatInterval))
+			if len(due) != 1 {
+				t.Fatalf("due heartbeat count = %d, want 1", len(due))
+			}
+			manager.execute(t.Context(), due[0])
+			result := <-manager.results
 
 			if result.workAttemptRenewed != tt.wantRenewed || result.workerChecked != tt.wantChecked || result.workerAlive != tt.wantAlive {
 				t.Fatalf("heartbeat result = %#v, want renewed=%v checked=%v alive=%v", result, tt.wantRenewed, tt.wantChecked, tt.wantAlive)

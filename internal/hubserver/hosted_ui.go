@@ -30,6 +30,11 @@ func (s *Service) registerHostedRoutes(e *echo.Echo) {
 	e.GET("/support", s.hostedSupportPage)
 	e.GET("/organization", s.hostedHome)
 	e.GET("/organization/plan", s.hostedPlanPage)
+	e.GET("/organization/billing", s.hostedBillingPage)
+	e.POST("/organization/billing/checkout", s.hostedBillingCheckout)
+	e.POST("/organization/billing/portal", s.hostedBillingPortal)
+	e.POST("/webhooks/stripe", s.hostedStripeWebhook)
+	e.GET("/api/cloud/billing/subscription", s.hostedBillingExport)
 	e.POST("/organization/create", s.createHostedOrganization)
 	e.POST("/organization/join", s.acceptHostedInvitation)
 	e.POST("/organization/switch", s.switchHostedOrganization)
@@ -306,8 +311,8 @@ func (s *Service) hostedUsage(ctx context.Context, report HostedMetadata) (hoste
 }
 
 func (s *Service) hostedBilling(c echo.Context) error {
-	credential, _, err := s.hostedCredential(c)
-	if err != nil || credential.HostedRole != "owner" {
+	credential, err := s.hostedBillingOwner(c)
+	if err != nil {
 		return s.nativeAPIError(c, auth.ErrHostedIdentity)
 	}
 	if err := s.hostedAudit(c.Request().Context(), credential.Hosted, "billing_viewed", "GET /api/cloud/billing", "", http.StatusOK); err != nil {

@@ -17,6 +17,7 @@ type HostedDestination struct {
 }
 
 type HostedConfig struct {
+	Billing                  *HostedBillingConfig
 	EntitlementAdministrator string
 	EntitlementAdminToken    []byte
 	Plans                    *HostedPlansConfig
@@ -68,9 +69,11 @@ func (c *HostedConfig) validate() error {
 		if c.PlanID != "" || c.StorageQuotaBytes != 0 || c.EventQuota != 0 {
 			return errors.New("use entitlements instead of legacy plan metadata fields")
 		}
-		return c.Plans.validate()
+		if err := c.Plans.validate(); err != nil {
+			return err
+		}
 	}
-	return nil
+	return c.Billing.validate(c.Plans)
 }
 
 func hostedPublicURL(value string) bool {

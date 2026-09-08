@@ -6,19 +6,22 @@
 
 ## Issue effort selection
 
+Use Codex Astra (`gpt-6-astra`) at low effort by default, medium for
+moderately difficult work, and high for the hardest work.
+
 Every issue created for this repository must include an explicit reasoning
 effort override:
 
 ```detent-agent
 schema: 1
-effort: high
+effort: low
 ```
 
 Choose the effort automatically from this rubric:
 
-- `medium` — small, mechanical, and tightly specified with file:line references and complete acceptance criteria.
-- `high` — a standard feature or fix with some ambiguity or a cross-cutting surface.
-- `xhigh` — a new subsystem, tricky state or concurrency, restart or recovery semantics, or a gesture or interaction engine.
+- `low` — small, mechanical, and tightly specified with file:line references and complete acceptance criteria.
+- `medium` — a standard feature or fix with some ambiguity or a cross-cutting surface.
+- `high` — a new subsystem, tricky state or concurrency, restart or recovery semantics, or a gesture or interaction engine.
 - `max` — exceptional and operator-designated only; never auto-assign it.
 
 Leave `model` unset so the issue inherits the fleet-standard model.

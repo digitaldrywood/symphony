@@ -159,7 +159,7 @@ func (c *catalog) initialize(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if target != 1 || current > target {
+	if target != 2 || current > target {
 		return errors.New("unsupported artifact catalog schema")
 	}
 	if _, err := provider.Up(ctx); err != nil {

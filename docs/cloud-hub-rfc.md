@@ -468,9 +468,10 @@ contract. The owning tenant Hub reports these values through authenticated
 `GET /api/cloud/metadata`; analytics has no database handle or unrestricted query
 API. The initial report contains opaque organization/provider IDs, active member,
 project, runner and event counts, latest activity, database/WAL bytes, health,
-plan ID and configured storage/event quota ceilings. Empty plan and absent ceilings
-mean unassigned, not free or unlimited. Prices, enforcement and actual allowances
-remain #2195. Owner-only `GET /api/cloud/billing` exposes the same bounded usage
+versioned plan assignment, scoped grant expiry, allowance/consumption and bounded
+request/artifact telemetry. Hosted mode initializes an operator-configurable pilot
+free plan; missing allowances inside a plan mean zero. See [hosted allowances](hosted-allowances.md)
+for enforcement, downgrade and reporting policy. Owner-only `GET /api/cloud/billing` exposes the same bounded usage
 for that Hub's organization. Organization administration cannot read project
 content without an explicit project grant.
 
@@ -523,7 +524,7 @@ Deployment and WorkOS team configuration are documented in
 [hosted identity setup](hosted-identity.md); no live WorkOS access is enabled by
 this change.
 
-Recommend entitlement resolution as a versioned free/paid base plus valid scoped
+Entitlement resolution uses a versioned free/paid base plus valid scoped
 complimentary grants; subscription state changes the base, and grant expiry
 returns to the applicable base. Administrative suspension and safety restrictions
 take precedence over all allowances. Free access requires no card or Stripe

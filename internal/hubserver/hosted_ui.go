@@ -1,6 +1,7 @@
 package hubserver
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -28,6 +29,7 @@ func (s *Service) registerHostedRoutes(e *echo.Echo) {
 	e.POST("/support/start", s.startHostedSupport)
 	e.GET("/support", s.hostedSupportPage)
 	e.GET("/organization", s.hostedHome)
+	e.GET("/organization/plan", s.hostedPlanPage)
 	e.POST("/organization/create", s.createHostedOrganization)
 	e.POST("/organization/join", s.acceptHostedInvitation)
 	e.POST("/organization/switch", s.switchHostedOrganization)
@@ -40,6 +42,8 @@ func (s *Service) registerHostedRoutes(e *echo.Echo) {
 	e.GET("/projects/:project/events", s.hostedEvents)
 	e.GET("/api/cloud/metadata", s.hostedMetadata)
 	e.GET("/api/cloud/billing", s.hostedBilling)
+	e.POST("/api/v2/organizations/:organization/entitlements", s.updateHostedPlan)
+	e.POST("/api/v2/organizations/:organization/artifact-allowances/:service", s.hostedArtifactAllowances)
 }
 
 func (s *Service) renderHosted(c echo.Context, status int, data templates.HostedPageData) error {
@@ -278,18 +282,24 @@ func (s *Service) hostedMetadata(c echo.Context) error {
 	if err != nil {
 		return c.JSON(http.StatusServiceUnavailable, apiErrorResponse{Code: "metadata_unavailable", Message: "Service metadata is temporarily unavailable"})
 	}
-	return c.JSON(http.StatusOK, s.hostedUsage(report))
+	usage, err := s.hostedUsage(c.Request().Context(), report)
+	if err != nil {
+		return s.nativeAPIError(c, err)
+	}
+	return c.JSON(http.StatusOK, usage)
 }
 
 type hostedUsageReport struct {
+	Entitlement HostedEntitlement `json:"entitlement"`
 	HostedMetadata
 	PlanID            string `json:"plan_id"`
 	StorageQuotaBytes int64  `json:"storage_quota_bytes,omitempty"`
 	EventQuota        int64  `json:"event_quota,omitempty"`
 }
 
-func (s *Service) hostedUsage(report HostedMetadata) hostedUsageReport {
-	return hostedUsageReport{HostedMetadata: report, PlanID: s.config.Hosted.PlanID, StorageQuotaBytes: s.config.Hosted.StorageQuotaBytes, EventQuota: s.config.Hosted.EventQuota}
+func (s *Service) hostedUsage(ctx context.Context, report HostedMetadata) (hostedUsageReport, error) {
+	entitlement, err := s.database.hostedPlanUsage(ctx, s.config.now())
+	return hostedUsageReport{HostedMetadata: report, Entitlement: entitlement, PlanID: entitlement.EffectiveBase.ID, StorageQuotaBytes: entitlement.Allowances["collaboration_bytes"], EventQuota: entitlement.Allowances["ingested_events"]}, err
 }
 
 func (s *Service) hostedBilling(c echo.Context) error {
@@ -304,7 +314,11 @@ func (s *Service) hostedBilling(c echo.Context) error {
 	if err != nil {
 		return s.nativeAPIError(c, err)
 	}
-	return c.JSON(http.StatusOK, s.hostedUsage(report))
+	usage, err := s.hostedUsage(c.Request().Context(), report)
+	if err != nil {
+		return s.nativeAPIError(c, err)
+	}
+	return c.JSON(http.StatusOK, usage)
 }
 
 func hostedFormTrue(c echo.Context, key string) bool {

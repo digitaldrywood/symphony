@@ -8,6 +8,11 @@ import (
 )
 
 type HostedPageData struct {
+	PlanName            string
+	PlanSource          string
+	UsageWindow         string
+	PlanGrants          []string
+	Allowances          []HostedAllowanceRow
 	Setup               *onboarding.Project
 	SetupAPI            string
 	CanWriteProject     bool
@@ -93,4 +98,12 @@ func hostedIssuePath(organization string, project string, issue tracker.NativeWo
 
 func hostedProjectMode(data HostedPageData) bool {
 	return data.OrganizationID != "" && (data.Mode == "organization" || data.Mode == "project")
+}
+
+type HostedAllowanceRow struct {
+	LimitOnly   bool
+	Label       string
+	Consumption string
+	Allowance   string
+	OverLimit   bool
 }

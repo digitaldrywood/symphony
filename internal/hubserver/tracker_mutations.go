@@ -92,6 +92,9 @@ func (d *database) claimInTransaction(ctx context.Context, tx *sql.Tx, request t
 		}
 	}
 
+	if err := d.checkHostedClaim(ctx, tx, now); err != nil {
+		return tracker.Lease{}, err
+	}
 	leaseID := strings.TrimSpace(d.newLeaseID())
 	if leaseID == "" {
 		return tracker.Lease{}, errors.New("generate hub lease ID: empty value")

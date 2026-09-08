@@ -17,22 +17,28 @@ type HostedDestination struct {
 }
 
 type HostedConfig struct {
-	OrganizationID       string
-	WorkOSOrganizationID string
-	BootstrapSubject     string
-	PublicURL            string
-	StaffEmails          []string
-	SupportActors        []string
-	Directory            []HostedDestination
-	Provider             auth.HostedProvider
-	PlanID               string
-	StorageQuotaBytes    int64
-	EventQuota           int64
+	EntitlementAdministrator string
+	EntitlementAdminToken    []byte
+	Plans                    *HostedPlansConfig
+	OrganizationID           string
+	WorkOSOrganizationID     string
+	BootstrapSubject         string
+	PublicURL                string
+	StaffEmails              []string
+	SupportActors            []string
+	Directory                []HostedDestination
+	Provider                 auth.HostedProvider
+	PlanID                   string
+	StorageQuotaBytes        int64
+	EventQuota               int64
 }
 
 func (c *HostedConfig) validate() error {
 	if c == nil {
 		return nil
+	}
+	if len(c.EntitlementAdminToken) > 0 && (len(c.EntitlementAdminToken) < 32 || !hostedSafeID(c.EntitlementAdministrator)) || len(c.EntitlementAdminToken) == 0 && c.EntitlementAdministrator != "" {
+		return errors.New("entitlement administration requires an actor ID and a separate token of at least 32 bytes")
 	}
 	if !strings.HasPrefix(c.OrganizationID, "org_") || len(c.OrganizationID) > 64 || !hostedSafeID(c.OrganizationID) || c.Provider == nil {
 		return errors.New("hosted organization identity and identity provider are required")
@@ -57,6 +63,12 @@ func (c *HostedConfig) validate() error {
 		if !hostedEmailListed(c.StaffEmails, actor) {
 			return errors.New("hosted support actors must also be declared staff identities")
 		}
+	}
+	if c.Plans != nil {
+		if c.PlanID != "" || c.StorageQuotaBytes != 0 || c.EventQuota != 0 {
+			return errors.New("use entitlements instead of legacy plan metadata fields")
+		}
+		return c.Plans.validate()
 	}
 	return nil
 }

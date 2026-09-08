@@ -137,6 +137,7 @@ func hostedReadRequest(c echo.Context) bool {
 
 func (s *Service) hostedBoundary(next echo.HandlerFunc) echo.HandlerFunc {
 	return func(c echo.Context) error {
+		defer s.recordHostedRequest(c, time.Now())
 		c.Response().Header().Set("Cache-Control", "no-store")
 		c.Response().Header().Set("Referrer-Policy", "no-referrer")
 		c.Response().Header().Set("X-Content-Type-Options", "nosniff")
@@ -229,6 +230,11 @@ func (s *Service) storeHostedMember(ctx context.Context, identity auth.Identity,
 			resultErr = errors.Join(resultErr, err)
 		}
 	}()
+	stamp := s.config.now()
+	before, err := s.database.hostedConsumption(ctx, tx, stamp)
+	if err != nil {
+		return err
+	}
 	principal := "hosted_" + apikey.HashToken(identity.Subject)[:32]
 	now := formatHubTime(s.config.now())
 	token, err := s.config.generateToken()
@@ -257,6 +263,18 @@ VALUES (?,?,?,?,1,?,?,?) ON CONFLICT(user_id) DO UPDATE SET email=excluded.email
 	}
 	if organizationName != "" {
 		if _, err := tx.ExecContext(ctx, "UPDATE organizations SET name = ? WHERE id = ?", organizationName, s.config.Hosted.OrganizationID); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.ExecContext(ctx, "DELETE FROM hosted_member_reservations WHERE email = ?", strings.ToLower(identity.Email)); err != nil {
+		return err
+	}
+	after, err := s.database.hostedConsumption(ctx, tx, stamp)
+	if err != nil {
+		return err
+	}
+	if after["members"] > before["members"] {
+		if err := s.database.checkHostedGrowth(ctx, tx, before, stamp, false); err != nil {
 			return err
 		}
 	}

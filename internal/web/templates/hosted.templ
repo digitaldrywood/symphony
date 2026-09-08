@@ -32,6 +32,8 @@ templ HostedPage(data HostedPageData) {
 						</section>
 					case "onboarding":
 						@hostedOnboarding(data)
+					case "plan":
+						@hostedPlanUsage(data)
 					case "organization":
 						@hostedOrganization(data)
 					case "project":
@@ -162,6 +164,9 @@ templ hostedOnboarding(data HostedPageData) {
 }
 
 templ hostedOrganization(data HostedPageData) {
+    if data.CanManage {
+        <a href="/organization/plan" class="inline-flex min-h-11 items-center rounded-card border border-line px-4 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">Plan and usage</a>
+    }
 	<section class="space-y-5 rounded-card border border-line bg-surface p-6">
 		<h2 class="break-words text-lg font-semibold">{ data.OrganizationName }</h2>
 		@hostedOrganizationSwitcher(data)
@@ -299,4 +304,36 @@ templ hostedSupport(data HostedPageData) {
 			<p class="text-sm text-sec" role="alert">Your account is not authorized to start support impersonation.</p>
 		}
 	</section>
+}
+
+templ hostedPlanUsage(data HostedPageData) {
+    <section class="space-y-4 rounded-card border border-line bg-surface p-4 md:p-6" aria-label="Organization plan and usage">
+        <h2 class="break-words text-lg font-semibold">{ data.PlanName }</h2>
+        <p class="text-sm text-sec">Access source: { data.PlanSource }. Pilot allowances are configurable and are not permanent public pricing.</p>
+        <p class="text-sm text-sec">Detent hosted resource usage is separate from charges by your model providers. Free access requires no card or subscription.</p>
+        for _, grant := range data.PlanGrants {
+            <p class="break-words text-sm" data-complimentary-access>{ grant }</p>
+        }
+        <p class="break-words text-sm text-sec">API, event and relay usage window ends: { data.UsageWindow }</p>
+        <dl class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            for _, row := range data.Allowances {
+                <div class="min-w-0 rounded-card border border-line p-3">
+                    <dt class="break-words text-sm capitalize">{ row.Label }</dt>
+                    if row.LimitOnly {
+                        <dd class="break-words font-mono text-sm">Maximum: { row.Allowance }</dd>
+                    } else {
+                        <dd class="break-words font-mono text-sm">{ row.Consumption } used / { row.Allowance } allowed</dd>
+                    }
+                    if row.OverLimit {
+                        <dd class="text-sm text-warn">Above allowance. New excess allocations are paused.</dd>
+                    }
+                </div>
+            }
+        </dl>
+        <p class="text-sm text-sec">Expiry or downgrade preserves existing data. Reading, export, billing, and safe completion remain available. Repository permissions and runner safety limits still apply.</p>
+        <a href="/organization" class="inline-flex min-h-11 items-center rounded-card border border-line px-4 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">Return to organization</a>
+        if data.CanManageOwnership {
+            <a href="/api/cloud/billing" class="inline-flex min-h-11 items-center rounded-card border border-line px-4 text-sm font-medium focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">Billing usage export</a>
+        }
+    </section>
 }

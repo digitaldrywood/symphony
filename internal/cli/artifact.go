@@ -53,12 +53,17 @@ func newArtifactCommand(lookup func(string) string) *cobra.Command {
 		if err := artifact.VerifyStorage(cmd.Context(), storage); err != nil {
 			return err
 		}
-		service, err := artifact.NewService(cmd.Context(), cfg, storage, configuredArtifactAllowances{cfg.Policy.Limits})
+		hub := &artifact.RemoteHub{Origin: cfg.HubOrigin, ServiceID: cfg.ServiceID, OrganizationID: cfg.OrganizationID, ProjectID: projectID, PublisherToken: func() string { return strings.TrimSpace(lookup(cfg.PublishTokenEnv)) }}
+		var allowances artifact.Allowances = configuredArtifactAllowances{cfg.Policy.Limits}
+		if cfg.Mode == "hosted" {
+			allowances = hub
+		}
+		service, err := artifact.NewService(cmd.Context(), cfg, storage, allowances)
 		if err != nil {
 			return err
 		}
 		defer func() { resultErr = errors.Join(resultErr, service.Close()) }()
-		hub := &artifact.RemoteHub{Origin: cfg.HubOrigin, ServiceID: cfg.ServiceID, OrganizationID: cfg.OrganizationID, ProjectID: projectID, PublisherToken: func() string { return strings.TrimSpace(lookup(cfg.PublishTokenEnv)) }}
+		hub.Usage = service.Usage
 		httpServer, err := artifact.NewHTTPServer(service, hub)
 		if err != nil {
 			return err

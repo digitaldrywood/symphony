@@ -13,17 +13,20 @@ import (
 )
 
 type hostedFileConfig struct {
-	OrganizationID       string                        `yaml:"organization_id"`
-	WorkOSOrganizationID string                        `yaml:"workos_organization_id"`
-	BootstrapSubject     string                        `yaml:"bootstrap_subject"`
-	PublicURL            string                        `yaml:"public_url"`
-	StaffEmails          []string                      `yaml:"staff_emails"`
-	SupportActors        []string                      `yaml:"support_actors"`
-	PlanID               string                        `yaml:"plan_id"`
-	StorageQuotaBytes    int64                         `yaml:"storage_quota_bytes"`
-	EventQuota           int64                         `yaml:"event_quota"`
-	Directory            []hubserver.HostedDestination `yaml:"directory"`
-	WorkOS               struct {
+	EntitlementAdministrator string                        `yaml:"entitlement_administrator"`
+	EntitlementAdminTokenEnv string                        `yaml:"entitlement_admin_token_env"`
+	Plans                    *hubserver.HostedPlansConfig  `yaml:"entitlements"`
+	OrganizationID           string                        `yaml:"organization_id"`
+	WorkOSOrganizationID     string                        `yaml:"workos_organization_id"`
+	BootstrapSubject         string                        `yaml:"bootstrap_subject"`
+	PublicURL                string                        `yaml:"public_url"`
+	StaffEmails              []string                      `yaml:"staff_emails"`
+	SupportActors            []string                      `yaml:"support_actors"`
+	PlanID                   string                        `yaml:"plan_id"`
+	StorageQuotaBytes        int64                         `yaml:"storage_quota_bytes"`
+	EventQuota               int64                         `yaml:"event_quota"`
+	Directory                []hubserver.HostedDestination `yaml:"directory"`
+	WorkOS                   struct {
 		ClientID  string `yaml:"client_id"`
 		APIKeyEnv string `yaml:"api_key_env"`
 		APIURL    string `yaml:"api_url"`
@@ -67,7 +70,19 @@ func readHostedConfig(path string, lookupEnv func(string) string) (result *hubse
 	if err != nil {
 		return nil, false, err
 	}
+	var entitlementToken []byte
+	if config.EntitlementAdminTokenEnv != "" {
+		if !validEnvName(config.EntitlementAdminTokenEnv) {
+			return nil, false, errors.New("entitlement token environment name is invalid")
+		}
+		entitlementToken = []byte(lookupEnv(config.EntitlementAdminTokenEnv))
+		if len(entitlementToken) < 32 {
+			return nil, false, errors.New("entitlement administration token is unavailable or too short")
+		}
+	}
 	return &hubserver.HostedConfig{
+		EntitlementAdministrator: config.EntitlementAdministrator, EntitlementAdminToken: entitlementToken,
+		Plans:          config.Plans,
 		OrganizationID: config.OrganizationID, WorkOSOrganizationID: config.WorkOSOrganizationID,
 		BootstrapSubject: config.BootstrapSubject, PublicURL: config.PublicURL,
 		StaffEmails: config.StaffEmails, SupportActors: config.SupportActors, Directory: config.Directory, Provider: provider,

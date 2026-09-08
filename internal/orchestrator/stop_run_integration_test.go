@@ -297,7 +297,7 @@ func TestStopRunAcknowledgesBeforeTrackerTransitionCompletes(t *testing.T) {
 
 func TestStopRunRecoveryReconcilesDurableHoldBeforeDispatch(t *testing.T) {
 	issue := testIssue("issue-stop-recovery", "digitaldrywood/detent#1311", "In Progress")
-	tracker := newFakeConnector(issue)
+	tracker := &operatorStopRecoveryConnector{fakeConnector: newFakeConnector(issue), stateUpdated: make(chan struct{}), releaseStateUpdate: make(chan struct{})}
 	runner := &operatorStopBlockingRunner{started: make(chan orchestrator.RunRequest, 1)}
 	runtimeStore, err := store.Open(t.Context(), store.Config{Backend: store.BackendSQLite, Path: filepath.Join(t.TempDir(), "detent.db")})
 	if err != nil {
@@ -322,9 +322,42 @@ func TestStopRunRecoveryReconcilesDurableHoldBeforeDispatch(t *testing.T) {
 	}
 	stop := runOrchestrator(t, orch)
 	defer stop()
-	state := waitForOperatorStopState(t, orch, func(state orchestrator.State) bool {
-		return len(tracker.stateUpdateCalls()) > 0 && len(state.Running) == 0 && len(state.Blocked) == 0
-	})
+	releaseStateUpdate := sync.OnceFunc(func() { close(tracker.releaseStateUpdate) })
+	defer releaseStateUpdate()
+	select {
+	case <-tracker.stateUpdated:
+	case <-time.After(operatorStopIntegrationWaitTimeout):
+		t.Fatal("timed out waiting for recovered tracker transition")
+	}
+	state, err := orch.State(t.Context())
+	if err != nil {
+		t.Fatalf("State() error = %v", err)
+	}
+	if len(tracker.stateUpdateCalls()) == 0 || len(state.Running) != 0 {
+		t.Fatal("want tracker update with no running items while reconciliation is paused")
+	}
+	if attempt, ok := workAttemptSnapshot(state, attemptID); !ok || attempt.Phase != "operator_stop_transition_failed" || attempt.NextAction != "retry tracker transition to Blocked" {
+		t.Fatalf("work attempt snapshot = %#v, %v, want unreconciled operator stop while transition is paused", attempt, ok)
+	}
+	recovered := func(state orchestrator.State) bool {
+		attempt, ok := workAttemptSnapshot(state, attemptID)
+		return ok && attempt.Phase == "operator_stop_succeeded" && attempt.NextAction == "await operator resume" && len(state.Running) == 0 && len(state.Blocked) == 0
+	}
+	for _, tt := range []struct {
+		name  string
+		state orchestrator.State
+	}{
+		{name: "paused tracker transition", state: state},
+		{name: "published collections ahead of receipt", state: orchestrator.State{WorkAttempts: state.WorkAttempts}},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			if recovered(tt.state) {
+				t.Fatal("recovery predicate accepted the unreconciled operator stop snapshot")
+			}
+		})
+	}
+	releaseStateUpdate()
+	state = waitForOperatorStopState(t, orch, recovered)
 	if attempt, ok := workAttemptSnapshot(state, attemptID); !ok || attempt.Phase != "operator_stop_succeeded" || attempt.NextAction != "await operator resume" {
 		t.Fatalf("work attempt snapshot = %#v, %v, want reconciled operator stop", attempt, ok)
 	}
@@ -497,6 +530,26 @@ func (s *operatorStopCompletionStore) RecordWorkflowPhaseEvent(ctx context.Conte
 		return eventID, nil
 	case <-ctx.Done():
 		return eventID, ctx.Err()
+	}
+}
+
+type operatorStopRecoveryConnector struct {
+	*fakeConnector
+	stateUpdated       chan struct{}
+	releaseStateUpdate chan struct{}
+	stateUpdateOnce    sync.Once
+}
+
+func (c *operatorStopRecoveryConnector) UpdateIssueState(ctx context.Context, issueID string, state string) error {
+	if err := c.fakeConnector.UpdateIssueState(ctx, issueID, state); err != nil {
+		return err
+	}
+	c.stateUpdateOnce.Do(func() { close(c.stateUpdated) })
+	select {
+	case <-c.releaseStateUpdate:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
 	}
 }
 

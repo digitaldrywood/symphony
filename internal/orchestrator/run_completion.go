@@ -2116,7 +2116,7 @@ func mergeWorkerProgrammaticMergeWaiting(issue connector.Issue) bool {
 		return false
 	}
 	pullRequest := issue.PullRequest
-	if pullRequestHydrationBlocksProgress(pullRequest) {
+	if pullRequestHydrationBlocksProgress(pullRequest) || mergeWorkerCIFailed(pullRequest) {
 		return false
 	}
 	if normalizePullRequestState(pullRequest.State) != "open" || pullRequest.Draft {

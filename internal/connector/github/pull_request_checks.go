@@ -54,11 +54,7 @@ func (c *Connector) fetchPullRequestCI(ctx context.Context, repo pullRequestRepo
 	c.logStaleSuccessfulCheckRuns(ctx, repo, sha, staleSuccessfulChecks)
 	requiredFailures := requiredStatusCheckFailures(checkRuns, statuses, c.requiredChecks)
 	state := combinedCIState(checkRunsState(checkRuns), commitStatusesState(statuses))
-	if requiredState := requiredStatusCheckState(requiredFailures); requiredState == "pending" {
-		state = requiredState
-	} else if requiredState != "" {
-		state = combinedCIState(requiredState, state)
-	}
+	state = combinedCIState(requiredStatusCheckState(requiredFailures), state)
 	transientFailures, err := c.transientCheckRunFailures(ctx, repo, checkRuns)
 	if err != nil {
 		return pullRequestCI{}, err
@@ -317,11 +313,11 @@ func checkRunsState(checkRuns []restCheckRun) string {
 			failed = true
 		}
 	}
-	if pending {
-		return "pending"
-	}
 	if failed {
 		return "failure"
+	}
+	if pending {
+		return "pending"
 	}
 	return "success"
 }
@@ -438,11 +434,11 @@ func requiredStatusCheckState(failures []connector.PullRequestCheck) string {
 			failed = true
 		}
 	}
-	if pending {
-		return "pending"
-	}
 	if failed {
 		return "failure"
+	}
+	if pending {
+		return "pending"
 	}
 	return ""
 }
@@ -704,11 +700,11 @@ func commitStatusesState(statuses []restCommitStatus) string {
 			failed = true
 		}
 	}
-	if pending {
-		return "pending"
-	}
 	if failed {
 		return "failure"
+	}
+	if pending {
+		return "pending"
 	}
 	return "success"
 }
@@ -770,11 +766,11 @@ func combinedCIState(checkRuns string, statuses string) string {
 			hasSuccess = true
 		}
 	}
-	if hasPending {
-		return "pending"
-	}
 	if hasFailure {
 		return "failure"
+	}
+	if hasPending {
+		return "pending"
 	}
 	if hasSuccess {
 		return "success"

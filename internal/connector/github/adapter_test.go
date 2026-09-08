@@ -2747,8 +2747,8 @@ func TestConnectorFetchIssuesByStatesAttachesPipelinePullRequest(t *testing.T) {
 		t.Fatalf("FetchIssuesByStates() len = %d, want 1", len(got))
 	}
 	pr := got[0].PullRequest
-	if pr == nil || pr.Number != 190 || pr.CIStatus != "pending" || pr.CodexReviewState != "P1" {
-		t.Fatalf("PullRequest = %#v, want PR 190 with pending CI and P1 review", pr)
+	if pr == nil || pr.Number != 190 || pr.CIStatus != "fail" || pr.CodexReviewState != "P1" {
+		t.Fatalf("PullRequest = %#v, want PR 190 with failed CI and P1 review", pr)
 	}
 	if pr.CodexReviewSource != connector.PullRequestReviewSourceFormal {
 		t.Fatalf("CodexReviewSource = %q, want formal review", pr.CodexReviewSource)
@@ -2977,12 +2977,12 @@ func TestCheckRunsStateUsesSettledContextResults(t *testing.T) {
 			want: "failure",
 		},
 		{
-			name: "pending context keeps a different failure unsettled",
+			name: "settled failure wins over a different pending context",
 			checkRuns: []restCheckRun{
 				{Name: "Checks", Status: "completed", Conclusion: "failure"},
 				{Name: "Test", Status: "queued"},
 			},
-			want: "pending",
+			want: "failure",
 		},
 		{
 			name: "cancelled artifact does not shadow success",
@@ -3072,18 +3072,91 @@ func TestCompletedFailedCheckRunIgnoresNonFailureArtifacts(t *testing.T) {
 	}
 }
 
-func TestCIStateWaitsForAllContextsToSettle(t *testing.T) {
+func TestCIStateReportsFailureWhileOtherContextsWait(t *testing.T) {
 	t.Parallel()
+	for _, tt := range []struct {
+		name         string
+		checks       string
+		statuses     []restCommitStatus
+		wantStatuses string
+		want         string
+	}{
+		{name: "mixed statuses", statuses: []restCommitStatus{{Context: "Checks", State: "failure"}, {Context: "Test", State: "pending"}}, wantStatuses: "failure", want: "failure"},
+		{name: "failed check pending status", checks: "failure", statuses: []restCommitStatus{{Context: "Test", State: "pending"}}, wantStatuses: "pending", want: "failure"},
+		{name: "pending check failed status", checks: "pending", statuses: []restCommitStatus{{Context: "Test", State: "error"}}, wantStatuses: "failure", want: "failure"},
+		{name: "pending only", checks: "success", statuses: []restCommitStatus{{Context: "Test", State: "pending"}}, wantStatuses: "pending", want: "pending"},
+		{name: "superseded failure", checks: "pending", statuses: []restCommitStatus{{Context: "Test", State: "pending", CreatedAt: new(time.Date(2026, 9, 8, 15, 0, 0, 0, time.UTC))}, {Context: "Test", State: "failure"}}, wantStatuses: "pending", want: "pending"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			statuses := commitStatusesState(tt.statuses)
+			if statuses != tt.wantStatuses {
+				t.Fatalf("commitStatusesState() = %q, want %q", statuses, tt.wantStatuses)
+			}
+			if got := combinedCIState(tt.checks, statuses); got != tt.want {
+				t.Fatalf("combinedCIState() = %q, want %q", got, tt.want)
+			}
+		})
+	}
+}
 
-	statuses := []restCommitStatus{
-		{Context: "Checks", State: "failure"},
-		{Context: "Test", State: "pending"},
-	}
-	if got := commitStatusesState(statuses); got != "pending" {
-		t.Fatalf("commitStatusesState() = %q, want pending", got)
-	}
-	if got := combinedCIState("failure", "pending"); got != "pending" {
-		t.Fatalf("combinedCIState() = %q, want pending", got)
+func TestConnectorHydratePullRequestMixedCurrentHeadChecks(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name       string
+		conclusion string
+		required   []string
+		statuses   string
+		want       string
+	}{
+		{name: "failed check and running checks", conclusion: "failure", want: "fail"},
+		{name: "failed check and missing required check", conclusion: "failure", required: []string{"Missing"}, want: "fail"},
+		{name: "required failure and running required check", conclusion: "failure", required: []string{"GoReleaser Snapshot", "Windows Core"}, want: "fail"},
+		{name: "failed legacy status and running check", conclusion: "success", statuses: `[{"context":"external","state":"failure"},{"context":"another","state":"pending"}]`, want: "fail"},
+		{name: "old head failure replaced by pending head", conclusion: "success", want: "pending"},
+		{name: "optional neutral check", conclusion: "neutral", want: "pending"},
+		{name: "optional skipped check", conclusion: "skipped", want: "pending"},
+		{name: "optional cancelled check", conclusion: "cancelled", want: "pending"},
+		{name: "missing required check needs startup", conclusion: "success", required: []string{"Missing"}, want: "pending"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			statuses := tt.statuses
+			if statuses == "" {
+				statuses = `[]`
+			}
+			server := newGraphQLTestServer(t, []graphqlTestResponse{
+				{method: http.MethodGet, path: "/repos/example/repo/pulls/42", body: `{"number":42,"state":"open","mergeable_state":"blocked","head":{"sha":"current-head"},"base":{"sha":"base"}}`},
+				{method: http.MethodGet, path: "/repos/example/repo/commits/current-head/check-runs?per_page=100", body: fmt.Sprintf(`{"check_runs":[{"name":"GoReleaser Snapshot","status":"completed","conclusion":%q,"started_at":"2026-09-08T15:40:00Z","completed_at":"2026-09-08T15:42:36Z"},{"name":"Windows Core","status":"in_progress","started_at":"2026-09-08T15:40:00Z"},{"name":"Linux","status":"queued","created_at":"2026-09-08T15:40:00Z"}]}`, tt.conclusion)},
+				{method: http.MethodGet, path: "/repos/example/repo/commits/current-head/statuses?per_page=100", body: statuses},
+				{method: http.MethodGet, path: "/repos/example/repo/pulls/42/reviews?per_page=100", body: `[]`},
+				emptyPullRequestCommentsResponse("example/repo", 42),
+			})
+			c := newGitHubTestConnector(t, server, Config{RequiredStatusChecks: tt.required})
+			c.now = func() time.Time { return time.Date(2026, 9, 8, 15, 54, 0, 0, time.UTC) }
+			c.unstartedThreshold = time.Minute
+			issue := connector.Issue{ID: "issue-1", Identifier: "example/repo#1", PRNumber: new(42), PRRepository: "example/repo", PullRequest: &connector.PullRequest{Number: 42, HeadSHA: "old-head", CIStatus: "failure", RequiredCheckFailures: []connector.PullRequestCheck{{Name: "Old", Status: "completed", Conclusion: "failure"}}}}
+			got, err := c.HydratePullRequest(t.Context(), issue)
+			if err != nil {
+				t.Fatal(err)
+			}
+			pr := got.PullRequest
+			if pr == nil {
+				t.Fatal("missing pull request")
+			}
+			if pr.HeadSHA != "current-head" || pr.CIStatus != tt.want {
+				t.Fatalf("head=%q CI=%q, want current-head CI=%q", pr.HeadSHA, pr.CIStatus, tt.want)
+			}
+			if !reflect.DeepEqual(pr.RunningChecks, []string{"Windows Core"}) || pr.UnstartedCheckCount != 1 || len(pr.UnstartedChecks) != 1 || pr.UnstartedChecks[0].Name != "Linux" {
+				t.Fatalf("pending telemetry lost: running=%v unstarted=%v", pr.RunningChecks, pr.UnstartedChecks)
+			}
+			if pr.CIDurationSeconds != 0 || len(pr.Checks) < 3 {
+				t.Fatalf("partial CI telemetry: duration=%d checks=%v", pr.CIDurationSeconds, pr.Checks)
+			}
+			if tt.conclusion == "failure" && (len(pr.SlowChecks) != 1 || pr.SlowChecks[0].Conclusion != "failure") {
+				t.Fatalf("failed check telemetry lost: %v", pr.SlowChecks)
+			}
+		})
 	}
 }
 
@@ -3216,13 +3289,13 @@ func TestRequiredStatusCheckFailures(t *testing.T) {
 			}},
 		},
 		{
-			name: "pending required check wins over settled failure",
+			name: "settled required failure wins over pending check",
 			checkRuns: []restCheckRun{
 				{Name: "Checks", Status: "completed", Conclusion: "failure"},
 				{Name: "Test", Status: "in_progress"},
 			},
 			required:  []string{"Checks", "Test"},
-			wantState: "pending",
+			wantState: "failure",
 			wantChecks: []connector.PullRequestCheck{
 				{Name: "Checks", Status: "completed", Conclusion: "failure"},
 				{Name: "Test", Status: "in_progress"},

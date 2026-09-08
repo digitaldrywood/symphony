@@ -77,6 +77,30 @@ func TestMergeReservationLifecycle(t *testing.T) {
 		}},
 		{name: "external head change", mutate: func(i *connector.Issue) { i.PullRequest.HeadSHA = "external-head" }, reason: "head_changed"},
 		{name: "failed checks", mutate: func(i *connector.Issue) { i.PullRequest.CIStatus = "failure" }, reason: "required_checks_failed"},
+		{name: "failed required check with pending aggregate", mutate: func(i *connector.Issue) {
+			i.PullRequest.MergeableState = "blocked"
+			i.PullRequest.RunningChecks = []string{"Windows Core"}
+			i.PullRequest.RequiredCheckFailures = []connector.PullRequestCheck{{Name: "GoReleaser Snapshot", Status: "completed", Conclusion: "failure"}, {Name: "Windows Core", Status: "in_progress"}}
+		}, reason: "required_checks_failed"},
+		{name: "missing required check needs startup", mutate: func(i *connector.Issue) {
+			i.PullRequest.MergeableState = "blocked"
+			i.PullRequest.RequiredCheckFailures = []connector.PullRequestCheck{{Name: "Windows Core", Status: "missing", Conclusion: "missing"}}
+		}},
+		{name: "running required check", mutate: func(i *connector.Issue) {
+			i.PullRequest.RequiredCheckFailures = []connector.PullRequestCheck{{Name: "Windows Core", Status: "in_progress"}}
+		}},
+		{name: "ignored check telemetry", mutate: func(i *connector.Issue) {
+			i.PullRequest.SlowChecks = []connector.PullRequestCheck{{Name: "Optional", Status: "completed", Conclusion: "neutral"}, {Name: "Cancelled", Status: "completed", Conclusion: "cancelled"}}
+		}},
+		{name: "degraded failure is not authoritative", mutate: func(i *connector.Issue) {
+			i.PullRequest.CIStatus = "failure"
+			i.PullRequest.HydrationDegradedReason = "rate_limited"
+			i.PullRequest.RequiredCheckFailures = []connector.PullRequestCheck{{Name: "Test", Status: "completed", Conclusion: "failure"}}
+		}},
+		{name: "unavailable failure is not authoritative", mutate: func(i *connector.Issue) {
+			i.PullRequest.CIStatus = "failure"
+			i.PullRequest.HydrationUnavailableReason = "checks_unavailable"
+		}},
 		{name: "conflict", mutate: func(i *connector.Issue) { i.PullRequest.MergeableState = "dirty" }, reason: "conflict"},
 		{name: "withdrawal", mutate: func(i *connector.Issue) { i.State = "Rework" }, reason: "withdrawn"},
 		{name: "closed", mutate: func(i *connector.Issue) { i.PullRequest.State = "closed" }, reason: "withdrawn"},
@@ -141,6 +165,73 @@ func TestMergeReservationAllowsIndependentWork(t *testing.T) {
 	}
 }
 
+func TestMergeReservationFailedHeadAdmitsNextCandidate(t *testing.T) {
+	t.Parallel()
+	for _, restart := range []string{"none", "before failure", "after failure"} {
+		t.Run(restart, func(t *testing.T) {
+			t.Parallel()
+			for _, ci := range []string{"failure", "pending"} {
+				t.Run(ci, func(t *testing.T) {
+					t.Parallel()
+					now := time.Date(2026, 9, 8, 15, 40, 0, 0, time.UTC)
+					cfg := normalizeConfig(Config{MaxConcurrentAgents: 3, MaxConcurrentAgentsByState: map[string]int{"Merging": 1}, ActiveStates: []string{"Merging", "Rework"}, TerminalStates: []string{"Done"}, MergeFastPathEnabled: true})
+					issue := nativeMergeQueueTestIssue(2320, "pending")
+					issue.StageUpdatedAt = timePointer(now.Add(-time.Hour))
+					other := nativeMergeQueueTestIssue(2318, "success")
+					attempts := &recordingWorkAttemptStore{}
+					tracker := &autoPromoteTickMergeConnector{autoPromoteTickConnector: &autoPromoteTickConnector{stateIssues: []connector.Issue{issue, other}}}
+					orch := Orchestrator{cfg: cfg, connector: tracker, workAttempts: attempts}
+					state := newState(cfg)
+					orch.waitForMergeWorkerCurrentHeadCI(t.Context(), &state, runpkg.Completion{IssueID: issue.ID, CompletedAt: now}, Running{Issue: issue, Attempt: 1, WorkAttemptID: 1}, issue)
+					if len(attempts.completions) != 1 {
+						t.Fatalf("completions = %d, want 1", len(attempts.completions))
+					}
+					completion := attempts.completions[0]
+					attempts.history = []store.WorkAttempt{{ID: 1, IssueID: issue.ID, Phase: completion.Phase, Status: completion.Status, TerminalState: completion.TerminalState, AttemptNumber: 1, CompletedAt: now, WorkerMetadataJSON: completion.WorkerMetadataJSON}}
+					if restart == "before failure" {
+						state = newState(cfg)
+						orch.restoreDurableMergeReservations(t.Context(), &state, []connector.Issue{issue}, now.Add(time.Minute))
+					}
+					if _, blocked := mergeReservationBlocks(&state, other, now.Add(time.Minute)); !blocked {
+						t.Fatal("pending head did not reserve repository")
+					}
+					issue.PullRequest.CIStatus = ci
+					issue.PullRequest.MergeableState = "blocked"
+					issue.PullRequest.RunningChecks = []string{"Verify (ubuntu-latest)", "Windows Core"}
+					issue.PullRequest.RequiredCheckFailures = []connector.PullRequestCheck{{Name: "GoReleaser Snapshot", Status: "completed", Conclusion: "failure"}, {Name: "Windows Core", Status: "in_progress"}}
+					tracker.stateIssues = []connector.Issue{issue, other}
+					if restart == "after failure" {
+						state = newState(cfg)
+						orch.restoreDurableMergeReservations(t.Context(), &state, []connector.Issue{issue}, now.Add(3*time.Minute))
+					}
+					orch.reconcileMergeReservations(&state, tracker.stateIssues, now.Add(3*time.Minute))
+					if _, blocked := mergeReservationBlocks(&state, other, now.Add(3*time.Minute)); blocked {
+						t.Fatal("failed head still reserves repository")
+					}
+					transitioned := orch.reconcileStaleMergingPullRequestIssues(t.Context(), &state, tracker.stateIssues, now.Add(3*time.Minute))
+					if _, ok := transitioned[issue.ID]; !ok {
+						t.Fatalf("failed head was not reconciled to Rework: updates=%#v wait=%q", tracker.updates, state.Retry[issue.ID].Wait.Kind)
+					}
+					if !reflect.DeepEqual(tracker.updates, []autoPromoteTickUpdate{{issueID: issue.ID, state: "Rework"}}) {
+						t.Fatalf("updates = %#v, want failed issue in Rework", tracker.updates)
+					}
+					if _, retry := state.Retry[issue.ID]; retry {
+						t.Fatal("failed head retained CI wait retry")
+					}
+					candidates := orch.mergeWorkerDispatchCandidates(&state, issuesInStates(tracker.stateIssues, []string{"Merging"}), now.Add(3*time.Minute))
+					plan := newDispatchPlanner(cfg).plan(&state, candidates, now.Add(3*time.Minute), dispatchPlanHooks{})
+					if len(plan.Dispatches) != 1 || plan.Dispatches[0].IssueID != other.ID {
+						t.Fatalf("dispatches = %#v, want next green candidate", plan.Dispatches)
+					}
+					if len(tracker.merges) != 0 {
+						t.Fatal("failed head reached merge API")
+					}
+				})
+			}
+		})
+	}
+}
+
 func TestMergeReservationTracksWorkerPushWithoutRenewal(t *testing.T) {
 	t.Parallel()
 	for _, expired := range []bool{false, true} {
@@ -187,6 +278,12 @@ func TestMergeReservationRecoversCurrentWaitingHead(t *testing.T) {
 		{name: "head changed", mutate: func(i *connector.Issue, _ *store.WorkAttempt) { i.PullRequest.HeadSHA = "changed" }},
 		{name: "withdrawn", mutate: func(i *connector.Issue, _ *store.WorkAttempt) { i.State = "Rework" }},
 		{name: "failed", mutate: func(i *connector.Issue, _ *store.WorkAttempt) { i.PullRequest.CIStatus = "failure" }},
+		{name: "failed required check while pending", mutate: func(i *connector.Issue, _ *store.WorkAttempt) {
+			i.PullRequest.RequiredCheckFailures = []connector.PullRequestCheck{{Name: "Snapshot", Status: "completed", Conclusion: "failure"}, {Name: "Test", Status: "queued"}}
+		}},
+		{name: "missing check needs startup", mutate: func(i *connector.Issue, _ *store.WorkAttempt) {
+			i.PullRequest.RequiredCheckFailures = []connector.PullRequestCheck{{Name: "Test", Status: "missing", Conclusion: "missing"}}
+		}, want: true},
 		{name: "newer completed attempt", mutate: func(_ *connector.Issue, a *store.WorkAttempt) { a.Phase = "completed" }},
 		{name: "malformed metadata", mutate: func(_ *connector.Issue, a *store.WorkAttempt) { a.WorkerMetadataJSON = "{" }},
 	} {

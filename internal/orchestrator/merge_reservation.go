@@ -107,7 +107,7 @@ func reconcileMergeReservations(state *State, issues []connector.Issue, cfg Conf
 				reason = "repository_changed"
 			case strings.TrimSpace(pr.HeadSHA) != reservation.HeadSHA && !running:
 				reason = "head_changed"
-			case staleMergingCIRed(pr.CIStatus) || len(pr.RequiredCheckFailures) > 0 && !mergeWorkerProgrammaticMergeWaiting(issue):
+			case mergeWorkerCIFailed(pr):
 				reason = "required_checks_failed"
 			case strings.EqualFold(pr.MergeableState, "dirty"):
 				reason = "conflict"
@@ -125,9 +125,27 @@ func reconcileMergeReservations(state *State, issues []connector.Issue, cfg Conf
 			reservation.ReleasedReason = reason
 			state.mergeReservations[repository] = reservation
 			released = append(released, reservation)
+			if retry := state.Retry[issue.ID]; reason == "required_checks_failed" && retry.Wait.Kind == retryWaitCurrentHeadCI && !running {
+				delete(state.Retry, issue.ID)
+			}
 		}
 	}
 	return released
+}
+
+func mergeWorkerCIFailed(pr *connector.PullRequest) bool {
+	if pr == nil || pullRequestHydrationBlocksProgress(pr) {
+		return false
+	}
+	if staleMergingCIRed(pr.CIStatus) {
+		return true
+	}
+	for _, check := range pr.RequiredCheckFailures {
+		if !autoPromoteCheckPending(check) && autoPromoteCheckFailed(check) {
+			return true
+		}
+	}
+	return false
 }
 
 func (o *Orchestrator) reconcileMergeReservations(state *State, issues []connector.Issue, now time.Time) {

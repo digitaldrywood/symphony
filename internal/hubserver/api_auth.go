@@ -91,7 +91,7 @@ func (s *Service) requireAPIScope(allowed ...apiScope) echo.MiddlewareFunc {
 				return c.JSON(status, apiErrorResponse{Code: "unauthorized", Message: "Valid scoped API token is required"})
 			}
 			if s.config.Hosted != nil {
-				if credential.Hosted == nil && credential.Runner.RunnerID == "" && !s.hostedArtifactPublisher(c, credential) {
+				if credential.Hosted == nil && credential.Runner.RunnerID == "" && !s.hostedArtifactPublisher(c, credential) && !s.hostedChangeCheckPrincipal(c, credential) {
 					return s.nativeAPIError(c, nativeNotFound())
 				}
 				if credential.Hosted != nil && (!strings.HasPrefix(c.Path(), nativeBase) || strings.HasSuffix(c.Path(), "/checks") || strings.Contains(c.Path(), "/imports")) {

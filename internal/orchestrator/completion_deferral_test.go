@@ -3,12 +3,15 @@ package orchestrator
 import (
 	"context"
 	"errors"
+	"fmt"
 	"path/filepath"
+	"strings"
 	"sync"
 	"testing"
 	"time"
 
 	"github.com/digitaldrywood/detent/internal/connector"
+	"github.com/digitaldrywood/detent/internal/connector/github"
 	runpkg "github.com/digitaldrywood/detent/internal/runner"
 	"github.com/digitaldrywood/detent/internal/scheduler"
 	"github.com/digitaldrywood/detent/internal/store"
@@ -19,26 +22,18 @@ func TestCompletionFenceDeferralOutcomes(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
-		name             string
-		fenceErr         error
-		wantDeferred     bool
-		wantTerminal     store.WorkAttemptTerminalState
-		wantFetches      int
-		wantPreservedOut string
+		name     string
+		fenceErr error
 	}{
-		{
-			name:             "503 defers and preserves result",
-			fenceErr:         completionDeferralAvailabilityError(),
-			wantDeferred:     true,
-			wantFetches:      1,
-			wantPreservedOut: "validated completion",
-		},
-		{
-			name:         "403 follows existing fence rejection",
-			fenceErr:     errors.New("github graphql returned status 403"),
-			wantTerminal: store.WorkAttemptTerminalLaneRevoked,
-			wantFetches:  1,
-		},
+		{name: "503", fenceErr: completionDeferralAvailabilityError()},
+		{name: "403", fenceErr: &github.StatusError{StatusCode: 403, Err: github.ErrAuthenticationFailed}},
+		{name: "primary rate limit", fenceErr: &github.StatusError{StatusCode: 429, Err: github.ErrRateLimited}},
+		{name: "secondary rate limit", fenceErr: &github.StatusError{StatusCode: 403, Err: github.ErrRateLimited, RateLimitKind: "secondary"}},
+		{name: "GraphQL quota", fenceErr: &github.GraphQLErrorList{Err: github.ErrRateLimited, Errors: []github.GraphQLError{{Type: "RATE_LIMITED", Message: "API rate limit exceeded"}}}},
+		{name: "reserve exhausted", fenceErr: fmt.Errorf("completion lane: %w", connector.ErrResourceExhausted)},
+		{name: "timeout", fenceErr: context.DeadlineExceeded},
+		{name: "canceled read", fenceErr: context.Canceled},
+		{name: "transport", fenceErr: errors.New("connection reset by peer")},
 	}
 
 	for _, tt := range tests {
@@ -60,39 +55,35 @@ func TestCompletionFenceDeferralOutcomes(t *testing.T) {
 
 			orch.handleRunResult(t.Context(), &state, completionDeferralEvent(issue, attemptID, now))
 
-			_, deferred := state.deferredCompletions[issue.ID]
-			if deferred != tt.wantDeferred {
-				t.Fatalf("deferred completion present = %v, want %v", deferred, tt.wantDeferred)
+			record, deferred := state.deferredCompletions[issue.ID]
+			if !deferred {
+				t.Fatal("fence read failure did not defer completion")
 			}
-			if got := tracker.fetchCount(); got != tt.wantFetches {
-				t.Fatalf("completion fence fetches = %d, want %d", got, tt.wantFetches)
+			if got := tracker.fetchCount(); got != 1 {
+				t.Fatalf("completion fence fetches = %d, want 1", got)
 			}
 			receipt, err := runtimeStore.WorkAttempt(t.Context(), attemptID)
 			if err != nil {
-				t.Fatalf("WorkAttempt() error = %v", err)
+				t.Fatal(err)
 			}
-			if tt.wantDeferred {
-				if receipt.Status != store.WorkAttemptStatusActive || receipt.Phase != deferredCompletionPhase || receipt.WaitReason != connector.TrackerUnavailableCondition || receipt.NextAction != deferredCompletionNextAction {
-					t.Fatalf("deferred work attempt = %#v, want active tracker wait", receipt)
-				}
-				record := state.deferredCompletions[issue.ID]
-				if record.Result.Output != tt.wantPreservedOut || record.Result.Tokens.TotalTokens != 37 {
-					t.Fatalf("preserved result = %#v, want output %q and 37 tokens", record.Result, tt.wantPreservedOut)
-				}
-				snapshot := state.Snapshot(now)
-				if len(snapshot.Queue) != 1 || snapshot.Queue[0].QueueState != telemetry.QueueStateWaitingOnTracker {
-					t.Fatalf("snapshot queue = %#v, want waiting_on_tracker", snapshot.Queue)
-				}
-				if outcome := orch.dispatchIssueWithOutcome(t.Context(), &state, issue, 1, now, ""); outcome.dispatched || outcome.reason != dispatchSkipCompletionDeferred {
-					t.Fatalf("dispatch while completion deferred = %#v, want suppressed", outcome)
-				}
-				return
+			if receipt.Status != store.WorkAttemptStatusActive || receipt.Phase != deferredCompletionPhase || receipt.WaitReason != connector.TrackerUnavailableCondition || receipt.NextAction != deferredCompletionNextAction {
+				t.Fatalf("deferred work attempt = %#v, want active tracker wait", receipt)
 			}
-			if receipt.TerminalState != tt.wantTerminal {
-				t.Fatalf("terminal state = %q, want %q", receipt.TerminalState, tt.wantTerminal)
+			if strings.Contains(receipt.WorkerMetadataJSON, `"lane_revocation"`) || len(orch.pendingLaneRevocations) != 0 || len(tracker.comments) != 0 {
+				t.Fatalf("unreadable fence produced a revocation: %s", receipt.WorkerMetadataJSON)
 			}
-			if retry, ok := state.Retry[issue.ID]; ok && retry.CompletionDeferred {
-				t.Fatalf("Retry[%q] = %#v, want no completion deferral", issue.ID, retry)
+			if !strings.Contains(record.Availability.Message, tt.fenceErr.Error()) {
+				t.Fatalf("fence error = %q, want original error %v", record.Availability.Message, tt.fenceErr)
+			}
+			if record.Result.Output != "validated completion" || record.Result.Tokens.TotalTokens != 37 {
+				t.Fatalf("preserved result = %#v", record.Result)
+			}
+			snapshot := state.Snapshot(now)
+			if len(snapshot.Queue) != 1 || snapshot.Queue[0].QueueState != telemetry.QueueStateWaitingOnTracker {
+				t.Fatalf("snapshot queue = %#v, want waiting_on_tracker", snapshot.Queue)
+			}
+			if outcome := orch.dispatchIssueWithOutcome(t.Context(), &state, issue, 1, now, ""); outcome.dispatched || outcome.reason != dispatchSkipCompletionDeferred {
+				t.Fatalf("dispatch while completion deferred = %#v, want suppressed", outcome)
 			}
 		})
 	}
@@ -367,4 +358,80 @@ func openCompletionDeferralStoreWithoutCleanup(t *testing.T, path string) store.
 		t.Fatalf("store.Open() error = %v", err)
 	}
 	return runtimeStore
+}
+
+func TestCompletionFenceUnchangedOrUnknownLaneDefers(t *testing.T) {
+	t.Parallel()
+	for _, lane := range []string{"Blocked", "Done", ""} {
+		t.Run(lane, func(t *testing.T) {
+			now := time.Now().UTC()
+			issue := completionDeferralIssue("unchanged", lane)
+			cfg := completionDeferralConfig()
+			tracker := &completionDeferralConnector{issue: issue}
+			attempts := &recordingWorkAttemptStore{}
+			orch := Orchestrator{cfg: cfg, connector: tracker, workAttempts: attempts, now: func() time.Time { return now }}
+			state := newState(cfg)
+			state.Running[issue.ID] = completionDeferralRunning(issue, 2297, now)
+			orch.handleRunResult(t.Context(), &state, completionDeferralEvent(issue, 2297, now))
+			if len(state.deferredCompletions) != 1 || len(orch.pendingLaneRevocations) != 0 || len(attempts.completions) != 0 || len(tracker.comments) != 0 {
+				t.Fatal("unchanged or unknown lane finalized as revoked")
+			}
+		})
+	}
+}
+
+func TestCompletionFenceRateLimitDeadlineSurvivesRestart(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name  string
+		after time.Duration
+		reset time.Duration
+		want  time.Duration
+	}{
+		{name: "reset", reset: time.Hour, want: time.Hour},
+		{name: "secondary backoff", after: 10 * time.Minute, want: 10 * time.Minute},
+		{name: "later reset", after: time.Minute, reset: time.Hour, want: time.Hour},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			now := time.Now().UTC()
+			issue := completionDeferralIssue("quota", "In Progress")
+			cfg := completionDeferralConfig()
+			tracker := &completionDeferralConnector{issue: issue, firstErr: &github.StatusError{Err: github.ErrRateLimited, StatusCode: 429, RetryAfter: tt.after, ResetAt: now.Add(tt.reset)}}
+			backend := openCompletionDeferralStore(t, filepath.Join(t.TempDir(), "detent.db"))
+			id := startCompletionDeferralAttempt(t, backend, issue, now)
+			orch := Orchestrator{cfg: cfg, connector: tracker, workAttempts: backend, now: func() time.Time { return now }}
+			state := newState(cfg)
+			state.Running[issue.ID] = completionDeferralRunning(issue, id, now)
+			orch.handleRunResult(t.Context(), &state, completionDeferralEvent(issue, id, now))
+			recovered := newState(cfg)
+			orch.recoverDurableWorkAttempts(t.Context(), &recovered, now.Add(time.Second))
+			if got := recovered.Retry[issue.ID].DueAt; !got.Equal(now.Add(tt.want)) {
+				t.Fatalf("retry = %s, want %s", got, now.Add(tt.want))
+			}
+			orch.retryDeferredCompletions(t.Context(), &recovered, now.Add(tt.want-time.Second))
+			if tracker.fetchCount() != 1 {
+				t.Fatal("fence retried before quota recovered")
+			}
+		})
+	}
+}
+
+func TestCompletionFenceMissingLaneDefers(t *testing.T) {
+	t.Parallel()
+	for _, returnedID := range []string{"", "missing-lane"} {
+		t.Run(returnedID, func(t *testing.T) {
+			now := time.Now().UTC()
+			issue := completionDeferralIssue("missing-lane", "In Progress")
+			cfg := completionDeferralConfig()
+			tracker := &completionDeferralConnector{issue: connector.Issue{ID: returnedID}}
+			attempts := &recordingWorkAttemptStore{}
+			orch := Orchestrator{cfg: cfg, connector: tracker, workAttempts: attempts, now: func() time.Time { return now }}
+			state := newState(cfg)
+			state.Running[issue.ID] = completionDeferralRunning(issue, 2297, now)
+			orch.handleRunResult(t.Context(), &state, completionDeferralEvent(issue, 2297, now))
+			if len(state.deferredCompletions) != 1 || len(attempts.completions) != 0 {
+				t.Fatal("missing tracker lane did not defer completion")
+			}
+		})
+	}
 }

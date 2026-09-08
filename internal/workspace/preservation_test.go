@@ -236,6 +236,61 @@ func TestLocalGitPreservesRevokedWorkAcrossCleanupAndRestart(t *testing.T) {
 	}
 }
 
+func TestLocalGitPreservationVerifiesWorkEvidence(t *testing.T) {
+	t.Parallel()
+	for _, kind := range []string{"clean base", "dirty", "local commit", "pushed commit", "base branch pushed", "remote branch deleted"} {
+		t.Run(kind, func(t *testing.T) {
+			t.Parallel()
+			source := initSourceRepo(t)
+			remote := initBareRemote(t)
+			runGit(t, source, "remote", "add", "origin", remote)
+			runGit(t, source, "push", "-u", "origin", "main")
+			base := strings.TrimSpace(runGit(t, source, "rev-parse", "HEAD"))
+			backend, err := NewLocalGit(LocalGitOptions{Root: filepath.Join(t.TempDir(), "workspaces"), SourceRoot: source, AutoBranch: true})
+			if err != nil {
+				t.Fatal(err)
+			}
+			issue := Issue{Identifier: "evidence", BaseRef: base}
+			info, err := backend.Create(t.Context(), issue)
+			if err != nil {
+				t.Fatal(err)
+			}
+			changed := kind == "dirty" || kind == "local commit" || kind == "pushed commit" || kind == "remote branch deleted"
+			if changed {
+				if err := os.WriteFile(filepath.Join(info.Path, "README.md"), []byte("worker implementation\n"), 0o600); err != nil {
+					t.Fatal(err)
+				}
+				if kind != "dirty" {
+					runGit(t, info.Path, "add", "README.md")
+					runGit(t, info.Path, "commit", "-m", "implement change")
+				}
+			}
+			if kind == "pushed commit" || kind == "base branch pushed" || kind == "remote branch deleted" {
+				runGit(t, info.Path, "push", "origin", info.Branch)
+			}
+			if kind == "remote branch deleted" {
+				runGit(t, remote, "update-ref", "-d", "refs/heads/"+info.Branch)
+			}
+			preserved, err := backend.PreserveIssue(t.Context(), issue)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if !preserved.LocalChangesVerified {
+				t.Fatalf("unverified local evidence: %#v", preserved)
+			}
+			localWork := preserved.UnpushedCommits > 0 || len(preserved.TrackedPaths) > 0 || len(preserved.UntrackedPaths) > 0
+			if localWork != (kind == "dirty" || kind == "local commit") {
+				t.Fatalf("local evidence = %#v", preserved)
+			}
+			delivery := preserved.Delivery
+			delivered := delivery != nil && delivery.RemoteBranchExists && delivery.CommitsAhead > 0 && delivery.LocalHeadSHA == delivery.RemoteHeadSHA
+			if delivered != (kind == "pushed commit") {
+				t.Fatalf("delivery evidence = %#v", preserved)
+			}
+		})
+	}
+}
+
 func TestLocalGitPreservationInspectionFailureKeepsFiles(t *testing.T) {
 	t.Parallel()
 	backend, err := NewLocalGit(LocalGitOptions{Root: filepath.Join(t.TempDir(), "workspaces"), SourceRoot: initSourceRepo(t), AutoBranch: true})

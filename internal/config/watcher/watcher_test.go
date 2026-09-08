@@ -3,6 +3,7 @@ package watcher
 import (
 	"context"
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -10,6 +11,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/fsnotify/fsnotify"
@@ -258,6 +260,159 @@ func TestWatchReloadsLocalWorkflowOverlayLifecycle(t *testing.T) {
 	}
 	if deleted.Workflow.Overlay.Path != "" {
 		t.Fatalf("delete Overlay = %#v, want inactive", deleted.Workflow.Overlay)
+	}
+}
+
+func TestWatchReconcilesOverlayDeletionErrors(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		deniedFor time.Duration
+		wantErr   bool
+	}{
+		{name: "immediately absent"},
+		{name: "settles between last retry and expiry", deniedFor: 11 * time.Millisecond},
+		{name: "settles at expiry", deniedFor: 12 * time.Millisecond},
+		{name: "persistent permission error", deniedFor: time.Hour, wantErr: true},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			synctest.Test(t, func(t *testing.T) {
+				runtime := newControlledFileRuntime()
+				path := filepath.Join(t.TempDir(), "WORKFLOW.md")
+				localPath := workflowconfig.LocalWorkflowPath(path)
+				writeWorkflow(t, path, 60000, "shared")
+				var deniedUntil time.Time
+				var deniedReads int
+				w, err := New(path, WithDebounce(12*time.Millisecond),
+					withFileOptions(runtime.option()),
+					WithLoader(func(path string) (workflowconfig.Workflow, error) {
+						if time.Now().Before(deniedUntil) {
+							deniedReads++
+							return workflowconfig.Workflow{}, fmt.Errorf("read local workflow overlay: %w", &os.PathError{
+								Op: "open", Path: localPath, Err: os.ErrPermission,
+							})
+						}
+						return workflowconfig.LoadWorkflow(path)
+					}),
+				)
+				if err != nil {
+					t.Fatalf("New() error = %v", err)
+				}
+				ctx, cancel := context.WithCancel(t.Context())
+				defer cancel()
+				updates, err := w.Watch(ctx)
+				if err != nil {
+					t.Fatalf("Watch() error = %v", err)
+				}
+				steps := []struct {
+					name     string
+					interval int
+					prompt   string
+					remove   bool
+				}{
+					{name: "create", interval: 61000, prompt: "local first"},
+					{name: "edit", interval: 62000, prompt: "local second"},
+					{name: "delete", interval: 60000, prompt: "shared", remove: true},
+					{name: "recreate", interval: 63000, prompt: "local third"},
+				}
+				for _, step := range steps {
+					synctest.Wait()
+					deniedUntil = time.Time{}
+					if step.remove {
+						if err := os.Remove(localPath); err != nil {
+							t.Fatalf("Remove() error = %v", err)
+						}
+						deniedUntil = time.Now().Add(test.deniedFor)
+					} else {
+						writeWorkflow(t, localPath, step.interval, step.prompt)
+					}
+					runtime.sendEvent(t, localPath)
+					runtime.waitForReset(t)
+					runtime.fireTimer(t)
+					update := receiveUpdate(t, updates)
+					if step.remove && test.wantErr {
+						if !errors.Is(update.Err, os.ErrPermission) {
+							t.Fatalf("%s error = %v, want permission error", step.name, update.Err)
+						}
+					} else {
+						if update.Err != nil {
+							t.Fatalf("%s error = %v", step.name, update.Err)
+						}
+						if update.Workflow.Config.Polling.IntervalMS != step.interval || !strings.Contains(update.Workflow.Prompt, step.prompt+"\n") {
+							t.Fatalf("%s workflow = %#v, want interval %d and prompt %q", step.name, update.Workflow, step.interval, step.prompt)
+						}
+						if step.remove && (update.Workflow.Overlay.Path != "" || update.Workflow.Prompt != "shared\n") {
+							t.Fatalf("deleted workflow = %#v, want shared workflow with inactive overlay", update.Workflow)
+						}
+						if !step.remove && update.Workflow.Overlay.Path == "" {
+							t.Fatalf("%s overlay is inactive", step.name)
+						}
+					}
+					synctest.Wait()
+					select {
+					case extra := <-updates:
+						t.Fatalf("%s extra update = %#v", step.name, extra)
+					default:
+					}
+				}
+				if test.deniedFor > 0 && deniedReads == 0 {
+					t.Fatal("deletion did not exercise an access-denied read")
+				}
+				cancel()
+				synctest.Wait()
+				if _, ok := <-updates; ok {
+					t.Fatal("updates remained open after cancellation")
+				}
+				runtime.waitForClosed(t)
+				runtime.poll.waitForStopped(t)
+			})
+		})
+	}
+}
+
+func TestFileWatcherLoadCancellation(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name      string
+		cancelAt  time.Duration
+		wantReads int
+	}{
+		{name: "before initial read", wantReads: 0},
+		{name: "during retry wait", cancelAt: 2 * time.Millisecond, wantReads: 1},
+		{name: "before final reconciliation", cancelAt: 11 * time.Millisecond, wantReads: 3},
+	}
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			t.Parallel()
+			synctest.Test(t, func(t *testing.T) {
+				ctx, cancel := context.WithCancel(t.Context())
+				defer cancel()
+				if test.cancelAt == 0 {
+					cancel()
+				} else {
+					timer := time.AfterFunc(test.cancelAt, cancel)
+					defer timer.Stop()
+				}
+				reads := 0
+				w, err := NewFile("WORKFLOW.md", func(string) (string, error) {
+					reads++
+					return "", os.ErrPermission
+				}, WithFileDebounce(12*time.Millisecond))
+				if err != nil {
+					t.Fatalf("NewFile() error = %v", err)
+				}
+				if _, err := w.load(ctx); !errors.Is(err, context.Canceled) {
+					t.Fatalf("load() error = %v, want cancellation", err)
+				}
+				if reads != test.wantReads {
+					t.Fatalf("loader reads = %d, want %d", reads, test.wantReads)
+				}
+			})
+		})
 	}
 }
 

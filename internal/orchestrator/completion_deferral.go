@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/digitaldrywood/detent/internal/connector"
+	"github.com/digitaldrywood/detent/internal/connector/github"
 	runpkg "github.com/digitaldrywood/detent/internal/runner"
 	"github.com/digitaldrywood/detent/internal/runtimeoutput"
 	"github.com/digitaldrywood/detent/internal/store"
@@ -34,6 +35,7 @@ type deferredCompletion struct {
 	Retryable    bool                           `json:"retryable,omitempty"`
 	RetryAttempt int                            `json:"retry_attempt,omitempty"`
 	RetryDelay   time.Duration                  `json:"retry_delay,omitempty"`
+	FenceRetryAt time.Time                      `json:"fence_retry_at,omitzero"`
 	DeferredAt   time.Time                      `json:"deferred_at"`
 	Availability deferredCompletionAvailability `json:"availability"`
 	Persisted    bool                           `json:"-"`
@@ -62,7 +64,7 @@ type deferredCompletionAvailability struct {
 	Message string                             `json:"message"`
 }
 
-func newDeferredCompletion(event runpkg.Completion, running Running, availabilityErr *connector.TrackerAvailabilityError, deferredAt time.Time) deferredCompletion {
+func newDeferredCompletion(event runpkg.Completion, running Running, fenceErr error, deferredAt time.Time) deferredCompletion {
 	running.CompletionOwnershipReleased = true
 	record := deferredCompletion{
 		Schema:       deferredCompletionSchema,
@@ -76,7 +78,10 @@ func newDeferredCompletion(event runpkg.Completion, running Running, availabilit
 		RetryDelay:   event.RetryDelay,
 		DeferredAt:   deferredAt,
 	}
-	if availabilityErr != nil {
+	if fenceErr != nil {
+		record.Availability = deferredCompletionAvailability{Class: laneRevocationCompletionFenceUnavailable, Message: fenceErr.Error()}
+	}
+	if availabilityErr, ok := connector.AsTrackerAvailability(fenceErr); ok {
 		record.Availability = deferredCompletionAvailability{
 			Scope:   availabilityErr.Scope.Normalize(),
 			Class:   strings.TrimSpace(availabilityErr.Class),
@@ -141,7 +146,7 @@ func (o *Orchestrator) deferTrackerUnavailableCompletion(
 	state *State,
 	event runpkg.Completion,
 	running Running,
-	availabilityErr *connector.TrackerAvailabilityError,
+	fenceErr error,
 ) {
 	deferredAt := o.clockNow().UTC()
 	if deferredAt.IsZero() {
@@ -150,8 +155,9 @@ func (o *Orchestrator) deferTrackerUnavailableCompletion(
 	if deferredAt.IsZero() {
 		deferredAt = time.Now().UTC()
 	}
-	o.observeTrackerReadFailure(state, "", availabilityErr, deferredAt)
-	record := newDeferredCompletion(event, running, availabilityErr, deferredAt)
+	o.observeTrackerReadFailure(state, "", fenceErr, deferredAt)
+	record := newDeferredCompletion(event, running, fenceErr, deferredAt)
+	record.FenceRetryAt = o.completionFenceRetryAt(state, fenceErr, deferredAt, event.RetryDelay)
 	record.Persisted = o.persistDeferredCompletion(ctx, state, record)
 
 	if !running.CompletionOwnershipReleased {
@@ -175,14 +181,10 @@ func (o *Orchestrator) deferTrackerUnavailableCompletion(
 		state.deferredCompletions = map[string]deferredCompletion{}
 	}
 	state.deferredCompletions[event.IssueID] = record
-	delay := max(event.RetryDelay, o.cfg.PollInterval)
-	if delay < 0 {
-		delay = 0
-	}
 	state.Retry[event.IssueID] = Retry{
 		Issue:              cloneIssue(running.Issue),
 		Attempt:            running.Attempt,
-		DueAt:              deferredAt.Add(delay),
+		DueAt:              record.FenceRetryAt,
 		Error:              deferredCompletionStatus,
 		WorkerHost:         running.WorkerHost,
 		TrackerUnavailable: true,
@@ -200,6 +202,33 @@ func (o *Orchestrator) deferTrackerUnavailableCompletion(
 			Message: "retained completed result in memory for " + issueLabel(running.Issue) + " after durable persistence failed",
 		})
 	}
+}
+
+func (o *Orchestrator) completionFenceRetryAt(state *State, err error, now time.Time, retryDelay time.Duration) time.Time {
+	dueAt := now.Add(max(retryDelay, o.cfg.PollInterval, time.Second))
+	var statusErr *github.StatusError
+	if errors.As(err, &statusErr) && statusErr != nil {
+		if retryAt := now.Add(statusErr.RetryAfter); retryAt.After(dueAt) {
+			dueAt = retryAt
+		}
+		if statusErr.ResetAt.After(dueAt) {
+			dueAt = statusErr.ResetAt
+		}
+	}
+	if signal, ok := o.currentGitHubLookupSignal(state, now); ok && signal.resetAt.After(dueAt) {
+		dueAt = signal.resetAt
+	}
+	if reporter, ok := o.connector.(connector.RateLimitReporter); ok {
+		if rate, known := reporter.GraphQLRateLimit(); known && (rate.Remaining <= o.cfg.GitHubGraphQLMinReserve || rate.RetryAfter > 0) {
+			if rate.ResetAt.After(dueAt) {
+				dueAt = rate.ResetAt
+			}
+			if retryAt := now.Add(rate.RetryAfter); retryAt.After(dueAt) {
+				dueAt = retryAt
+			}
+		}
+	}
+	return dueAt
 }
 
 func (o *Orchestrator) persistDeferredCompletion(ctx context.Context, state *State, record deferredCompletion) bool {
@@ -296,7 +325,10 @@ func (o *Orchestrator) recoverDeferredCompletions(ctx context.Context, state *St
 		issueID := record.Running.Issue.ID
 		state.deferredCompletions[issueID] = record
 		dueAt := now
-		if candidate := record.DeferredAt.Add(o.cfg.PollInterval); candidate.After(dueAt) {
+		if record.FenceRetryAt.IsZero() {
+			record.FenceRetryAt = record.DeferredAt.Add(o.cfg.PollInterval)
+		}
+		if candidate := record.FenceRetryAt; candidate.After(dueAt) {
 			dueAt = candidate
 		}
 		state.Retry[issueID] = Retry{

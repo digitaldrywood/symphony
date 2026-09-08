@@ -97,14 +97,7 @@ func (o *Orchestrator) handleRunResult(ctx context.Context, state *State, event 
 		refreshed, err := o.refreshCompletionLane(ctx, running)
 		if err != nil {
 			if !errors.Is(event.Err, runpkg.ErrWorkerGitHubBudgetMonitor) && !errors.Is(event.Err, runpkg.ErrWorkerGitHubTokenResolution) {
-				availabilityErr, unavailable := connector.AsTrackerAvailability(err)
-				if unavailable && availabilityErr != nil {
-					o.deferTrackerUnavailableCompletion(ctx, state, event, running, availabilityErr)
-					return
-				}
-				o.rejectWorkerCompletion(ctx, state, event, running, laneRevocationCompletionFenceUnavailable, err)
-				o.beginLaneRevocation(ctx, state, running, running.Issue, event.CompletedAt, laneRevocationCompletionFenceUnavailable)
-				o.handleLaneRevocationCompletion(ctx, state, event, running)
+				o.deferTrackerUnavailableCompletion(ctx, state, event, running, err)
 				return
 			}
 			if o.logger != nil {
@@ -114,14 +107,20 @@ func (o *Orchestrator) handleRunResult(ctx context.Context, state *State, event 
 			receiptAccepted := false
 			receipt, receiptFound, receiptErr := o.laneMutationReceipt(ctx, running, refreshed)
 			if receiptErr != nil {
-				o.rejectWorkerCompletion(ctx, state, event, running, "lane mutation receipt is unavailable", receiptErr)
+				o.deferTrackerUnavailableCompletion(ctx, state, event, running, fmt.Errorf("lane mutation receipt is unavailable: %w", receiptErr))
 				return
 			}
 			if receiptFound {
+				if receipt.Disposition == laneMutationRevokeWorker {
+					if err := laneRevocationTransitionError(receipt.FromState, refreshed.State); err != nil {
+						o.deferTrackerUnavailableCompletion(ctx, state, event, beforeRefresh, err)
+						return
+					}
+				}
 				running.laneMutation = receipt
 				consumed, consumeErr := o.consumeLaneMutationReceipt(ctx, receipt, running, refreshed.State, event.CompletedAt)
 				if consumeErr != nil {
-					o.rejectWorkerCompletion(ctx, state, event, running, "lane mutation receipt could not be consumed", consumeErr)
+					o.deferTrackerUnavailableCompletion(ctx, state, event, running, fmt.Errorf("lane mutation receipt could not be consumed: %w", consumeErr))
 					return
 				}
 				receipt = consumed
@@ -153,6 +152,10 @@ func (o *Orchestrator) handleRunResult(ctx context.Context, state *State, event 
 				if accepted, ok := o.acceptCurrentAttemptCompletionLane(ctx, state, running, refreshed, event.CompletedAt); ok {
 					running = accepted
 				} else {
+					if err := laneRevocationTransitionError(beforeRefresh.Issue.State, refreshed.State); err != nil {
+						o.deferTrackerUnavailableCompletion(ctx, state, event, beforeRefresh, err)
+						return
+					}
 					o.rejectWorkerCompletion(ctx, state, event, running, "current tracker lane is not worker-owned", nil)
 					o.beginLaneRevocation(ctx, state, beforeRefresh, refreshed, event.CompletedAt, laneRevocationStateChanged)
 					o.handleLaneRevocationCompletion(ctx, state, event, beforeRefresh)

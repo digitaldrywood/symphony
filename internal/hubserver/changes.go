@@ -18,6 +18,55 @@ import (
 
 const changeBase = nativeBase + "/work-items/:item/changes"
 
+func changeCheckRequest(c echo.Context) bool {
+	return c.Request().Method == http.MethodPost && c.Path() == changeBase+"/:change/versions/:version/checks"
+}
+
+func (s *Service) hostedChangeCheckPrincipal(c echo.Context, credential apiCredential) bool {
+	if !changeCheckRequest(c) {
+		return false
+	}
+	scope := nativeScope{organization: tracker.OrganizationID(c.Param("organization")), project: tracker.ProjectID(c.Param("project")), credential: credential}
+	return s.requireHostedChangeCheckPrincipal(c.Request().Context(), s.database.db, scope) == nil
+}
+
+func (s *Service) requireHostedChangeCheckPrincipal(ctx context.Context, query nativeQueryer, scope nativeScope) error {
+	credential := scope.credential
+	if credential.Scope != apiScopeOperator || credential.Hosted != nil || credential.Runner.RunnerID != "" || string(scope.organization) != s.config.Hosted.OrganizationID {
+		return nativeNotFound()
+	}
+	var created string
+	var expires sql.NullString
+	err := query.QueryRowContext(ctx, `SELECT t.created_at, t.expires_at FROM api_tokens t
+JOIN token_grants g ON g.token_id = t.id
+WHERE t.id = ? AND t.token_hash = ? AND t.scope = 'operator' AND t.revoked_at IS NULL
+AND g.organization_id = ? AND g.project_id = ?
+AND NOT EXISTS (SELECT 1 FROM runner_identities r WHERE r.token_id = t.id)`, credential.ID, credential.Hash, scope.organization, scope.project).Scan(&created, &expires)
+	if err != nil {
+		return err
+	}
+	if expires.Valid && !runnerTimeValid(s.config.now(), created, expires.String) {
+		return nativeNotFound()
+	}
+	rules, err := readChangePolicy(ctx, query, scope)
+	if err != nil {
+		return err
+	}
+	approved, err := readProjectPolicy(ctx, query, string(scope.organization)+"/"+string(scope.project))
+	if err != nil {
+		return err
+	}
+	if rules.PolicyID != approved.Policy.ID {
+		return nativeNotFound()
+	}
+	for _, check := range rules.RequiredChecks {
+		if check.PrincipalID == credential.ID && check.Source == "independent" {
+			return nil
+		}
+	}
+	return nativeNotFound()
+}
+
 func (s *Service) registerChangeRoutes(e *echo.Echo) {
 	read := s.requireNativeScope(apiScopeWorker, apiScopeOperator)
 	write := s.requireNativeScope(apiScopeWorker, apiScopeOperator)

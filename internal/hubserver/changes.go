@@ -23,7 +23,7 @@ func (s *Service) registerChangeRoutes(e *echo.Echo) {
 	write := s.requireNativeScope(apiScopeWorker, apiScopeOperator)
 	operator := s.requireNativeScope(apiScopeOperator)
 	e.GET(nativeBase+"/change-review-policy", s.getChangeReviewPolicy, read)
-	e.PUT(nativeBase+"/change-review-policy", s.approveChangeReviewPolicy, s.requireInstanceAdmin(), s.requireNativeScope(apiScopeAdmin))
+	e.PUT(nativeBase+"/change-review-policy", s.approveChangeReviewPolicy, s.requireChangeReviewPolicyAdmin())
 	e.GET(changeBase, s.listChanges, read)
 	e.POST(changeBase, s.createChange, write)
 	e.GET(changeBase+"/:change", s.getChange, read)
@@ -33,6 +33,20 @@ func (s *Service) registerChangeRoutes(e *echo.Echo) {
 	e.GET(changeBase+"/:change/versions/:version/viewed-files", s.changeViewedFiles, operator)
 	e.POST(changeBase+"/:change/versions/:version/viewed-files", s.viewChangeFile, operator)
 	e.POST(changeBase+"/:change/versions/:version/checks", s.submitChangeCheck, write)
+}
+
+func (s *Service) requireChangeReviewPolicyAdmin() echo.MiddlewareFunc {
+	return func(next echo.HandlerFunc) echo.HandlerFunc {
+		if s.config.Hosted == nil {
+			return s.requireInstanceAdmin()(s.requireNativeScope(apiScopeAdmin)(next))
+		}
+		return s.requireOnboardingAdmin()(func(c echo.Context) error {
+			scope := nativeRequestScope(c)
+			scope.requireHostedAdmin = true
+			c.Set("native_scope", scope)
+			return next(c)
+		})
+	}
 }
 
 func readChangePolicy(ctx context.Context, query nativeQueryer, scope nativeScope) (tracker.ChangeReviewPolicy, error) {

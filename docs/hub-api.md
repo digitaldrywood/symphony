@@ -647,7 +647,13 @@ also supply their current `lease_id`, `fencing_token`, `run_id`, and `attempt_id
 | `POST /work-items/{item}/changes/{change}/versions/{version}/reviews` | Operator decision: `approved`, `changes_requested`, or `commented`, plus optional `body` |
 | `POST /work-items/{item}/changes/{change}/versions/{version}/checks` | Credential pinned in the immutable expected check set |
 | `GET /change-review-policy` | Inspect the approved native review/CI expectations |
-| `PUT /change-review-policy` | Instance administrator; compare `expected_review_policy_id` and approve `policy` |
+| `PUT /change-review-policy` | Self-hosted instance administrator, or hosted owner/admin with a target-project write grant; compare `expected_review_policy_id` and approve `policy` |
+
+Hosted approval requires an active organization owner/admin membership, a valid
+human session and CSRF token, and a write grant for the target project. Runner
+management grants are not required. Bearer tokens cannot replace human membership.
+The server rechecks the session, membership role and project grant inside the
+mutation transaction, including before returning a cached approval response.
 
 Before publishing, an administrator approves a review policy tied to the current
 repository `policy_id`. Its `require_review` setting cannot weaken a repository

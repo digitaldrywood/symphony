@@ -190,6 +190,9 @@ func (s *Service) recheckHostedMutation(ctx context.Context, tx *sql.Tx, scope n
 	if err != nil || membership.Role.Slug == "viewer" {
 		return auth.ErrHostedIdentity
 	}
+	if scope.requireHostedAdmin && membership.Role.Slug != "owner" && membership.Role.Slug != "admin" {
+		return auth.ErrHostedIdentity
+	}
 	var count int
 	err = tx.QueryRowContext(ctx, `SELECT count(*) FROM hosted_sessions s, hosted_members m
 WHERE s.token_hash = ? AND s.revoked_at IS NULL AND julianday(s.expires_at) > julianday(?) AND m.user_id = ? AND m.membership_id = ? AND m.active = 1`, scope.credential.SessionHash, formatHubTime(s.config.now()), identity.Subject, membership.ID).Scan(&count)

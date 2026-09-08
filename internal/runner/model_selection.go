@@ -42,7 +42,48 @@ func resolveRequestAgentSelection(ctx context.Context, req RunRequest, workspace
 	if hasResumeIdentity(req) {
 		identity := req.ResumeState.RuntimeIdentity
 		model := effectiveModel("", identity.RequestedModel.Value, identity.ResolvedModel.Value)
-		return agentSelection{resolvedAgentOverride: resolvedAgentOverride{Model: model, Effort: identity.ReasoningEffort.Value}, Selection: identity.Selection}
+		result := agentSelection{resolvedAgentOverride: resolvedAgentOverride{Model: model, Effort: identity.ReasoningEffort.Value}, Selection: identity.Selection}
+		policy := cfg.EffectiveModelSelection()
+		if !policy.Active() || policy.BackendKinds == nil || !slices.Contains(*policy.BackendKinds, backendConfig.Kind) {
+			return result
+		}
+		override, _, err := agentoverride.FromIssueBody(req.Issue.Description)
+		if err != nil {
+			return result.reject("block", "", err.Error())
+		}
+		effort, field := override.EffortForRole(role)
+		roleEffort := effort != ""
+		if effort == "" {
+			effort, field = override.Effort, "effort"
+		}
+		if effort != "" && selectionEffortRank(effort) < selectionEffortRank(result.Effort) {
+			result.Effort = effort
+			result.Selection.EffortSource = "issue." + field
+		}
+		explicitModel, _ := override.ModelForRole(role)
+		level, _ := selectionComplexity(policy, req.Issue, role, result.Effort, roleEffort, explicitModel == "")
+		result = boundSelectionEffort(result, policy, level, role)
+		if result.Effort == identity.ReasoningEffort.Value {
+			return result
+		}
+		provider, ok := backend.(AgentModelCatalogProvider)
+		if !ok {
+			return result.reject("effort", result.Effort, "changed resume effort requires a backend model catalog")
+		}
+		models, err := provider.ListModels(ctx)
+		if err != nil {
+			return result.reject("effort", result.Effort, "model catalog unavailable while validating changed resume effort")
+		}
+		selected, ok := findAgentModel(models, model)
+		if !ok {
+			return result.reject("model", model, "resumed model is unavailable while validating changed effort")
+		}
+		if effort, ok := supportedAgentEffort(selected, result.Effort); ok {
+			result.Effort = effort
+		} else {
+			return result.reject("effort", result.Effort, "changed resume effort is unsupported by the resumed model")
+		}
+		return result
 	}
 	return resolveAgentSelection(ctx, req.Issue, workspace, baseModel, role, cfg, backendConfig, backend)
 }
@@ -107,6 +148,7 @@ func resolveAgentSelection(ctx context.Context, issue connector.Issue, workspace
 			result.Selection.EffortSource = selectionSource(policy, "stages."+role+".effort", "")
 		}
 	}
+	result = boundSelectionEffort(result, policy, level, role)
 	result.Selection.RequestedModel = result.Model
 	provider, ok := backend.(AgentModelCatalogProvider)
 	if !ok {
@@ -151,6 +193,34 @@ func (s agentSelection) reject(field, value, reason string) agentSelection {
 	s.Rejections = append(s.Rejections, AgentOverrideRejection{Field: field, Value: value, Reason: reason})
 	s.Err = fmt.Errorf("agent override rejected: %s: %s", field, reason)
 	return s
+}
+
+func boundSelectionEffort(result agentSelection, policy config.ModelSelection, level, role string) agentSelection {
+	ceiling := -1
+	for _, defaults := range policy.Levels {
+		ceiling = max(ceiling, selectionEffortRank(selectionValue(defaults.Effort)))
+	}
+	stage := policy.Stages[role]
+	ceiling = max(ceiling, selectionEffortRank(selectionValue(stage.Effort)))
+	if ceiling < 0 || selectionEffortRank(result.Effort) <= ceiling {
+		return result
+	}
+	result.Effort = selectionValue(policy.Levels[level].Effort)
+	field := "levels." + level + ".effort"
+	if stage.Effort != nil && *stage.Effort != "" {
+		result.Effort = *stage.Effort
+		field = "stages." + role + ".effort"
+	}
+	result.Selection.EffortSource = selectionSource(policy, field, "") + ":ceiling"
+	return result
+}
+
+func selectionEffortRank(effort string) int {
+	effort = strings.ToLower(strings.TrimSpace(effort))
+	if effort == "ultracode" {
+		effort = "max"
+	}
+	return slices.Index([]string{"none", "minimal", "low", "medium", "high", "xhigh", "max"}, effort)
 }
 
 func selectionValue(value *string) string {

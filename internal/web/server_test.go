@@ -9669,57 +9669,81 @@ func TestServerEventsPreserveProjectContextForStaticSidebarNavigation(t *testing
 func TestServerEventsEnrichesSnapshotOncePerPublish(t *testing.T) {
 	t.Parallel()
 
-	generatedAt := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
-	year, month, day := generatedAt.UTC().Date()
-	budgetPeriodStart := time.Date(year, month, day, 0, 0, 0, 0, time.UTC)
-	budgetQueryFrom := budgetPeriodStart.AddDate(0, 0, -6)
+	for _, tt := range []struct {
+		name              string
+		reverseClockOrder bool
+	}{
+		{name: "concurrent subscribers"},
+		{name: "earlier clock sample arrives after enrichment starts", reverseClockOrder: true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			generatedAt := time.Date(2026, 6, 1, 12, 0, 0, 0, time.UTC)
+			year, month, day := generatedAt.UTC().Date()
+			budgetPeriodStart := time.Date(year, month, day, 0, 0, 0, 0, time.UTC)
+			budgetQueryFrom := budgetPeriodStart.AddDate(0, 0, -6)
 
-	var cycleTimeCalls atomic.Int64
-	var budgetCalls atomic.Int64
+			enrichmentStarted := make(chan struct{})
+			var enrichmentStartedOnce sync.Once
+			var clockCalls atomic.Int64
+			var cycleTimeCalls atomic.Int64
+			var budgetCalls atomic.Int64
 
-	registry := project.NewRegistry()
-	if err := registry.Set(newBudgetTestProject(t, "detent", 100, 10, workflowconfig.BillingModeSubscription)); err != nil {
-		t.Fatalf("Registry.Set() error = %v", err)
-	}
-
-	deps := testDeps(t)
-	deps.Registry = registry
-	deps.Store = storeProbe{
-		cycleTimeReport: func(context.Context) (store.CycleTimeReport, error) {
-			cycleTimeCalls.Add(1)
-			return store.CycleTimeReport{}, nil
-		},
-		budgetCostEvents: func(_ context.Context, query store.BudgetCostQuery) ([]store.BudgetCostEvent, error) {
-			if query.From.Equal(budgetQueryFrom) {
-				budgetCalls.Add(1)
+			registry := project.NewRegistry()
+			if err := registry.Set(newBudgetTestProject(t, "detent", 100, 10, workflowconfig.BillingModeSubscription)); err != nil {
+				t.Fatalf("Registry.Set() error = %v", err)
 			}
-			return nil, nil
-		},
-	}
-	server, err := web.NewServer(web.Config{SSETickInterval: time.Hour}, deps)
-	if err != nil {
-		t.Fatalf("NewServer() error = %v", err)
-	}
 
-	first := openEventStream(t, server)
-	second := openEventStream(t, server)
+			deps := testDeps(t)
+			deps.Registry = registry
+			deps.Store = storeProbe{
+				cycleTimeReport: func(context.Context) (store.CycleTimeReport, error) {
+					cycleTimeCalls.Add(1)
+					enrichmentStartedOnce.Do(func() { close(enrichmentStarted) })
+					return store.CycleTimeReport{}, nil
+				},
+				budgetCostEvents: func(_ context.Context, query store.BudgetCostQuery) ([]store.BudgetCostEvent, error) {
+					if query.From.Equal(budgetQueryFrom) {
+						budgetCalls.Add(1)
+					}
+					return nil, nil
+				},
+			}
+			server, err := web.NewServer(web.Config{SSETickInterval: time.Hour, Now: func() time.Time {
+				if !tt.reverseClockOrder {
+					return time.Now()
+				}
+				if clockCalls.Add(1) == 1 {
+					<-enrichmentStarted
+					return generatedAt
+				}
+				return generatedAt.Add(time.Nanosecond)
+			}}, deps)
+			if err != nil {
+				t.Fatalf("NewServer() error = %v", err)
+			}
 
-	if err := deps.Hub.Publish(telemetry.Snapshot{GeneratedAt: generatedAt}); err != nil {
-		t.Fatalf("Publish() error = %v", err)
-	}
+			first := openEventStream(t, server)
+			second := openEventStream(t, server)
+			t.Cleanup(func() { enrichmentStartedOnce.Do(func() { close(enrichmentStarted) }) })
 
-	for _, body := range []io.Reader{first, second} {
-		event := readSSEEvent(t, body)
-		if event.name != "snapshot" {
-			t.Fatalf("event name = %q, want snapshot", event.name)
-		}
-	}
+			if err := deps.Hub.Publish(telemetry.Snapshot{GeneratedAt: generatedAt}); err != nil {
+				t.Fatalf("Publish() error = %v", err)
+			}
 
-	if got := cycleTimeCalls.Load(); got != 1 {
-		t.Fatalf("CycleTimeReport calls = %d, want 1", got)
-	}
-	if got := budgetCalls.Load(); got != 1 {
-		t.Fatalf("BudgetCostEvents calls = %d, want 1", got)
+			for _, body := range []io.Reader{first, second} {
+				event := readSSEEvent(t, body)
+				if event.name != "snapshot" {
+					t.Fatalf("event name = %q, want snapshot", event.name)
+				}
+			}
+
+			if got := cycleTimeCalls.Load(); got != 1 {
+				t.Fatalf("CycleTimeReport calls = %d, want 1", got)
+			}
+			if got := budgetCalls.Load(); got != 1 {
+				t.Fatalf("BudgetCostEvents calls = %d, want 1", got)
+			}
+		})
 	}
 }
 

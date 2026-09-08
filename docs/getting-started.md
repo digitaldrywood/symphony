@@ -516,7 +516,9 @@ requests rather than free `304` checks.
 To make existing and newly onboarded projects use Sol for ordinary work and
 Astra for explicitly complex work, configure `global.agents.model_selection.preset:
 sol_first` in the instance configuration. This defaults omitted effort to medium
-(or high for very complex work) and preserves explicit issue model/effort fields.
+(or high for very complex work). Explicit models and supported effort overrides
+within the configured policy ceiling are preserved; legacy xhigh/max requests
+use the selected level effort, including after resume.
 Create `complexity:complex` and `complexity:very-complex` repository labels for
 operators who want those signals, plus `design` if using an inherited Claude
 selector. Generic `enhancement` does not select Astra. Projects inherit each

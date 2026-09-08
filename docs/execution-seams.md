@@ -130,13 +130,27 @@ Required PR merge checks, branch protection/rulesets, and
 - `Lint` - budget: `2m`
 - `Verify (ubuntu-latest)` - budget: `30m`
 - `Test Coverage` - budget: `4m`
-- `Browser Visual` - budget: `5m`
+- `Browser Visual` - budget: `15m`
 - `Portability Verify (macos-latest)` - budget: `8m`
 - `Portability Verify (windows-latest)` - budget: `45m`
 - `Windows Core` - budget: `4m`
 - `Installer Smoke (ubuntu-latest)` - budget: `6m`
 - `Installer Smoke (windows-latest)` - budget: `6m`
-- `GoReleaser Snapshot` - budget: `8m`
+- `GoReleaser Snapshot` - budget: `15m`
+
+Browser and snapshot budgets are whole-job ceilings, enforced with
+`timeout-minutes: 15`, including setup and artifact handling. Repeated hosted
+Linux measurements put full browser jobs at `10m49s`–`11m23s` and snapshot jobs
+at `10m3s`–`10m39s`, even with Go cache hits. The full Playwright step alone
+took `8m17s`–`8m41s`; a non-visual PR's binary smoke took `21s` in a `48s` job
+and is not a basis for the full-check budget. The ceilings leave more than
+three minutes above the observed maxima for runner variation and retries;
+they are bounds, not predicted runtimes or measured cold-cache guarantees.
+See [browser and snapshot measurements](../.detent/validation/2310/README.md)
+for runner/cache provenance, generation and compilation costs, packaging
+costs, and the assessment of repeated build and fixture work. Full browser
+selection, release hooks, all six release targets, archives, Linux packages,
+checksums, and minisign signing remain required work.
 
 The required portability checks are limited to build, vet, and the non-race
 test suite. Windows runs packages sequentially with four-way test parallelism

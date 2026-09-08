@@ -1,0 +1,563 @@
+[
+  {
+    "id": 101962076772,
+    "run_id": 34195459084,
+    "head_sha": "49428fd64560656fcff3b5ae5eda324ff3e4ade0",
+    "html_url": "https://github.com/digitaldrywood/detent/actions/runs/34195459084/job/101962076772",
+    "name": "GoReleaser Snapshot",
+    "conclusion": "success",
+    "started_at": "2026-09-08T06:37:15Z",
+    "completed_at": "2026-09-08T06:47:18Z",
+    "labels": [
+      "ubuntu-latest"
+    ],
+    "runner_name": "GitHub Actions 1000050963",
+    "seconds": 603.0,
+    "steps": [
+      {
+        "name": "Set up job",
+        "conclusion": "success",
+        "started_at": "2026-09-08T06:37:16Z",
+        "completed_at": "2026-09-08T06:37:17Z"
+      },
+      {
+        "name": "Run actions/checkout@v5",
+        "conclusion": "success",
+        "started_at": "2026-09-08T06:37:17Z",
+        "completed_at": "2026-09-08T06:37:21Z"
+      },
+      {
+        "name": "Run actions/setup-go@v6",
+        "conclusion": "success",
+        "started_at": "2026-09-08T06:37:21Z",
+        "completed_at": "2026-09-08T06:37:33Z"
+      },
+      {
+        "name": "Install minisign",
+        "conclusion": "success",
+        "started_at": "2026-09-08T06:37:33Z",
+        "completed_at": "2026-09-08T06:37:43Z"
+      },
+      {
+        "name": "Prepare minisign snapshot key",
+        "conclusion": "success",
+        "started_at": "2026-09-08T06:37:43Z",
+        "completed_at": "2026-09-08T06:37:43Z"
+      },
+      {
+        "name": "Run GoReleaser snapshot",
+        "conclusion": "success",
+        "started_at": "2026-09-08T06:37:43Z",
+        "completed_at": "2026-09-08T06:47:15Z"
+      },
+      {
+        "name": "Post Run actions/setup-go@v6",
+        "conclusion": "success",
+        "started_at": "2026-09-08T06:47:15Z",
+        "completed_at": "2026-09-08T06:47:15Z"
+      },
+      {
+        "name": "Post Run actions/checkout@v5",
+        "conclusion": "success",
+        "started_at": "2026-09-08T06:47:15Z",
+        "completed_at": "2026-09-08T06:47:16Z"
+      },
+      {
+        "name": "Complete job",
+        "conclusion": "success",
+        "started_at": "2026-09-08T06:47:16Z",
+        "completed_at": "2026-09-08T06:47:16Z"
+      }
+    ],
+    "timing_log_lines": [
+      "2026-09-08T06:37:16.0485381Z Image: ubuntu-24.04",
+      "2026-09-08T06:37:16.0485885Z Version: 20260831.293.1",
+      "2026-09-08T06:37:28.5518931Z Cache hit for: setup-go-Linux-x64-ubuntu24-go-1.26.6-a09195471dcc685fdb9736f7219e7e6fe6e377e9fd02622cfdd8cf8f7a8f97e3",
+      "2026-09-08T06:37:45.0200881Z     \u2022 running                                        hook=go mod download",
+      "2026-09-08T06:37:45.0320345Z     \u2022 running                                        hook=go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.30.0",
+      "2026-09-08T06:38:44.0847787Z     \u2022 running                                        hook=make generate",
+      "2026-09-08T06:39:09.9307697Z     \u2022 running                                        hook=go test ./...",
+      "2026-09-08T06:41:38.4557234Z   \u2022 building binaries",
+      "2026-09-08T06:46:48.6928019Z   \u2022 archives",
+      "2026-09-08T06:47:15.4293536Z   \u2022 calculating checksums",
+      "2026-09-08T06:47:15.5037936Z   \u2022 signing artifacts",
+      "2026-09-08T06:47:15.7837724Z   \u2022 release succeeded after 9m30s",
+      "2026-09-08T06:47:15.9557952Z Cache hit occurred on the primary key setup-go-Linux-x64-ubuntu24-go-1.26.6-a09195471dcc685fdb9736f7219e7e6fe6e377e9fd02622cfdd8cf8f7a8f97e3, not saving cache."
+    ]
+  },
+  {
+    "id": 101962076799,
+    "run_id": 34195459084,
+    "head_sha": "49428fd64560656fcff3b5ae5eda324ff3e4ade0",
+    "html_url": "https://github.com/digitaldrywood/detent/actions/runs/34195459084/job/101962076799",
+    "name": "Browser Visual",
+    "conclusion": "success",
+    "started_at": "2026-09-08T06:37:16Z",
+    "completed_at": "2026-09-08T06:48:39Z",
+    "labels": [
+      "ubuntu-latest"
+    ],
+    "runner_name": "GitHub Actions 1000050968",
+    "seconds": 683.0,
+    "steps": [
+      {
+        "name": "Set up job",
+        "conclusion": "success",
+        "started_at": "2026-09-08T06:37:18Z",
+        "completed_at": "2026-09-08T06:37:19Z"
+      },
+      {
+        "name": "Run actions/checkout@v5",
+        "conclusion": "success",
+        "started_at": "2026-09-08T06:37:19Z",
+        "completed_at": "2026-09-08T06:37:23Z"
+      },
+      {
+        "name": "Run actions/setup-go@v6",
+        "conclusion": "success",
+        "started_at": "2026-09-08T06:37:23Z",
+        "completed_at": "2026-09-08T06:37:39Z"
+      },
+      {
+        "name": "Detect visual-sensitive changes",
+        "conclusion": "success",
+        "started_at": "2026-09-08T06:37:39Z",
+        "completed_at": "2026-09-08T06:37:39Z"
+      },
+      {
+        "name": "Run actions/setup-node@v6",
+        "conclusion": "success",
+        "started_at": "2026-09-08T06:37:39Z",
+        "completed_at": "2026-09-08T06:37:42Z"
+      },
+      {
+        "name": "Install Node dependencies",
+        "conclusion": "success",
+        "started_at": "2026-09-08T06:37:42Z",
+        "completed_at": "2026-09-08T06:37:43Z"
+      },
+      {
+        "name": "Install Playwright browsers",
+        "conclusion": "success",
+        "started_at": "2026-09-08T06:37:43Z",
+        "completed_at": "2026-09-08T06:38:06Z"
+      },
+      {
+        "name": "Install visual build generators",
+        "conclusion": "success",
+        "started_at": "2026-09-08T06:38:06Z",
+        "completed_at": "2026-09-08T06:39:08Z"
+      },
+      {
+        "name": "Build Detent visual test binary",
+        "conclusion": "success",
+        "started_at": "2026-09-08T06:39:08Z",
+        "completed_at": "2026-09-08T06:39:52Z"
+      },
+      {
+        "name": "Run full browser visual gate",
+        "conclusion": "success",
+        "started_at": "2026-09-08T06:39:52Z",
+        "completed_at": "2026-09-08T06:48:33Z"
+      },
+      {
+        "name": "Run browser smoke gate",
+        "conclusion": "skipped",
+        "started_at": "2026-09-08T06:48:33Z",
+        "completed_at": "2026-09-08T06:48:33Z"
+      },
+      {
+        "name": "Upload browser visual evidence",
+        "conclusion": "success",
+        "started_at": "2026-09-08T06:48:33Z",
+        "completed_at": "2026-09-08T06:48:36Z"
+      },
+      {
+        "name": "Upload browser visual failure artifacts",
+        "conclusion": "skipped",
+        "started_at": "2026-09-08T06:48:36Z",
+        "completed_at": "2026-09-08T06:48:36Z"
+      },
+      {
+        "name": "Post Run actions/setup-node@v6",
+        "conclusion": "success",
+        "started_at": "2026-09-08T06:48:36Z",
+        "completed_at": "2026-09-08T06:48:36Z"
+      },
+      {
+        "name": "Post Run actions/setup-go@v6",
+        "conclusion": "success",
+        "started_at": "2026-09-08T06:48:36Z",
+        "completed_at": "2026-09-08T06:48:36Z"
+      },
+      {
+        "name": "Post Run actions/checkout@v5",
+        "conclusion": "success",
+        "started_at": "2026-09-08T06:48:36Z",
+        "completed_at": "2026-09-08T06:48:36Z"
+      },
+      {
+        "name": "Complete job",
+        "conclusion": "success",
+        "started_at": "2026-09-08T06:48:36Z",
+        "completed_at": "2026-09-08T06:48:36Z"
+      }
+    ],
+    "timing_log_lines": [
+      "2026-09-08T06:37:18.4570136Z Image: ubuntu-24.04",
+      "2026-09-08T06:37:18.4570748Z Version: 20260831.293.1",
+      "2026-09-08T06:37:32.9420180Z Cache hit for: setup-go-Linux-x64-ubuntu24-go-1.26.6-a09195471dcc685fdb9736f7219e7e6fe6e377e9fd02622cfdd8cf8f7a8f97e3",
+      "2026-09-08T06:37:40.7709839Z Cache hit for: node-cache-Linux-x64-npm-4de5e62afe53e7f3108e577f5202384a92b7ad10a828299132a34264ca828ac3",
+      "2026-09-08T06:39:08.7439579Z ##[group]Run make build",
+      "2026-09-08T06:39:33.8956135Z go build -ldflags \"-X main.version=v0.107.0-25-g542b94fd -X main.commit=542b94fd -X main.date=2026-09-08T06:39:33Z\" -o tmp/detent ./cmd/detent",
+      "2026-09-08T06:39:52.8966724Z ##[group]Run npm run test:visual",
+      "2026-09-08T06:39:54.6600117Z Running 207 tests using 1 worker",
+      "2026-09-08T06:48:33.4632383Z ##[notice]  32 skipped",
+      "  175 passed (8.7m)",
+      "2026-09-08T06:48:33.4645973Z   32 skipped",
+      "2026-09-08T06:48:33.4646259Z   175 passed (8.7m)",
+      "2026-09-08T06:48:36.1735309Z Cache hit occurred on the primary key node-cache-Linux-x64-npm-4de5e62afe53e7f3108e577f5202384a92b7ad10a828299132a34264ca828ac3, not saving cache.",
+      "2026-09-08T06:48:36.3227591Z Cache hit occurred on the primary key setup-go-Linux-x64-ubuntu24-go-1.26.6-a09195471dcc685fdb9736f7219e7e6fe6e377e9fd02622cfdd8cf8f7a8f97e3, not saving cache."
+    ]
+  },
+  {
+    "id": 101966105086,
+    "run_id": 34196736772,
+    "head_sha": "0be66fbee96886b2ca82e6d2206d915842dafeb3",
+    "html_url": "https://github.com/digitaldrywood/detent/actions/runs/34196736772/job/101966105086",
+    "name": "GoReleaser Snapshot",
+    "conclusion": "success",
+    "started_at": "2026-09-08T06:54:30Z",
+    "completed_at": "2026-09-08T07:05:09Z",
+    "labels": [
+      "ubuntu-latest"
+    ],
+    "runner_name": "GitHub Actions 1000050979",
+    "seconds": 639.0,
+    "steps": [
+      {
+        "name": "Set up job",
+        "conclusion": "success",
+        "started_at": "2026-09-08T06:54:31Z",
+        "completed_at": "2026-09-08T06:54:32Z"
+      },
+      {
+        "name": "Run actions/checkout@v5",
+        "conclusion": "success",
+        "started_at": "2026-09-08T06:54:32Z",
+        "completed_at": "2026-09-08T06:54:35Z"
+      },
+      {
+        "name": "Run actions/setup-go@v6",
+        "conclusion": "success",
+        "started_at": "2026-09-08T06:54:35Z",
+        "completed_at": "2026-09-08T06:54:52Z"
+      },
+      {
+        "name": "Install minisign",
+        "conclusion": "success",
+        "started_at": "2026-09-08T06:54:52Z",
+        "completed_at": "2026-09-08T06:55:02Z"
+      },
+      {
+        "name": "Prepare minisign snapshot key",
+        "conclusion": "success",
+        "started_at": "2026-09-08T06:55:02Z",
+        "completed_at": "2026-09-08T06:55:02Z"
+      },
+      {
+        "name": "Run GoReleaser snapshot",
+        "conclusion": "success",
+        "started_at": "2026-09-08T06:55:02Z",
+        "completed_at": "2026-09-08T07:05:05Z"
+      },
+      {
+        "name": "Post Run actions/setup-go@v6",
+        "conclusion": "success",
+        "started_at": "2026-09-08T07:05:05Z",
+        "completed_at": "2026-09-08T07:05:05Z"
+      },
+      {
+        "name": "Post Run actions/checkout@v5",
+        "conclusion": "success",
+        "started_at": "2026-09-08T07:05:05Z",
+        "completed_at": "2026-09-08T07:05:05Z"
+      },
+      {
+        "name": "Complete job",
+        "conclusion": "success",
+        "started_at": "2026-09-08T07:05:05Z",
+        "completed_at": "2026-09-08T07:05:05Z"
+      }
+    ],
+    "timing_log_lines": [
+      "2026-09-08T06:54:31.1874507Z Image: ubuntu-24.04",
+      "2026-09-08T06:54:31.1875569Z Version: 20260831.293.1",
+      "2026-09-08T06:54:45.2510679Z Cache hit for: setup-go-Linux-x64-ubuntu24-go-1.26.6-a09195471dcc685fdb9736f7219e7e6fe6e377e9fd02622cfdd8cf8f7a8f97e3",
+      "2026-09-08T06:55:04.3620332Z     \u2022 running                                        hook=go mod download",
+      "2026-09-08T06:55:04.3780802Z     \u2022 running                                        hook=go install github.com/sqlc-dev/sqlc/cmd/sqlc@v1.30.0",
+      "2026-09-08T06:56:05.3190007Z     \u2022 running                                        hook=make generate",
+      "2026-09-08T06:56:32.5425187Z     \u2022 running                                        hook=go test ./...",
+      "2026-09-08T06:59:16.3952905Z   \u2022 building binaries",
+      "2026-09-08T07:04:38.8346825Z   \u2022 archives",
+      "2026-09-08T07:05:05.1297018Z   \u2022 calculating checksums",
+      "2026-09-08T07:05:05.1801172Z   \u2022 signing artifacts",
+      "2026-09-08T07:05:05.4080563Z   \u2022 release succeeded after 10m1s",
+      "2026-09-08T07:05:05.5972571Z Cache hit occurred on the primary key setup-go-Linux-x64-ubuntu24-go-1.26.6-a09195471dcc685fdb9736f7219e7e6fe6e377e9fd02622cfdd8cf8f7a8f97e3, not saving cache."
+    ]
+  },
+  {
+    "id": 101966105123,
+    "run_id": 34196736772,
+    "head_sha": "0be66fbee96886b2ca82e6d2206d915842dafeb3",
+    "html_url": "https://github.com/digitaldrywood/detent/actions/runs/34196736772/job/101966105123",
+    "name": "Browser Visual",
+    "conclusion": "success",
+    "started_at": "2026-09-08T06:54:29Z",
+    "completed_at": "2026-09-08T07:05:18Z",
+    "labels": [
+      "ubuntu-latest"
+    ],
+    "runner_name": "GitHub Actions 1000050980",
+    "seconds": 649.0,
+    "steps": [
+      {
+        "name": "Set up job",
+        "conclusion": "success",
+        "started_at": "2026-09-08T06:54:30Z",
+        "completed_at": "2026-09-08T06:54:31Z"
+      },
+      {
+        "name": "Run actions/checkout@v5",
+        "conclusion": "success",
+        "started_at": "2026-09-08T06:54:31Z",
+        "completed_at": "2026-09-08T06:54:34Z"
+      },
+      {
+        "name": "Run actions/setup-go@v6",
+        "conclusion": "success",
+        "started_at": "2026-09-08T06:54:34Z",
+        "completed_at": "2026-09-08T06:54:50Z"
+      },
+      {
+        "name": "Detect visual-sensitive changes",
+        "conclusion": "success",
+        "started_at": "2026-09-08T06:54:50Z",
+        "completed_at": "2026-09-08T06:54:51Z"
+      },
+      {
+        "name": "Run actions/setup-node@v6",
+        "conclusion": "success",
+        "started_at": "2026-09-08T06:54:51Z",
+        "completed_at": "2026-09-08T06:54:53Z"
+      },
+      {
+        "name": "Install Node dependencies",
+        "conclusion": "success",
+        "started_at": "2026-09-08T06:54:53Z",
+        "completed_at": "2026-09-08T06:54:54Z"
+      },
+      {
+        "name": "Install Playwright browsers",
+        "conclusion": "success",
+        "started_at": "2026-09-08T06:54:54Z",
+        "completed_at": "2026-09-08T06:55:20Z"
+      },
+      {
+        "name": "Install visual build generators",
+        "conclusion": "success",
+        "started_at": "2026-09-08T06:55:20Z",
+        "completed_at": "2026-09-08T06:56:16Z"
+      },
+      {
+        "name": "Build Detent visual test binary",
+        "conclusion": "success",
+        "started_at": "2026-09-08T06:56:16Z",
+        "completed_at": "2026-09-08T06:56:57Z"
+      },
+      {
+        "name": "Run full browser visual gate",
+        "conclusion": "success",
+        "started_at": "2026-09-08T06:56:57Z",
+        "completed_at": "2026-09-08T07:05:14Z"
+      },
+      {
+        "name": "Run browser smoke gate",
+        "conclusion": "skipped",
+        "started_at": "2026-09-08T07:05:14Z",
+        "completed_at": "2026-09-08T07:05:14Z"
+      },
+      {
+        "name": "Upload browser visual evidence",
+        "conclusion": "success",
+        "started_at": "2026-09-08T07:05:14Z",
+        "completed_at": "2026-09-08T07:05:15Z"
+      },
+      {
+        "name": "Upload browser visual failure artifacts",
+        "conclusion": "skipped",
+        "started_at": "2026-09-08T07:05:15Z",
+        "completed_at": "2026-09-08T07:05:15Z"
+      },
+      {
+        "name": "Post Run actions/setup-node@v6",
+        "conclusion": "success",
+        "started_at": "2026-09-08T07:05:15Z",
+        "completed_at": "2026-09-08T07:05:16Z"
+      },
+      {
+        "name": "Post Run actions/setup-go@v6",
+        "conclusion": "success",
+        "started_at": "2026-09-08T07:05:16Z",
+        "completed_at": "2026-09-08T07:05:16Z"
+      },
+      {
+        "name": "Post Run actions/checkout@v5",
+        "conclusion": "success",
+        "started_at": "2026-09-08T07:05:16Z",
+        "completed_at": "2026-09-08T07:05:16Z"
+      },
+      {
+        "name": "Complete job",
+        "conclusion": "success",
+        "started_at": "2026-09-08T07:05:16Z",
+        "completed_at": "2026-09-08T07:05:16Z"
+      }
+    ],
+    "timing_log_lines": [
+      "2026-09-08T06:54:30.3450113Z Image: ubuntu-24.04",
+      "2026-09-08T06:54:30.3450684Z Version: 20260831.293.1",
+      "2026-09-08T06:54:43.7497838Z Cache hit for: setup-go-Linux-x64-ubuntu24-go-1.26.6-a09195471dcc685fdb9736f7219e7e6fe6e377e9fd02622cfdd8cf8f7a8f97e3",
+      "2026-09-08T06:54:53.0611923Z Cache hit for: node-cache-Linux-x64-npm-4de5e62afe53e7f3108e577f5202384a92b7ad10a828299132a34264ca828ac3",
+      "2026-09-08T06:56:16.5228623Z ##[group]Run make build",
+      "2026-09-08T06:56:39.8000697Z go build -ldflags \"-X main.version=v0.107.0-26-g272f2700 -X main.commit=272f2700 -X main.date=2026-09-08T06:56:39Z\" -o tmp/detent ./cmd/detent",
+      "2026-09-08T06:56:57.8758381Z ##[group]Run npm run test:visual",
+      "2026-09-08T06:56:59.3924707Z Running 207 tests using 1 worker",
+      "2026-09-08T07:05:14.3308906Z ##[notice]  32 skipped",
+      "  175 passed (8.3m)",
+      "2026-09-08T07:05:14.3315660Z   32 skipped",
+      "2026-09-08T07:05:14.3316061Z   175 passed (8.3m)",
+      "2026-09-08T07:05:16.0949396Z Cache hit occurred on the primary key node-cache-Linux-x64-npm-4de5e62afe53e7f3108e577f5202384a92b7ad10a828299132a34264ca828ac3, not saving cache.",
+      "2026-09-08T07:05:16.2343647Z Cache hit occurred on the primary key setup-go-Linux-x64-ubuntu24-go-1.26.6-a09195471dcc685fdb9736f7219e7e6fe6e377e9fd02622cfdd8cf8f7a8f97e3, not saving cache."
+    ]
+  },
+  {
+    "id": 101951468437,
+    "run_id": 34191891374,
+    "head_sha": "6720ae3151045e2e688ffde17656dea08ce97ed6",
+    "html_url": "https://github.com/digitaldrywood/detent/actions/runs/34191891374/job/101951468437",
+    "name": "Browser Visual",
+    "conclusion": "success",
+    "started_at": "2026-09-08T05:46:04Z",
+    "completed_at": "2026-09-08T05:46:52Z",
+    "labels": [
+      "ubuntu-latest"
+    ],
+    "runner_name": "GitHub Actions 1000050920",
+    "seconds": 48.0,
+    "steps": [
+      {
+        "name": "Set up job",
+        "conclusion": "success",
+        "started_at": "2026-09-08T05:46:05Z",
+        "completed_at": "2026-09-08T05:46:07Z"
+      },
+      {
+        "name": "Run actions/checkout@v5",
+        "conclusion": "success",
+        "started_at": "2026-09-08T05:46:07Z",
+        "completed_at": "2026-09-08T05:46:10Z"
+      },
+      {
+        "name": "Run actions/setup-go@v6",
+        "conclusion": "success",
+        "started_at": "2026-09-08T05:46:10Z",
+        "completed_at": "2026-09-08T05:46:27Z"
+      },
+      {
+        "name": "Detect visual-sensitive changes",
+        "conclusion": "success",
+        "started_at": "2026-09-08T05:46:27Z",
+        "completed_at": "2026-09-08T05:46:28Z"
+      },
+      {
+        "name": "Run actions/setup-node@v6",
+        "conclusion": "skipped",
+        "started_at": "2026-09-08T05:46:28Z",
+        "completed_at": "2026-09-08T05:46:28Z"
+      },
+      {
+        "name": "Install Node dependencies",
+        "conclusion": "skipped",
+        "started_at": "2026-09-08T05:46:28Z",
+        "completed_at": "2026-09-08T05:46:28Z"
+      },
+      {
+        "name": "Install Playwright browsers",
+        "conclusion": "skipped",
+        "started_at": "2026-09-08T05:46:28Z",
+        "completed_at": "2026-09-08T05:46:28Z"
+      },
+      {
+        "name": "Install visual build generators",
+        "conclusion": "skipped",
+        "started_at": "2026-09-08T05:46:28Z",
+        "completed_at": "2026-09-08T05:46:28Z"
+      },
+      {
+        "name": "Build Detent visual test binary",
+        "conclusion": "skipped",
+        "started_at": "2026-09-08T05:46:28Z",
+        "completed_at": "2026-09-08T05:46:28Z"
+      },
+      {
+        "name": "Run full browser visual gate",
+        "conclusion": "skipped",
+        "started_at": "2026-09-08T05:46:28Z",
+        "completed_at": "2026-09-08T05:46:28Z"
+      },
+      {
+        "name": "Run browser smoke gate",
+        "conclusion": "success",
+        "started_at": "2026-09-08T05:46:28Z",
+        "completed_at": "2026-09-08T05:46:49Z"
+      },
+      {
+        "name": "Upload browser visual evidence",
+        "conclusion": "success",
+        "started_at": "2026-09-08T05:46:49Z",
+        "completed_at": "2026-09-08T05:46:49Z"
+      },
+      {
+        "name": "Upload browser visual failure artifacts",
+        "conclusion": "skipped",
+        "started_at": "2026-09-08T05:46:49Z",
+        "completed_at": "2026-09-08T05:46:49Z"
+      },
+      {
+        "name": "Post Run actions/setup-go@v6",
+        "conclusion": "success",
+        "started_at": "2026-09-08T05:46:49Z",
+        "completed_at": "2026-09-08T05:46:49Z"
+      },
+      {
+        "name": "Post Run actions/checkout@v5",
+        "conclusion": "success",
+        "started_at": "2026-09-08T05:46:49Z",
+        "completed_at": "2026-09-08T05:46:50Z"
+      },
+      {
+        "name": "Complete job",
+        "conclusion": "success",
+        "started_at": "2026-09-08T05:46:50Z",
+        "completed_at": "2026-09-08T05:46:50Z"
+      }
+    ],
+    "timing_log_lines": [
+      "2026-09-08T05:46:05.8904651Z Image: ubuntu-24.04",
+      "2026-09-08T05:46:05.8905273Z Version: 20260831.293.1",
+      "2026-09-08T05:46:21.0266784Z Cache hit for: setup-go-Linux-x64-ubuntu24-go-1.26.6-a09195471dcc685fdb9736f7219e7e6fe6e377e9fd02622cfdd8cf8f7a8f97e3",
+      "2026-09-08T05:46:49.8598044Z Cache hit occurred on the primary key setup-go-Linux-x64-ubuntu24-go-1.26.6-a09195471dcc685fdb9736f7219e7e6fe6e377e9fd02622cfdd8cf8f7a8f97e3, not saving cache."
+    ]
+  }
+]

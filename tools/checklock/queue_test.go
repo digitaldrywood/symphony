@@ -107,6 +107,80 @@ func TestValidationQueueDeadlines(t *testing.T) {
 	}
 }
 
+func TestValidationQueueContextEndsAfterPosition(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name    string
+		wantErr error
+	}{
+		{name: "cancellation", wantErr: context.Canceled},
+		{name: "deadline", wantErr: context.DeadlineExceeded},
+	} {
+		for _, held := range []bool{false, true} {
+			t.Run(fmt.Sprintf("%s/held=%t", tt.name, held), func(t *testing.T) {
+				t.Parallel()
+				synctest.Test(t, func(t *testing.T) {
+					path := filepath.Join(t.TempDir(), "validation.lock")
+					if held {
+						acquireTestLock(t, path)
+					}
+					before, err := instancelock.Inspect(path)
+					if err != nil {
+						t.Fatal(err)
+					}
+					ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+					defer cancel()
+					var ticket string
+					lock, waited, err := acquireValidationLockWithPosition(ctx, path, io.Discard, func(ctx context.Context, path, name string) (int, int, error) {
+						position, size, err := validationPosition(ctx, path, name)
+						if err != nil || position != 1 || size != 1 {
+							t.Fatalf("position lookup = (%d, %d, %v), want (1, 1, nil)", position, size, err)
+						}
+						ticket = name
+						if errors.Is(tt.wantErr, context.Canceled) {
+							cancel()
+						}
+						<-ctx.Done()
+						return position, size, nil
+					})
+					if lock != nil {
+						t.Cleanup(func() { lock.Close() })
+						t.Fatal("context ended before acquisition but validation acquired the lock")
+					}
+					if !errors.Is(err, tt.wantErr) || waited || ticket == "" {
+						t.Fatalf("acquisition = (waited=%t, ticket=%q, %v), want %v after position lookup", waited, ticket, err, tt.wantErr)
+					}
+					if !strings.Contains(err.Error(), "wait") {
+						t.Errorf("context error lacks waiting context: %v", err)
+					}
+					after, err := instancelock.Inspect(path)
+					if err != nil || after.Status != before.Status || after.Owner != before.Owner {
+						t.Fatalf("validation ownership changed: before=%+v after=%+v error=%v", before, after, err)
+					}
+					if !held {
+						if _, err := os.Stat(path); !errors.Is(err, os.ErrNotExist) {
+							t.Fatalf("context-ended invocation touched validation lock: %v", err)
+						}
+					}
+					inspection, err := instancelock.Inspect(filepath.Join(path+".queue", ticket))
+					if err != nil || inspection.Status == instancelock.StatusHeld {
+						t.Fatalf("waiter ticket remains held: %+v, %v", inspection, err)
+					}
+					next, err := registerValidationWaiter(t.Context(), path)
+					if err != nil {
+						t.Fatal(err)
+					}
+					defer next.lock.Close()
+					position, size, err := validationPosition(t.Context(), path, next.name)
+					if err != nil || position != 1 || size != 1 {
+						t.Fatalf("queue after context ended = (%d, %d, %v), want (1, 1, nil)", position, size, err)
+					}
+				})
+			})
+		}
+	}
+}
+
 func TestValidationQueueCanceledBeforeAcquisition(t *testing.T) {
 	t.Parallel()
 	ctx, cancel := context.WithCancel(t.Context())

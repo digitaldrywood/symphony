@@ -1,22 +1,23 @@
 # Cloud pilot evidence and release checklist
 
-This is a reproducible readiness assessment for #2199, not a pilot launch
-declaration. **The complete hosted journey is not ready.** Hosted navigation
-(#2290/#2294) and review-policy authorization (#2291/#2293) are merged and
-verified. The resumed two-repository journey reproduced a remaining gap:
-[approved independent CI principals cannot submit hosted Change checks #2299](https://github.com/digitaldrywood/detent/issues/2299).
-Hosted infrastructure costs and operational restore objectives also remain
-unmeasured. No deployment, invitations, billing, DNS or live identity changes
-were performed or authorized. Native diff delivery remains independent of this
-first-release gate; billing is not a prerequisite for free access.
+This is a reproducible readiness assessment for #2199. **The pilot release gate
+remains incomplete.** Hosted navigation (#2290/#2294), review-policy authorization
+(#2291/#2293) and independent Change checks (#2299/#2302) are merged and verified.
+Browser evidence covers organization creation, invitation acceptance, native
+issue creation, offline uploaded logs and human/automatic review policies.
+Hosted infrastructure costs and operational restore objectives remain unmeasured.
+No deployment, customer invitations, billing, DNS or live identity changes were
+performed or authorized. Native diff delivery remains the immediate independent
+follow-up; billing is not a prerequisite for free access.
 
 ## Reproduce
 
 Start from the issue branch or its merged successor. Prerequisites #2194,
 #2195 and #2197 were closed, with closing PRs #2278 (`4d3871bb`), #2284
 (`a2c1e9c5`) and #2269 (`1d94a9a1`) verified as ancestors of `origin/main`.
-The continuation also verified #2290/#2294 (`4ea87c17`) and #2291/#2293
-(`e905e6f8`) merged into `origin/main` before incorporating them.
+The continuation also verified #2290/#2294 (`4ea87c17`), #2291/#2293
+(`e905e6f8`) and #2299/#2302 (`ea268db7`) merged into `origin/main` before
+incorporating them.
 
 ```sh
 PYTHONDONTWRITEBYTECODE=1 python3 scripts/pilot_evidence_test.py
@@ -35,15 +36,14 @@ Compilation/dependency downloads are outside the measured workloads. Tests use s
 content and provider fixtures, temporary SQLite files, and ephemeral listeners.
 They never bind to the live dogfood port 4000.
 
-The recorded [resumed evidence JSON](../.detent/validation/2199/resumed-evidence.json) contains
-55 passing required tests and their subtests. It is a local protocol sample;
+The recorded [verified evidence JSON](../.detent/validation/2199/verified-evidence.json) contains
+58 passing required tests and their subtests. It is a local protocol sample;
 elapsed time is descriptive, never a cross-machine performance assertion.
 The local release gate is `make check`, including build, generated-file checks,
 lint, vet, NilAway, race tests, aggregate coverage and configured package/file
-coverage floors. Current-head CI is a separate PR gate. A passing known-gap
-test confirms a release blocker; it does not turn missing capability into successful acceptance.
-The earlier `evidence.json`, `evidence-race.json` and screenshots remain historical
-evidence from before the hosted fixes. Resumed files use the `resumed-` prefix.
+coverage floors. Current-head CI is a separate PR gate. Earlier `evidence*` and
+`resumed-*` files remain historical records of navigation, policy and independent
+CI limitations before their fixes. Current captures use the `verified-` prefix.
 
 ## Evidence coverage and limits
 
@@ -56,7 +56,7 @@ production deployment or an actual model executing a customer repository.
 | Sign in, create/join organization, create project, enroll runners, run native work | `TestHostedBrowserFirstOrganization`, `TestHostedLoginInvitationIntentAndReplay`, `TestHostedOnboardingFirstRun`, `TestPilotHostedHistoryAfterRunnerLossAndRestart` | Provider fixtures; local doctor/provider readiness is user-reported. Hosted issue/Change HTML navigation now verified at 390×844. |
 | Read history with execution runners stopped | `TestPilotHostedHistoryAfterRunnerLossAndRestart` reads issue, comments, run history and draft Change after expired runner heartbeats and Hub reopen | Completed execution does not imply reviewed Change. |
 | Durable uploaded logs/artifacts | `TestPilotHostedArtifactGatewayWithoutRunners`, `TestHTTPArtifactAccessWithoutRunners`, hosted artifact permission/revocation tests | The resumed hosted browser fixture uses a real HTTP gateway and Hub authorizer with synthetic in-memory storage. Real provider compatibility remains an operator prerequisite. |
-| Human/automatic policies on one fleet | `TestPilotHostedTwoRepositoryReadinessGap`, `TestHostedChangePolicyJourney`, `TestProjectPolicyIsolationAndRestart`, `TestChangeApprovalPreservesProtectedMerge`, `TestChangeCIRejectsForgedAndReplayedResults` | Two projects execute on the same tagged runner and publish distinct policies. Human approval succeeds; both retain missing checks because hosted independent CI submission returns 404 (#2299). Protected external merge denial remains component evidence; no complete hosted merge or live GitHub merge is claimed. |
+| Human/automatic policies on one fleet | `TestPilotHostedTwoRepositoryReadiness`, `TestHostedIndependentChangeChecks`, `TestHostedRunnerChangeChecks`, `TestHostedChangePolicyJourney`, `TestProjectPolicyIsolationAndRestart`, `TestChangeApprovalPreservesProtectedMerge`, `TestChangeCIRejectsForgedAndReplayedResults` | Two projects execute on the same tagged runner. Successful independent checks leave human review pending until approval; automatic mode becomes reviewed without native approval. Both retain an external gate. External protected-merge rejection is component evidence; no live GitHub merge is claimed. |
 | Explicit host, tags, no-match/offline waits | `TestRunnerRoutingClaims`, `TestRunnerSharedHostConcurrentClaimsAndRestart`, `TestRunnerRoutingRevocationAndDrain` | Routing authorization is tested independently of browser navigation. |
 | GitHub issue independence after cutover | `TestGitHubImportCheckpointCutoverAndNativeIsolation`, `TestNativeSchedulerAndConnectorWithoutGitHub` | The latter's transport rejects non-native network requests; optional import, PR/CI and Git traffic remain separate. |
 | Idle fleet request scaling | `TestPilotIdleRunnerReconciliation`, `TestPilotGitHubRequestBudgets`, `TestPilotGitHubImportBudget`, `TestPilotGitHubBackoffAndOperationBound` | Counts and scope are described below; these are not all customer GitHub requests. |
@@ -128,10 +128,10 @@ and response timestamps can change sizes slightly between runs.
 
 | Workload | Hub HTTP requests | API mutation units | Ingestion units | Heartbeats | Approximate backup bytes after workload |
 | --- | ---: | ---: | ---: | ---: | ---: |
-| Idle baseline, no runners | 10 | 0 | 0 | 0 | 799,000 |
-| Idle, one runner | 30 | 10 | 0 | 10 | 807,000 |
-| Idle, sixteen runners | 330 | 160 | 0 | 160 | 836,000 |
-| Active, one runner, 100 jobs | 630 | 510 | 400 | 10 | 2,740,000 |
+| Idle baseline, no runners | 10 | 0 | 0 | 0 | 836,000 |
+| Idle, one runner | 30 | 10 | 0 | 10 | 844,000 |
+| Idle, sixteen runners | 330 | 160 | 0 | 160 | 872,000 |
+| Active, one runner, 100 jobs | 630 | 510 | 400 | 10 | 2,789,000 |
 
 The JSON contains exact snapshot sizes, HTTP response-body bytes and aggregate
 handler microseconds. Elapsed handler time is not CPU consumption, provisioned
@@ -218,12 +218,32 @@ DETENT_PILOT_BROWSER_MANIFEST="$TMPDIR/pilot-browser.json" \
   -run '^TestPilotBrowserPreview$' -count=1 -v
 ```
 
-Read the manifest from the temporary directory, open `login`, and click the
+Read the manifest from the temporary directory, open `owner`, then `login`, and click the
 mocked WorkOS sign-in. Inspect `organization`, `human_review`, `automatic`,
 `usage`, `issue`, `change`, `human_change` and `automatic_change`. The manifest
 also provides API URLs; it contains no session or runner credentials. Create a
 synthetic native issue through the actual project form. Stop only this fixture with POST to its manifest's `stop` URL.
 It times out if abandoned. It never starts or manipulates live Detent.
+
+For first-organization creation and invitation acceptance, use a fresh output
+path with the organization preview:
+
+```sh
+DETENT_PILOT_ORGANIZATION_MANIFEST="$TMPDIR/pilot-organization.json" \
+  GOTOOLCHAIN=go1.26.6 go test ./internal/hubserver \
+  -run '^TestPilotOrganizationBrowserPreview$' -count=1 -v
+```
+
+Open `owner`, then `login`, and follow the provider sign-in. Create the
+organization, project and issue through their forms. Invite `invitee@example.test`;
+the test-only `invitation_mailbox` URL substitutes for provider email delivery.
+Open `invitee` and join with that synthetic invitation ID. Organization membership
+must not grant project access. Switch to `owner`, sign in again, grant the member
+project access, then switch to `invitee` and sign in again to verify it. Provider
+account selection persists independently of application-session rotation; the
+collector includes a regression proving that an invalid app session cannot turn
+the selected viewer into the owner. The mailbox and account selector exist only
+in the Go test fixture.
 
 [Screenshots](../.detent/validation/2199/) use 390×844, DPR 1, viewport capture.
 The resumed provider fixture uses a generated valid organization ID, real scoped
@@ -240,17 +260,18 @@ and uploaded log access. Manifest/object hashes were verified; script-looking
 log text remained inert. Revoking the viewer's project grant changed an already
 issued gateway grant from HTTP 200 to 403. Cross-tenant HTML access returned 403
 without issue content. Checked pages had no horizontal overflow. Exact sanitized
-browser results and screenshots are in the [browser record](../.detent/validation/2199/resumed-browser.md).
+browser results and screenshots are in the [historical browser record](../.detent/validation/2199/resumed-browser.md).
 
-Hosted owner review-policy approval and immutable version publication now
-succeed for both repositories. One shared tagged runner executes both jobs.
-Human native approval returned 200 and changed review from pending to approved;
-automatic mode reports review not required. Both show checks missing and needs
-evidence: the project-granted operator credential pinned as an independent CI
-principal receives 404 on the version checks endpoint. `TestPilotHostedTwoRepositoryReadinessGap`
-records this limitation explicitly. Ordinary workers cannot substitute for an
-independent validator. Resume the complete checks/merge journey after #2299
-merges; do not weaken authentication or mark this pilot gate complete.
+The [verified browser record](../.detent/validation/2199/verified-browser.md)
+adds first-organization creation, invited-member acceptance and explicit project
+access, plus refreshed offline log and policy evidence. One shared tagged runner
+executes both repository jobs. Approved independent CI submissions return 200.
+The human repository remains `needs_evidence` with pending approval despite
+successful checks; owner approval returns 200 and changes it to `reviewed`.
+Automatic mode reaches `reviewed` with review `not_required`. Both show the
+external GitHub gate, and the protected-merge regression verifies denial with
+zero merge execution effects. These results do not establish a live deployment,
+provider storage compatibility or measured hosting costs.
 
 ## Release decision checklist
 
@@ -261,15 +282,16 @@ merges; do not weaken authentication or mark this pilot gate complete.
 - [x] #2291 merged; hosted review-policy approval and version publication verified.
 - [x] Uploaded artifact browser read, integrity and live revocation verified with
   execution runners offline against the isolated provider fixture.
-- [ ] #2299 merged; complete two-repository hosted check/review/merge journey
-  verified without bypassing external branch protections.
+- [x] #2299 merged; hosted independent checks and two-repository native review
+  readiness verified, with external protected-merge denial covered separately.
+- [x] Organization creation, invited-user acceptance and explicit project access
+  verified through the browser without changing the signed-in actor.
 - [ ] Hosted idle/active infrastructure, retention, backup, network and support
   measurements recorded; operator approves pilot allowances.
 - [ ] Operator records gateway/provider configuration, TLS/proxy trust,
   identity/grant policy, retention/export/deletion rules and a restore rehearsal
   with recovery objectives and responsible owners.
-- [ ] Final `make check` and exact-head PR CI pass; repeat journey evidence after
-  #2299 merges.
+- [ ] Final `make check` and exact-head PR CI pass.
 - [ ] Human explicitly authorizes any later deployment or customer invitation.
 
 A green component suite is evidence for the tested contracts. It does not clear

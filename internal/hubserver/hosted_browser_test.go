@@ -211,6 +211,7 @@ func newBrowserHostedOrganizationFixture(t *testing.T, allocated bool, organizat
 		t.Fatal(err)
 	}
 	fixture := &browserHostedFixture{service: service, server: server, provider: provider, cookies: make(map[string]*http.Cookie), stop: make(chan struct{})}
+	accounts := make(map[string]auth.Identity)
 	t.Cleanup(func() {
 		server.Close()
 		if err := service.Close(); err != nil {
@@ -238,6 +239,7 @@ func newBrowserHostedOrganizationFixture(t *testing.T, allocated bool, organizat
 			organization = "org_browser_other"
 		}
 		identity := provider.identity(account.user, account.email, organization, account.support)
+		accounts[account.name] = identity
 		if allocated && account.role != "" {
 			membership, err := provider.CreateMembership(t.Context(), account.user, organization, account.role)
 			if err != nil {
@@ -277,6 +279,7 @@ func newBrowserHostedOrganizationFixture(t *testing.T, allocated bool, organizat
 			return
 		}
 		http.SetCookie(w, cookie)
+		http.SetCookie(w, &http.Cookie{Name: "detent_preview_account", Value: r.PathValue("account"), Path: "/", HttpOnly: true, SameSite: http.SameSiteLaxMode})
 		http.Redirect(w, r, "/organization", http.StatusSeeOther)
 	})
 	mux.HandleFunc("GET /__preview/authorize", func(w http.ResponseWriter, r *http.Request) {
@@ -284,7 +287,16 @@ func newBrowserHostedOrganizationFixture(t *testing.T, allocated bool, organizat
 		provider.mu.Lock()
 		organization := provider.organization.ID
 		provider.mu.Unlock()
-		identity := provider.identity("user_browser_owner", "owner@example.test", organization, "")
+		account := "owner"
+		if cookie, err := r.Cookie("detent_preview_account"); err == nil {
+			account = cookie.Value
+		}
+		selected, ok := accounts[account]
+		if !ok || selected.Hosted == nil {
+			http.NotFound(w, r)
+			return
+		}
+		identity := provider.identity(selected.Subject, selected.Email, organization, selected.Hosted.SupportActor)
 		provider.mu.Lock()
 		code := "code_" + identity.Hosted.SessionID
 		provider.codes[code] = identity
@@ -294,6 +306,14 @@ func newBrowserHostedOrganizationFixture(t *testing.T, allocated bool, organizat
 	mux.HandleFunc("POST /__preview/stop", func(w http.ResponseWriter, _ *http.Request) {
 		fixture.stopOnce.Do(func() { close(fixture.stop) })
 		w.WriteHeader(http.StatusNoContent)
+	})
+	mux.HandleFunc("GET /__preview/invitations", func(w http.ResponseWriter, _ *http.Request) {
+		provider.mu.Lock()
+		defer provider.mu.Unlock()
+		w.Header().Set("Content-Type", "application/json")
+		if err := json.NewEncoder(w).Encode(provider.invitations); err != nil {
+			t.Error(err)
+		}
 	})
 	mux.Handle("/", service.Handler())
 	server.Config.Handler = mux
@@ -511,6 +531,62 @@ func TestHostedBrowserFirstOrganization(t *testing.T) {
 	browserHostedStatus(t, response, http.StatusOK)
 	if !strings.Contains(response.Body.String(), "No work items in this project yet") {
 		t.Error("new project did not open its empty work list")
+	}
+}
+
+func TestHostedBrowserProviderAccountSelection(t *testing.T) {
+	t.Parallel()
+	f := newBrowserHostedFixture(t, true)
+	base, err := url.Parse(f.server.URL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, account := range []string{"owner", "viewer"} {
+		t.Run(account, func(t *testing.T) {
+			jar, err := cookiejar.New(nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			client := f.server.Client()
+			client.Jar = jar
+			request, err := http.NewRequestWithContext(t.Context(), http.MethodGet, f.server.URL+"/__preview/account/"+account, nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			response, err := client.Do(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := response.Body.Close(); err != nil {
+				t.Fatal(err)
+			}
+			jar.SetCookies(base, []*http.Cookie{{Name: hostedCookie, Value: "invalid-preview-session", Path: "/"}})
+			request, err = http.NewRequestWithContext(t.Context(), http.MethodGet, f.server.URL+"/auth/oidc/start", nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			response, err = client.Do(request)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := response.Body.Close(); err != nil {
+				t.Fatal(err)
+			}
+			if response.StatusCode != http.StatusOK {
+				t.Fatalf("sign-in status = %d", response.StatusCode)
+			}
+			for _, cookie := range jar.Cookies(base) {
+				if cookie.Name != hostedCookie {
+					continue
+				}
+				session, err := f.service.hostedSessions.Authenticate(t.Context(), cookie.Value)
+				if err != nil || session.Identity == nil || session.Identity.Subject != "user_browser_"+account {
+					t.Fatalf("provider selected another account: %+v, %v", session, err)
+				}
+				return
+			}
+			t.Fatal("sign-in cookie missing")
+		})
 	}
 }
 

@@ -118,6 +118,22 @@ func TestPilotBrowserPreview(t *testing.T) {
 		info[key] = f.server.URL + templates.ChangePath(parts[6], tracker.NativeWorkItemID(parts[8]), parts[10])
 		info[key+"_api"] = f.server.URL + version.path
 	}
+	pilotBrowserWait(t, f, manifest, info)
+}
+
+func TestPilotOrganizationBrowserPreview(t *testing.T) {
+	manifest := os.Getenv("DETENT_PILOT_ORGANIZATION_MANIFEST")
+	if manifest == "" {
+		t.Skip("isolated organization browser preview")
+	}
+	f := newBrowserHostedOrganizationFixture(t, false, artifact.NewID("org"))
+	info := map[string]string{"login": f.server.URL + "/login", "organization": f.server.URL + "/organization", "owner": f.server.URL + "/__preview/account/owner", "invitee": f.server.URL + "/__preview/account/invitee", "stop": f.server.URL + "/__preview/stop"}
+	info["invitation_mailbox"] = f.server.URL + "/__preview/invitations"
+	pilotBrowserWait(t, f, manifest, info)
+}
+
+func pilotBrowserWait(t *testing.T, f *browserHostedFixture, manifest string, info map[string]string) {
+	t.Helper()
 	raw, err := json.Marshal(info)
 	if err != nil {
 		t.Fatal(err)

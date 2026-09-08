@@ -61,6 +61,7 @@ func pilotReviewVersions(t *testing.T, f *browserHostedFixture) []pilotReviewVer
 		path += "/changes/" + change.ID
 		input := changeTestInput()
 		input.PolicyID, input.Repository = descriptor.ID, "https://github.com/example/"+project
+		input.External = &tracker.ChangeExternalReference{Provider: "github", ID: "1", URL: input.Repository + "/pull/1"}
 		input.RunID, input.AttemptID = start.Data.RunID, start.Data.AttemptID
 		response = f.setupRequest(t, "owner", http.MethodPost, path+"/versions", tracker.PublishChangeVersion{Mutation: tracker.Mutation{IdempotencyKey: "pilot-version"}, ChangeVersionInput: input})
 		requireNativeStatus(t, response, http.StatusOK)
@@ -84,7 +85,7 @@ func pilotChangeSummary(t *testing.T, f *browserHostedFixture, path string) trac
 	return detail.Summary
 }
 
-func TestPilotHostedTwoRepositoryReadinessGap(t *testing.T) {
+func TestPilotHostedTwoRepositoryReadiness(t *testing.T) {
 	t.Parallel()
 	f, _, _ := pilotHostedJourney(t)
 	versions := pilotReviewVersions(t, f)
@@ -94,16 +95,16 @@ func TestPilotHostedTwoRepositoryReadinessGap(t *testing.T) {
 	for _, version := range versions {
 		t.Run(version.version.Repository, func(t *testing.T) {
 			summary := pilotChangeSummary(t, f, version.path)
-			if version.ciStatus != http.StatusNotFound || summary.Checks != "missing" || summary.Status == "reviewed" {
-				t.Fatalf("update pilot evidence when independent CI admission changes: status=%d summary=%+v", version.ciStatus, summary)
+			if version.ciStatus != http.StatusOK || summary.Checks != "success" || summary.ExternalReview != "external_gate" {
+				t.Fatalf("independent CI or external gate = %d, %+v", version.ciStatus, summary)
 			}
 			if !version.human {
-				if summary.NativeReview != "not_required" {
-					t.Fatalf("automatic policy review = %s", summary.NativeReview)
+				if summary.NativeReview != "not_required" || summary.Status != "reviewed" {
+					t.Fatalf("automatic policy review = %+v", summary)
 				}
 				return
 			}
-			if summary.NativeReview != "pending" {
+			if summary.NativeReview != "pending" || summary.Status != "needs_evidence" {
 				t.Fatalf("human policy bypassed: %+v", summary)
 			}
 			path := version.path + "/versions/" + version.version.ID + "/reviews"
@@ -113,7 +114,7 @@ func TestPilotHostedTwoRepositoryReadinessGap(t *testing.T) {
 				t.Fatal("denied review changed readiness")
 			}
 			requireNativeStatus(t, f.setupRequest(t, "owner", http.MethodPost, path, review), http.StatusOK)
-			if got := pilotChangeSummary(t, f, version.path); got.Status == "reviewed" || got.NativeReview != "approved" || got.Checks != "missing" {
+			if got := pilotChangeSummary(t, f, version.path); got.Status != "reviewed" || got.NativeReview != "approved" || got.Checks != "success" || got.ExternalReview != "external_gate" {
 				t.Fatalf("approved repository status = %+v", got)
 			}
 		})
@@ -121,5 +122,5 @@ func TestPilotHostedTwoRepositoryReadinessGap(t *testing.T) {
 	if versions[0].version.PolicyID == versions[1].version.PolicyID || versions[0].version.ReviewPolicy.ID == versions[1].version.ReviewPolicy.ID {
 		t.Fatal("repository policies share an identity")
 	}
-	t.Log("PILOT readiness_gap independent_ci_http=404 human_approval_http=200 checks=missing reviewed=false repositories=2 shared_runner=true")
+	t.Log("PILOT readiness independent_ci_http=200 human_approval_http=200 checks=success human_before_review=needs_evidence human_after_review=reviewed automatic=reviewed external=external_gate repositories=2 shared_runner=true")
 }

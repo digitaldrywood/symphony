@@ -1,5 +1,8 @@
 # Resumed hosted pilot browser evidence
 
+Historical capture before #2299/#2302. The later positive check/review and
+organization/invitation evidence is recorded in `verified-browser.md`.
+
 Captured 2026-09-08 with Chrome DevTools, 390×844 viewport, DPR 1. The
 isolated `TestPilotBrowserPreview` used ephemeral Hub/gateway ports, a
 provider fixture, temporary SQLite databases and synthetic object storage.

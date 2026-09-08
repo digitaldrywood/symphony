@@ -43,6 +43,7 @@ func ConfigFromWorkflow(cfg workflowconfig.Config) Config {
 		StopRunPriorityNames:       stopRunPriorityNames(cfg.Tracker.PriorityMap),
 		MaxConcurrentAgentsPerHost: positiveIntValue(cfg.Worker.MaxConcurrentAgentsPerHost),
 		MaxRetryBackoff:            durationFromMillis(cfg.Agent.MaxRetryBackoffMS),
+		Recovery:                   cfg.Recovery,
 		OverloadRetryDelay:         durationFromMillis(cfg.Agent.OverloadRetryDelayMS),
 		NoProgressTokenLimit:       cfg.Agent.NoProgressTokenLimit,
 		NoProgressSpendLimitUSD:    cfg.Agent.NoProgressSpendLimitUSD,

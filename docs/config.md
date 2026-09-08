@@ -13,6 +13,50 @@ configuration is documented below after the host-wide settings.
 For instance backend/route inheritance and the opt-in `sol_first` model-selection
 preset, see [Instance agent defaults](multi-project.md#instance-agent-defaults-and-sol-first-selection).
 
+## Terminal attempt recovery
+
+Set `recovery.terminal_attempt_retry_limit` in `detent.yaml` or
+`detent.local.yaml` to control recovery from consecutive terminal attempts
+without a pushed work product or linked pull request:
+
+```yaml
+recovery:
+  terminal_attempt_retry_limit: 0
+```
+
+The default is `3`. The value preserves the existing consecutive-failure
+threshold for values of `2` or greater; `1` explicitly permits one recovery
+attempt, and `0` disables automatic recovery for a qualifying failure.
+
+| Setting | Failure 1 | Failure 2 | Failure 3 | Recovery after parking |
+| --- | --- | --- | --- | --- |
+| `0` | Blocked | No automatic attempt | No automatic attempt | Operator reviews the failure and moves the issue to Todo |
+| `1` | Todo; one recovery attempt | Blocked | No attempt before recovery from parking | Existing breaker cooldown |
+| `3` (default) | Todo | Todo | Blocked | Existing breaker cooldown |
+
+Thus `1` and `2` both park on the second qualifying failure. Higher values
+park on that numbered failure. Negative values are rejected. This compatibility
+rule keeps the existing default at two redispatches before parking.
+
+The zero policy persists an operator-owned hold, including the latest failure
+evidence. Restarting Detent or waiting for the breaker cooldown does not release
+that hold. If the tracker rejects the Blocked transition, Detent holds the issue
+locally and retries that transition during reconciliation without starting a worker.
+Changing the setting alone does not authorize release of an existing
+operator-owned hold. Retry counts are reconstructed from durable issue attempt
+history after restart; successful attempts and pushed work reset the sequence.
+Service-restart recovery remains resumable and does not consume this limit.
+
+Durable provider capacity, GitHub REST capacity, and forge availability waits
+retain their existing handling and do not consume generic terminal retries.
+Transient overload failures remain qualifying terminal failures. Workspace
+preparation retains its separate fixed threshold of three failures. This policy
+is independent of automatic promotion, validators, and Rework limits.
+
+`detent doctor` reports the effective setting, the qualifying failure on which
+Detent parks, and whether parking requires external review or uses cooldown
+recovery. Local overlays preserve an explicit zero.
+
 ## Repository policy with Hub execution
 
 Connecting a project to Hub preserves its repository definition. The customer
@@ -1099,6 +1143,8 @@ only to resettable budget pacing and never clears a per-issue hard hold.
 | `polling.conditional` | `boolean` | `true` | No | None |
 | `polling.interval_ms` | `integer` | `120000` | No | must be at least 60000<br>must be greater than 0 |
 | `polling.refresh_failure_threshold` | `integer` | `3` | No | must be greater than 0 |
+| `recovery` | `object` | `see child fields` | No | None |
+| `recovery.terminal_attempt_retry_limit` | `integer` | `3` | No | must be greater than or equal to 0 |
 | `release` | `object` | `see child fields` | No | None |
 | `release.enabled` | `boolean` | `false` | No | release.max_age_hours must be greater than 0 when release.enabled is true<br>release.min_merged_issues must be greater than 0 when release.enabled is true<br>release.require_green_ci must be true when release.enabled is true<br>requires tracker.kind github or github_local<br>tracker.repository must be owner/name when release.enabled is true |
 | `release.flaky_check_names` | `list<string>` | `[]` | No | must not be empty when release.rerun_flaky_once is true |

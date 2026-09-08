@@ -575,6 +575,10 @@
 # dependencies:
 #   # dependencies.source | type: string | default: "merged" | required: No | validation: must be one of merged, native_only
 #   source: "merged"
+# # recovery | type: object | default: see child fields | required: No | validation: None
+# recovery:
+#   # recovery.terminal_attempt_retry_limit | type: integer | default: 3 | required: No | validation: must be greater than or equal to 0
+#   terminal_attempt_retry_limit: 3
 # # worker | type: object | default: see child fields | required: No | validation: None
 # worker:
 #   # worker.ssh_hosts | type: list<string> | default: [] | required: No | validation: None

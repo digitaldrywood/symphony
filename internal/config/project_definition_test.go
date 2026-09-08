@@ -9,6 +9,64 @@ import (
 	"testing"
 )
 
+func TestLoadProjectDefinitionTerminalAttemptRecovery(t *testing.T) {
+	t.Parallel()
+	for _, tt := range []struct {
+		name     string
+		shared   string
+		local    string
+		want     int
+		failures int
+		wantErr  string
+	}{
+		{name: "default", want: 3, failures: 3},
+		{name: "shared zero", shared: "0", failures: 1},
+		{name: "shared one", shared: "1", want: 1, failures: 2},
+		{name: "shared three", shared: "3", want: 3, failures: 3},
+		{name: "overlay zero", shared: "3", local: "0", failures: 1},
+		{name: "overlay one", shared: "0", local: "1", want: 1, failures: 2},
+		{name: "overlay three", shared: "0", local: "3", want: 3, failures: 3},
+		{name: "higher limit", shared: "6", want: 6, failures: 6},
+		{name: "negative shared", shared: "-1", wantErr: "recovery.terminal_attempt_retry_limit must be greater than or equal to 0"},
+		{name: "negative overlay", shared: "3", local: "-1", wantErr: "recovery.terminal_attempt_retry_limit must be greater than or equal to 0"},
+		{name: "invalid type", shared: "false", wantErr: "cannot unmarshal"},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			dir := t.TempDir()
+			workflowPath := filepath.Join(dir, "WORKFLOW.md")
+			writeProjectDefinitionTestFile(t, workflowPath, "Implement the issue.\n", 0o644)
+			shared := "schema: 1\ntracker:\n  kind: memory\n"
+			if tt.shared != "" {
+				shared += "recovery:\n  terminal_attempt_retry_limit: " + tt.shared + "\n"
+			}
+			writeProjectDefinitionTestFile(t, filepath.Join(dir, "detent.yaml"), shared, 0o644)
+			if tt.local != "" {
+				writeProjectDefinitionTestFile(t, filepath.Join(dir, "detent.local.yaml"), "schema: 1\nrecovery:\n  terminal_attempt_retry_limit: "+tt.local+"\n", 0o600)
+			}
+			workflow, err := LoadProjectDefinition(workflowPath)
+			if err == nil {
+				err = workflow.Config.Validate()
+			}
+			if tt.wantErr != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantErr) {
+					t.Fatalf("LoadProjectDefinition() error = %v, want %q", err, tt.wantErr)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if got := workflow.Config.Recovery.EffectiveTerminalAttemptRetryLimit(); got != tt.want {
+				t.Fatalf("effective limit = %d, want %d", got, tt.want)
+			}
+			if got := workflow.Config.Recovery.TerminalAttemptFailureLimit(); got != tt.failures {
+				t.Fatalf("failure limit = %d, want %d", got, tt.failures)
+			}
+		})
+	}
+}
+
 func TestLoadProjectDefinitionLayouts(t *testing.T) {
 	t.Parallel()
 

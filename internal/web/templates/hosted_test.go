@@ -265,7 +265,7 @@ func TestHostedProjectContentAndEscaping(t *testing.T) {
 			t.Errorf("project page contains %q", forbidden)
 		}
 	}
-	for _, want := range []string{`href="/api/v2/organizations/org-example/projects/project-example/work-items/issue-example"`, "private issue", "&lt;script&gt;title&lt;/script&gt;", `role="alert"`, `role="status"`} {
+	for _, want := range []string{`href="/projects/project-example/issues/issue-example"`, "private issue", "&lt;script&gt;title&lt;/script&gt;", `role="alert"`, `role="status"`} {
 		if !strings.Contains(html, want) {
 			t.Errorf("project page missing %q", want)
 		}

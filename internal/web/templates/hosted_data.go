@@ -8,6 +8,9 @@ import (
 )
 
 type HostedPageData struct {
+	Issue               *tracker.NativeIssue
+	Change              *tracker.ChangeDetail
+	Changes             []tracker.ChangeRequest
 	PlanName            string
 	PlanSource          string
 	UsageWindow         string
@@ -92,12 +95,12 @@ func hostedMemberPath(member string, action string) string {
 	return "/organization/members/" + url.PathEscape(member) + "/" + action
 }
 
-func hostedIssuePath(organization string, project string, issue tracker.NativeWorkItemID) string {
-	return "/api/v2/organizations/" + url.PathEscape(organization) + "/projects/" + url.PathEscape(project) + "/work-items/" + url.PathEscape(string(issue))
+func hostedIssuePath(project string, issue tracker.NativeWorkItemID) string {
+	return NativeIssuePath(project, issue)
 }
 
 func hostedProjectMode(data HostedPageData) bool {
-	return data.OrganizationID != "" && (data.Mode == "organization" || data.Mode == "project")
+	return data.OrganizationID != "" && (data.Mode == "organization" || data.Mode == "project" || data.Mode == "issue" || data.Mode == "change" || data.Mode == "changes")
 }
 
 type HostedAllowanceRow struct {

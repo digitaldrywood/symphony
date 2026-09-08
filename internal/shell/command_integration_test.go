@@ -62,7 +62,7 @@ func TestCommandWithArgsExecution(t *testing.T) {
 				t.Skipf("shell unavailable: %v", err)
 			}
 			quote := argQuoterForOS(shellName, runtime.GOOS)
-			command := quote(helper) + " -test.run=TestShellArgumentProcess -- configured"
+			command := quote(helper) + " " + quote("-test.run=TestShellArgumentProcess") + " -- configured"
 			if runtime.GOOS == "windows" {
 				if shellBase(shellName) == "cmd" {
 					command = `"` + helper + `" -test.run=TestShellArgumentProcess -- configured`

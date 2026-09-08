@@ -543,6 +543,11 @@ type WorkAttempt struct {
 	RuntimeIdentityJson    string         `json:"runtime_identity_json"`
 }
 
+type WorkflowHistoryRevision struct {
+	ID       int64 `json:"id"`
+	Revision int64 `json:"revision"`
+}
+
 type WorkflowPhaseEvent struct {
 	ID                    int64          `json:"id"`
 	ProjectID             string         `json:"project_id"`

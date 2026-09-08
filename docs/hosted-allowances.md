@@ -104,8 +104,10 @@ Grant `starts_at` defaults to transaction time; optional `expires_at` uses an
 RFC3339 timestamp after the start. A `revoke` command names `grant_id` and a
 reason. `base` assigns a plan version. `subscription` assigns a plan version
 with a required future validity deadline; `end_subscription` clears that
-derived access. These commands are a payment-independent input contract for a
-future trusted subscription adapter, not a public webhook or payment processor.
+derived access when Stripe billing is disabled. With
+[hosted subscription billing](hosted-billing.md) configured, authoritative
+Stripe reconciliation owns subscription-derived access and these two commands
+are rejected. Complimentary grants remain independent of payment records.
 
 Resolution at the allocation transaction's clock sample is:
 

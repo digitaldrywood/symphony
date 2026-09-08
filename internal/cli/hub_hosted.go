@@ -9,10 +9,12 @@ import (
 	"gopkg.in/yaml.v3"
 
 	"github.com/digitaldrywood/detent/internal/auth"
+	"github.com/digitaldrywood/detent/internal/billing"
 	"github.com/digitaldrywood/detent/internal/hubserver"
 )
 
 type hostedFileConfig struct {
+	Billing                  *hostedBillingFileConfig      `yaml:"billing"`
 	EntitlementAdministrator string                        `yaml:"entitlement_administrator"`
 	EntitlementAdminTokenEnv string                        `yaml:"entitlement_admin_token_env"`
 	Plans                    *hubserver.HostedPlansConfig  `yaml:"entitlements"`
@@ -32,6 +34,39 @@ type hostedFileConfig struct {
 		APIURL    string `yaml:"api_url"`
 		IssuerURL string `yaml:"issuer_url"`
 	} `yaml:"workos"`
+}
+
+type hostedBillingFileConfig struct {
+	AccountID             string                         `yaml:"account_id"`
+	CustomerID            string                         `yaml:"customer_id"`
+	PortalConfigurationID string                         `yaml:"portal_configuration_id"`
+	APIKeyEnv             string                         `yaml:"api_key_env"`
+	WebhookSecretEnv      string                         `yaml:"webhook_secret_env"`
+	GraceSeconds          int64                          `yaml:"grace_seconds"`
+	ReconcileSeconds      int64                          `yaml:"reconcile_seconds"`
+	Prices                []hubserver.HostedBillingPrice `yaml:"prices"`
+}
+
+func readHostedBillingConfig(config *hostedBillingFileConfig, lookupEnv func(string) string) (*hubserver.HostedBillingConfig, error) {
+	if config == nil {
+		return nil, errors.New("billing configuration is required")
+	}
+	if !validEnvName(config.APIKeyEnv) || !validEnvName(config.WebhookSecretEnv) {
+		return nil, errors.New("billing secret environment variable names are required and must be valid")
+	}
+	provider, err := billing.NewStripe(billing.StripeConfig{APIKey: lookupEnv(config.APIKeyEnv)})
+	if err != nil {
+		return nil, err
+	}
+	secret := lookupEnv(config.WebhookSecretEnv)
+	if len(secret) < 16 || !strings.HasPrefix(secret, "whsec_") {
+		return nil, errors.New("billing webhook secret is unavailable or invalid")
+	}
+	return &hubserver.HostedBillingConfig{
+		AccountID: config.AccountID, CustomerID: config.CustomerID, PortalConfigurationID: config.PortalConfigurationID,
+		WebhookSecret: []byte(secret), GraceSeconds: config.GraceSeconds, ReconcileSeconds: config.ReconcileSeconds,
+		Prices: config.Prices, Provider: provider,
+	}, nil
 }
 
 func readHostedConfig(path string, lookupEnv func(string) string) (result *hubserver.HostedConfig, enabled bool, resultErr error) {
@@ -80,7 +115,15 @@ func readHostedConfig(path string, lookupEnv func(string) string) (result *hubse
 			return nil, false, errors.New("entitlement administration token is unavailable or too short")
 		}
 	}
+	var billingConfig *hubserver.HostedBillingConfig
+	if config.Billing != nil {
+		billingConfig, err = readHostedBillingConfig(config.Billing, lookupEnv)
+		if err != nil {
+			return nil, false, err
+		}
+	}
 	return &hubserver.HostedConfig{
+		Billing:                  billingConfig,
 		EntitlementAdministrator: config.EntitlementAdministrator, EntitlementAdminToken: entitlementToken,
 		Plans:          config.Plans,
 		OrganizationID: config.OrganizationID, WorkOSOrganizationID: config.WorkOSOrganizationID,

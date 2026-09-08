@@ -147,6 +147,9 @@ func (s *Service) hostedBoundary(next echo.HandlerFunc) echo.HandlerFunc {
 		if strings.HasPrefix(c.Path(), "/api/v1/") || c.Path() == "/health" {
 			return s.nativeAPIError(c, nativeNotFound())
 		}
+		if c.Path() == "/webhooks/stripe" && c.Request().Method == http.MethodPost {
+			return next(c)
+		}
 		bearerAPI := strings.HasPrefix(c.Path(), "/api/v2/") && c.Request().Header.Get(echo.HeaderAuthorization) != ""
 		if !hostedReadRequest(c) && !bearerAPI && !strings.HasSuffix(c.Path(), "/redeem") && !s.hostedCSRFValid(c) {
 			return c.JSON(http.StatusForbidden, apiErrorResponse{Code: "invalid_csrf", Message: "Reload the form and try again"})

@@ -49,6 +49,9 @@ func (s *Service) updateHostedPlan(c echo.Context) error {
 }
 
 func (d *database) applyHostedPlanCommand(ctx context.Context, actor string, command hostedPlanCommand) error {
+	if d.hostedBilling && (command.Action == "subscription" || command.Action == "end_subscription") {
+		return nativeInvalid("Stripe reconciliation owns subscription access; use separate complimentary grants for operator access")
+	}
 	if d.hostedPlans == nil || !hostedSafeID(command.ID) || strings.TrimSpace(command.Reason) == "" || len(command.Reason) > 500 || command.ExpectedRevision < 1 || !slices.Contains([]string{"base", "subscription", "end_subscription", "grant", "revoke"}, command.Action) {
 		return nativeInvalid("A command ID, revision, action and bounded audit reason are required")
 	}

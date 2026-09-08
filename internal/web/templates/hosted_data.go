@@ -12,6 +12,13 @@ type HostedPageData struct {
 	Change              *tracker.ChangeDetail
 	Changes             []tracker.ChangeRequest
 	NextChanges         string
+	BillingEnabled      bool
+	BillingCanPurchase  bool
+	BillingStatus       string
+	BillingMessage      string
+	BillingCheckedAt    string
+	BillingPrices       []HostedBillingPrice
+	BillingAudit        []HostedBillingAudit
 	PlanName            string
 	PlanSource          string
 	UsageWindow         string
@@ -50,6 +57,18 @@ type HostedPageData struct {
 	Projects            []HostedProjectChoice
 	Members             []HostedMember
 	Issues              []tracker.NativeIssue
+}
+
+type HostedBillingPrice struct {
+	ID    string
+	Label string
+}
+
+type HostedBillingAudit struct {
+	Actor   string `json:"actor"`
+	Action  string `json:"action"`
+	Summary string `json:"summary"`
+	At      string `json:"at"`
 }
 
 type HostedOrganizationChoice struct {

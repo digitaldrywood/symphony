@@ -1,6 +1,6 @@
 # Native Hub and Detent Cloud architecture RFC
 
-[Documentation index](../README.md#documentation) · [Implemented Hub API](hub-api.md) · [Delivery issue #2181](https://github.com/digitaldrywood/detent/issues/2181)
+[Documentation index](../README.md#documentation) · [Implemented Hub API](hub-api.md) · [Original delivery #2181](https://github.com/digitaldrywood/detent/issues/2181) · [Shared-site correction #2340](https://github.com/digitaldrywood/detent/issues/2340)
 
 Status: proposed architecture for human review. This is the authoritative design
 target for the linked Cloud work once reviewed; it does not claim those features
@@ -9,9 +9,12 @@ RFC before dependent implementation. The RFC can finish independently of every
 implementation below.
 
 Detent remains a Go agent orchestrator delivered as one binary. Local operation,
-a customer-hosted Hub, and paid hosted Cloud at `cloud.detent.build` are supported
-directions. Local and self-hosted operation require no Detent Cloud, WorkOS, or
-Stripe account. Customer machines execute work using customer provider accounts;
+a customer-hosted Hub, and the shared hosted service at `https://hub.detent.build`
+are supported directions. Hosted access has organization free/paid entitlements.
+Self-hosted Detent is free with customer-selected authentication, including WorkOS,
+custom, generic or local options; it never requires a Detent hosted account,
+subscription, or billing connection. WorkOS is optional for self-hosting. Customer
+machines execute work using customer provider accounts;
 Detent does not resell provider keys. This document authorizes no live accounts,
 DNS changes, deployment, purchases, invitations, or customer charges.
 
@@ -33,14 +36,17 @@ implementation without silently resolving the product choices in this table.
 | Billing boundary and teams | Approved September 7: organization billing; flat owner/admin/member/viewer roles with explicit project and separate runner-management grants. Nested teams and inherited permissions are deferred | Human product review; [#2193](https://github.com/digitaldrywood/detent/issues/2193), [#2195](https://github.com/digitaldrywood/detent/issues/2195) |
 | Artifact deployment | Approved September 7: optional local-only operation, customer-managed storage, and explicit opt-in hosted storage through a portable service and configurable S3 adapter. DigitalOcean Spaces is the initial hosted provider | [#2190](https://github.com/digitaldrywood/detent/issues/2190); [artifact contract](artifact-access-contract.md) |
 | Hosted tenant allocation | Approved September 7: one dedicated Hub process and SQLite file per organization, with persistent tenant binding and scoped APIs. Customer collaboration databases are not pooled; measure the per-process baseline cost | Human architecture/cost review; #2193, [#2199](https://github.com/digitaldrywood/detent/issues/2199) |
+| Shared product entry | Confirmed September 8: one public origin for sign-in, organization creation/joining/switching and organization billing; supersedes per-organization public origins without changing tenant storage | [#2340](https://github.com/digitaldrywood/detent/issues/2340), #2341, #2342, #2343 |
 | Pilot access | Recommend invitation-controlled pilot with configurable grants; eligibility and invitations remain operator decisions | #2194, #2195, #2199 |
 | Prices and free allowances | No approved prices, permanent free quantities, unlimited tier, or marginal-cost promise. Measure baseline and marginal cost before public commitments | #2195, [#2196](https://github.com/digitaldrywood/detent/issues/2196), #2199 |
 | Retention and deletion | Require explicit policies for collaboration, events, artifacts, and backups; durations, backup expiry, and revocation bounds remain unresolved | #2182, #2189, #2195, #2197 |
 
 An unresolved choice blocks only the implementation that needs it. It is not a
 dependency from this RFC back to that implementation. The first-release evidence
-gate is #2199; Stripe subscriptions (#2196), native diff rendering (#2192), and
-capacity-based routing refinements (#2198) are separate follow-ups.
+gate is #2199, including shared self-service hosting after #2342. The completed
+test billing delivery #2196 is reused by live-mode/customer provisioning #2343;
+paid activation is independent of the free pilot. Native diff rendering (#2192)
+and capacity-based routing refinements (#2198) remain separate work.
 
 ## Existing implementation and superseded assumptions
 
@@ -135,14 +141,18 @@ flowchart TB
 
 Each Hub process alone opens its database. Remote clients use authenticated HTTP;
 no SQLite file is shared over NFS/SMB, and no replicated writers are added. Hosted
-placement assigns one organization to one dedicated Hub process and SQLite file.
-The organization binding persists across restart; a different tenant, host origin,
-or local-mode reopen is rejected. A reserved empty Hub can create its WorkOS
-organization for its configured bootstrap user. The deployment directory routes
-organization switching to a fresh protected login on the owning Hub. Automatic
-placement and recovery remain deployment work in #2199. Tenant filters remain
-mandatory even with dedicated processes; customer collaboration databases are
-not pooled.
+placement retains one organization per dedicated Hub process and SQLite file.
+The September 8 correction separates that storage boundary from the public site:
+all customer application navigation uses `https://hub.detent.build`
+(external identity/payment screens return to this same origin). A shared entry service
+owns authentication, organization selection, provisioning and trusted routing.
+It does not open tenant databases. Tenant filters remain mandatory.
+
+The previously delivered reserved bootstrap user, immutable public-origin binding
+and cross-origin directory are migration inputs, not the self-service launch
+contract. Stable organization/provider bindings remain enforced; removing their
+checks globally is prohibited. See [identity migration](hosted-identity.md#existing-origin-migration)
+and [deployment examples](examples/hub/README.md).
 
 Preserve startup ownership locks, schema identity checks, WAL, foreign keys,
 busy-timeout handling, and fail-closed migration/version checks. Health becomes
@@ -151,6 +161,146 @@ backup path; do not copy live database/WAL files. Recovery starts a replacement
 only after the previous owner is fenced off. A reverse proxy may terminate TLS
 under the existing trusted-proxy contract. Self-hosted endpoints and identity
 adapters are configurable; no compiled-in Cloud login or billing requirement.
+
+## Shared-site control and tenant storage
+
+This September 8 design is proposed for review in #2340. #2341 implements shared
+routing, #2342 provisioning/lifecycle and #2343 customer billing. It does not
+claim those implementations or any live deployment are complete.
+
+```mermaid
+flowchart LR
+    Browser[Browser and customer runners] --> Edge[hub.detent.build TLS ingress]
+    Edge --> Entry[Shared entry and authenticated routing]
+    Entry --> Registry[(Metadata registry: one SQLite owner)]
+    Entry -->|Private authenticated requests for A| A[Tenant A Hub]
+    Entry -->|Private authenticated requests for B| B[Tenant B Hub]
+    A --> ADB[(A collaboration SQLite)]
+    B --> BDB[(B collaboration SQLite)]
+    Entry --> Identity[WorkOS identity]
+    Entry --> Billing[Optional Stripe billing]
+```
+
+The registry is a separate, single-owner local SQLite service at the baseline.
+Other processes access it through authenticated bounded APIs, never a shared
+mount. Registry records allow only stable Detent/provider user and organization
+IDs, verified identity fields needed for account administration, organization
+names for the chooser, membership status/revision mappings, provisioning intents
+and checkpoints, allocation IDs/private endpoints/generations, non-secret
+runner/service principal-to-organization routing references, tombstones,
+versioned plan references and Stripe account/environment/customer references.
+Authentication state and encrypted provider credentials needed for login live in
+a private auth store with explicit retention, not in operator reports. Minimal
+hashed invitation/operation references permit recovery; raw invitation tokens,
+session capabilities and secrets never enter the reporting registry schema.
+The entry service exclusively owns the auth store; other services use its private
+validated-session API for continuing authorization, not a second SQLite handle
+or copies of the operator WorkOS key. Restoring auth storage invalidates sessions.
+
+Project grants and all issues, comments, run history, policies, source/artifact
+references and artifact bytes remain in their owning tenant/service. The registry
+must not replicate collaboration content, arbitrary metadata maps, project
+search indexes, credential material or provider payloads. Counts/health use the
+existing bounded tenant metadata API. A membership mapping is a routing candidate,
+not authorization: current provider membership, local revocation and tenant
+project grants must still agree. Unknown, stale or conflicting bindings fail
+closed. Registry unavailability denies new routing/provisioning; already admitted
+work follows its existing lease and safe checkpoint rules, never another tenant.
+
+Only the entry service resolves an immutable organization ID to an allowlisted
+allocation endpoint. It validates the route and caller before routing, including
+current membership for browser authority and independent credential binding for
+machines/services. The tenant checks its persisted organization/allocation generation
+and project/operation authority. Neither client headers, Host, return URLs, JSON
+IDs nor provider metadata may supply an upstream address or filesystem path.
+Use private authenticated transport (mTLS between services, or an equivalently
+reviewed local Unix-socket identity) plus a short-lived signed request assertion.
+Bind the assertion to issuer, exact tenant audience, organization, allocation
+generation, actual/effective principal, session/credential ID, method, canonical
+path, body digest, issued/expiry times and replay identity. Expiry is at most
+30 seconds and never extends underlying authority. Tenants validate all fields;
+mutation retries use their existing idempotency journal after fresh authorization.
+Key rotation permits bounded overlap, and replayed transport assertions are denied.
+For SSE the assertion admits the connection only; ongoing session/membership and
+revocation checks authorize every frame and idle heartbeat independently.
+
+Ingress strips all inbound internal identity/forwarding headers and sets only
+trusted transport metadata. Backend listeners are private, firewall-restricted
+or socket-permission restricted, and reject missing/invalid assertions even on
+loopback. A public proxy-header-only bypass is never supported. Separate principals
+limit allocator, registry, reporter and tenant access; a reporter cannot mint
+browser or runner assertions. TLS termination alone is not proxy authentication.
+
+Browser sessions, CSRF, invitations, scoped routes, SSE and artifact grants are
+specified in [hosted identity](hosted-identity.md#shared-origin-route-and-session-contract).
+Runner and integration credentials remain independently authenticated and
+organization-bound; a browser session cannot confer machine authority.
+
+## Provisioning, recovery and capacity
+
+The durable lifecycle is `requested -> allocating -> ready`, with `failed` for a
+recoverable or terminal failure and `deleting -> deleted` for retirement. Record
+step, attempt count, next retry, bounded error code and allocation generation.
+The verified creator sees the same operation after refresh/login; failure never
+requires another organization ID. [Onboarding](cloud-onboarding.md#organization-provisioning-and-recovery)
+defines the checkpoints and user-visible outcomes.
+
+Before creating external resources, atomically reserve a finite organization
+slot, allocation concurrency, measured memory headroom and local disk/backup
+budget. Apply per-identity signup limits and operator eligibility policy; invitation
+control can bound a pilot without manually assigning each tenant's YAML. Reject
+new admission with a retryable capacity result before disrupting ready tenants.
+A durable reservation is tied to the intent and fenced allocator lease. After a
+crash, reconcile actual process/disk/provider state before releasing it or starting
+a replacement; an expired timer alone cannot prove a live owner is gone.
+
+Dedicated processes and separate databases are the baseline even when idle.
+Measure shared entry/registry overhead separately from each tenant's startup peak,
+idle and active RSS/CPU, file descriptors, connections/SSE, database/WAL growth,
+backup staging/retention, network and optional artifact relay. Capacity is bounded
+by the tightest measured memory, CPU, disk, descriptors and service limits with
+explicit reserve. Record workload, hardware, binary revision, concurrency,
+measurement window and calculation inputs in #2199/#2308. Publish the maximum
+admitted tenants and allocation refusal result, not an unmeasured cost promise.
+No existing snapshot of free RAM is an admission measurement.
+
+Process pooling or on-demand activation is a separate reviewed lifecycle design.
+It needs evidence for activation latency and stampedes, exclusive database
+ownership, idle eviction with SSE/leases/jobs, drain/fencing, crash/restart,
+webhook delivery, backup/restore, quota fairness and secret isolation. Do not
+silently pool collaboration databases or promise pennies to reduce memory cost.
+
+Backups pair a registry checkpoint and per-tenant owner-produced snapshots in a
+manifest with organization, allocation generation, schema, restore epoch and
+checksums. Quiesce provisioning/membership changes and relevant tenant writes for
+a consistent capture; do not claim cross-database atomic snapshots. Keep deletion
+and revocation ledgers outside rollbackable snapshots. Restore fenced/isolated,
+verify registry-to-tenant bindings, reconcile provider and billing references,
+reapply tombstones/revocations, rotate restored authority and runner credentials
+under the existing recovery contract, then publish a new allocation generation.
+Missing or conflicting records leave only the affected tenant unavailable;
+never guess ownership or serve a restored deleted organization.
+
+Organization deletion requires a current, non-impersonating owner, fresh identity
+verification and explicit confirmation. Mark `deleting`, deny new allocations,
+invitations and writes, revoke sessions/grants/enrollment, and drain or safely
+stop active work. Reconcile/cancel paid service before retiring its billing
+mapping. Fence the Hub and disable routing before the storage owner erases tenant
+content, artifacts under the selected custody contract, exports and backups under
+the approved retention policy. Keep minimal deletion/billing references needed
+to reject delayed events and restoration; IDs are never reused. Failed erasure
+stays visible as pending, not deleted. Customer-managed artifacts and external
+GitHub projections require their own authorized owner actions. Policy durations,
+retained billing records and recovery objectives must be published before launch;
+this RFC invents none and performs no erasure.
+
+Account deletion is distinct: revoke all that account's sessions and memberships
+across organizations and remove its grants without deleting other members' work.
+A last owner must transfer ownership to another verified member or complete
+organization deletion first. Preserve opaque authorship attribution as required
+by the tenant retention contract; remove account profile/provider identity only
+after membership cleanup and documented retention checks. Cross-service failures
+remain a resumable deletion operation. Re-creation never restores old grants.
 
 ## Stable identities and protocol compatibility
 
@@ -454,8 +604,10 @@ not reveal another organization's existence/content. Revalidate membership and
 runner authority on protected operations; define session/capability revocation
 bounds in the identity and artifact designs. Billing administration alone does
 not grant code credentials or privileged execution. Local/self-hosted auth stays
-pluggable and independent of WorkOS availability. Legacy Hub tokens need explicit
-overlap/rotation guidance, not silent invalidation.
+pluggable and independent of Detent Cloud. A customer-selected WorkOS adapter
+may depend on WorkOS; custom/local authentication requires no WorkOS connection.
+Authentication provider selection never enables hosted monetization. Legacy Hub
+tokens need explicit overlap/rotation guidance, not silent invalidation.
 
 ### Approved operational reporting and support access
 
@@ -471,9 +623,10 @@ project, runner and event counts, latest activity, database/WAL bytes, health,
 versioned plan assignment, scoped grant expiry, allowance/consumption and bounded
 request/artifact telemetry. Hosted mode initializes an operator-configurable pilot
 free plan; missing allowances inside a plan mean zero. See [hosted allowances](hosted-allowances.md)
-for enforcement, downgrade and reporting policy. Owner-only `GET /api/cloud/billing` exposes the same bounded usage
-for that Hub's organization. Organization administration cannot read project
-content without an explicit project grant.
+for enforcement, downgrade and reporting policy. The delivered owner-only
+`GET /api/cloud/billing` exposes bounded tenant usage; the shared site scopes it
+as `GET /api/cloud/organizations/ORG/billing`. Organization administration cannot
+read project content without an explicit project grant.
 
 Reports exclude issue/comment bodies and titles, repository names and paths,
 prompts, source, diffs, logs, artifact references and contents, credentials, and
@@ -730,7 +883,10 @@ services; the RFC author does not configure live customer accounts.
 
 | Scenario | Evidence required |
 | --- | --- |
-| Local and self-hosted portability | Run with Cloud, WorkOS and Stripe networking denied; local workflow and self-hosted auth/claims/recovery work without hosted entitlements |
+| Local and self-hosted portability | Run custom/local auth with Detent Cloud, WorkOS and Stripe networking denied; auth/claims/recovery work without hosted entitlements. Separately use a WorkOS fixture with Cloud/Stripe blocked and verify auth choice does not enable billing |
+| Shared-site journey | Execute the two-organization, concurrent-tab trace in [onboarding](cloud-onboarding.md#shared-site-acceptance-trace); all customer routes use hub.detent.build |
+| Shared ingress isolation | Spoof headers/paths, replay assertions, bypass the entry service, change allocation generation and reuse cross-tenant cursors/grants; deny before content or mutation |
+| Self-service recovery | Crash between each provider/registry/tenant commit, repeat creation concurrently, exhaust capacity, restore mismatched snapshots and replay deletion; no duplicate owner, tenant, customer or live SQLite writer |
 | Cloud native work | Hosted fixture login, scoped organization/project, full native issue/comment/dependency edits, customer runner execution and Change creation; no external issue identity required |
 | Compatibility coexistence | Native and GitHub-compatible projects run together; existing split/legacy/local/external-root configurations and GitHub-owned field semantics survive |
 | Tagged and pinned runners | A targets one stable Mac machine; B requires Linux tags. Competing incompatible runners cannot claim either; rename preserves pin; offline/no-match waits with no widened selector |
@@ -756,15 +912,15 @@ issues, especially #2191/#2192/#2194; no UI change is made by this RFC.
 
 ## Implementation order and dependency contract
 
-The following table is the current native blocked-by graph, verified against issue
-bodies on September 4, 2026: 19 issues including this RFC, 32 edges, acyclic.
+The following table and diagram preserve the original September 4 delivery graph
+(19 issues, 32 edges). They are historical ordering, not current open blockers.
 Dependencies are prerequisites, not a request to implement this whole table in
 the RFC. The two design reviews precede their consumers. Current tracker state
 and merged deliverables must be checked again before each implementation.
 
 | Issue and deliverable | Direct prerequisites |
 | --- | --- |
-| [#2181 — this architecture RFC](https://github.com/digitaldrywood/detent/issues/2181) | None |
+| [#2181 — original architecture RFC](https://github.com/digitaldrywood/detent/issues/2181) | None |
 | [#2182 — native issues, comments and history](https://github.com/digitaldrywood/detent/issues/2182) | #2181 |
 | [#2183 — repository workflow/policy compatibility](https://github.com/digitaldrywood/detent/issues/2183) | #2182 |
 | [#2184 — scoped enrollment and runner identity](https://github.com/digitaldrywood/detent/issues/2184) | #2182 |
@@ -820,14 +976,23 @@ flowchart TD
     Self --> Pilot
 ```
 
-Planning for this issue uses its requested Astra model. Configurable Sol/Astra
-selection belongs to [#2175](https://github.com/digitaldrywood/detent/issues/2175);
-this document neither duplicates that work nor changes live fleet defaults.
+The September 8 correction extends that completed work without reopening its
+completion records. #2181/#2193/#2194/#2196/#2197 are merged into `origin/main`.
+
+| Follow-up | Current scope and prerequisite |
+| --- | --- |
+| [#2340](https://github.com/digitaldrywood/detent/issues/2340) | This reviewed shared-site correction; no implementation prerequisite |
+| [#2341](https://github.com/digitaldrywood/detent/issues/2341) | Shared sessions, routing and origin migration after #2340 |
+| [#2342](https://github.com/digitaldrywood/detent/issues/2342) | Self-service provisioning, allocation and lifecycle after #2341 |
+| [#2343](https://github.com/digitaldrywood/detent/issues/2343) | Idempotent billing customers and explicit test/live separation after #2342; independent of free pilot |
+| [#2199](https://github.com/digitaldrywood/detent/issues/2199) | Retain prior pilot evidence and add shared-site journey after #2342 and its other current tracker dependencies |
+| [#2308](https://github.com/digitaldrywood/detent/issues/2308) | Human-owned capacity, costs, retention/recovery and operator evidence; not a prerequisite for this design |
 
 ## RFC validation and review checklist
 
 Validate relative links and anchors, GitHub issue links, and agreement between
-the dependency table, diagram, native dependency relations and issue-body lines.
+the historical dependency table/diagram and the current follow-up links. Check
+current native dependencies and issue-body lines before dependent implementation.
 Load the two YAML examples with `config.ParseProjectDefinition`; verify split
 local override, equivalent legacy layout and rejection of a mixed layout. Existing
 configuration compatibility tests are relevant evidence; parsing does not imply

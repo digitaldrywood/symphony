@@ -7,8 +7,15 @@ with explicit downtime for maintenance; there is no active-active replication,
 automatic failover, or high availability guarantee. Never share a live SQLite
 file over NFS/SMB, mount it into runners, or run a second owner against it.
 
-No WorkOS, Stripe, Detent Cloud account, `cloud.detent.build` callback, or paid
-infrastructure is required. The native-only example disables GitHub transport.
+Self-hosted Detent is free. No WorkOS, Stripe, Detent Cloud account,
+`hub.detent.build` callback, Detent subscription or purchased infrastructure is
+required. Operators choose authentication, including WorkOS/custom/generic/local
+options; selecting WorkOS must never enable Detent billing. An external auth
+provider may have its own connectivity/account requirements. The currently
+supported Hub bearer deployment below has no such dependency. Shared-site mode
+and self-hosted WorkOS configuration separation are design targets documented in
+[the deployment examples](examples/hub/README.md), not new flags in this runbook.
+The native-only example disables GitHub transport.
 Ordinary local Detent remains supported separately: omit `client.hub_url` and
 run `detent` using local configuration and the selected local/tracker backend.
 Durable artifacts are optional in both modes; local-only artifact availability
@@ -23,7 +30,9 @@ recovery. Linux packages install `/usr/bin/detent`; archive installations must
 install the executable at that path or adjust the example unit. Do not use an
 unversioned download URL for an upgrade. The release includes this runbook and
 the [Hub unit](examples/hub/detent-hub.service) and
-[Caddy example](examples/hub/Caddyfile); equivalent files are in the same tagged
+[Caddy example](examples/hub/Caddyfile). These examples deploy a customer-operated
+Hub, not the shared hub.detent.build entry/registry. See the
+[deployment boundary](examples/hub/README.md); equivalent files are in the same tagged
 source checkout. Native package documentation lives under `/usr/share/doc/detent/docs`.
 
 On a clean Linux host with systemd, install the selected Detent package and a

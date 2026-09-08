@@ -509,31 +509,40 @@ func (w *FileWatcher[T]) reload(ctx context.Context) FileUpdate[T] {
 }
 
 func (w *FileWatcher[T]) load(ctx context.Context) (T, error) {
+	if err := ctx.Err(); err != nil {
+		var zero T
+		return zero, err
+	}
 	value, err := w.loader(w.path)
 	if err == nil {
 		return value, nil
 	}
-	lastErr := err
-
 	deadline := time.NewTimer(w.debounce)
 	defer deadline.Stop()
 	retry := time.NewTicker(retryInterval(w.debounce))
 	defer retry.Stop()
 
 	for {
+		finalAttempt := false
 		select {
 		case <-ctx.Done():
 			var zero T
 			return zero, ctx.Err()
 		case <-deadline.C:
-			var zero T
-			return zero, lastErr
+			finalAttempt = true
 		case <-retry.C:
-			value, err := w.loader(w.path)
-			if err == nil {
-				return value, nil
-			}
-			lastErr = err
+		}
+		if err := ctx.Err(); err != nil {
+			var zero T
+			return zero, err
+		}
+		value, err := w.loader(w.path)
+		if err == nil {
+			return value, nil
+		}
+		if finalAttempt {
+			var zero T
+			return zero, err
 		}
 	}
 }

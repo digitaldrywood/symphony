@@ -38,6 +38,8 @@ templ HostedPage(data HostedPageData) {
 						@hostedOrganization(data)
 					case "project":
 						@hostedProject(data)
+					case "issue", "change", "changes":
+						@hostedWork(data)
 					case "support":
 						@hostedSupport(data)
 					default:
@@ -269,6 +271,7 @@ templ hostedProject(data HostedPageData) {
  }
 	<section class="space-y-4 rounded-card border border-line bg-surface p-6">
 		<h2 class="text-lg font-semibold">Project work</h2>
+		<a href={ templ.SafeURL(hostedProjectPath(data.SelectedProject) + "/changes") } class="inline-flex min-h-11 items-center text-sm text-accent">Changes</a>
 		if len(data.Issues) == 0 {
 			<p class="text-sm text-sec">No work items in this project yet.</p>
 		} else {
@@ -276,7 +279,7 @@ templ hostedProject(data HostedPageData) {
 				for _, issue := range data.Issues {
 					if string(issue.OrganizationID) == data.OrganizationID && string(issue.ProjectID) == data.SelectedProject {
 						<li class="py-3">
-							<a href={ templ.SafeURL(hostedIssuePath(data.OrganizationID, data.SelectedProject, issue.WorkItemID)) } class="flex min-h-11 flex-col justify-center gap-1 rounded-card text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
+							<a href={ templ.SafeURL(hostedIssuePath(data.SelectedProject, issue.WorkItemID)) } class="flex min-h-11 flex-col justify-center gap-1 rounded-card text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent">
 								<span class="break-words font-medium text-accent">{ issue.Title }</span>
 								<span class="text-xs text-sec">{ issue.State }</span>
 							</a>

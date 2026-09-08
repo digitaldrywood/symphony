@@ -1,0 +1,125 @@
+package templates
+
+import "strconv"
+
+templ hostedWork(data HostedPageData) {
+	<div class="min-w-0 space-y-5 break-words [overflow-wrap:anywhere]" data-hosted-work data-api={ data.SetupAPI } data-csrf={ data.CSRF }>
+		<nav aria-label="Project work navigation" class="flex flex-wrap gap-x-5 gap-y-2 text-sm text-accent">
+			<a class="inline-flex min-h-11 items-center" href={ templ.SafeURL(hostedProjectPath(data.SelectedProject)) }>Project work</a>
+			<a class="inline-flex min-h-11 items-center" href={ templ.SafeURL(hostedProjectPath(data.SelectedProject) + "/changes") }>Changes</a>
+			if data.Issue != nil {
+				<a class="inline-flex min-h-11 items-center" href={ templ.SafeURL(NativeIssuePath(data.SelectedProject, data.Issue.WorkItemID)) }>Issue</a>
+			}
+		</nav>
+		if data.Mode == "changes" {
+			<section class="space-y-3 rounded-card border border-line bg-surface p-4">
+				<h2 class="text-lg font-semibold">Changes</h2>
+				if len(data.Changes) == 0 {
+					<p class="text-sm text-sec">No Changes in this project yet. Open an issue to start one.</p>
+				}
+				for _, change := range data.Changes {
+					<a class="flex min-h-11 items-center text-sm text-accent" href={ templ.SafeURL(ChangePath(data.SelectedProject, change.WorkItemID, change.ID)) }>{ change.Title }</a>
+				}
+				if data.NextChanges != "" {
+					<a class="inline-flex min-h-11 items-center rounded-card border border-line px-3 text-sm text-accent" href={ templ.SafeURL(data.NextChanges) }>Older Changes</a>
+				}
+			</section>
+		} else if data.Change != nil {
+			@hostedChange(data)
+		} else if data.Issue != nil {
+			<section class="space-y-3 rounded-card border border-line bg-surface p-4">
+				<h2 class="text-lg font-semibold">{ data.Issue.Title }</h2>
+				<p class="text-sm text-sec">Issue #{ strconv.Itoa(data.Issue.Number) } · { data.Issue.State }</p>
+				<div class="whitespace-pre-wrap text-sm">{ data.Issue.Body }</div>
+			</section>
+			<nav aria-label="Issue sections" class="flex flex-wrap gap-4 text-sm text-accent">
+				<a href="#discussion" class="inline-flex min-h-11 items-center">Discussion</a>
+				<a href="#runs" class="inline-flex min-h-11 items-center">Run history</a>
+				<a href="#history" class="inline-flex min-h-11 items-center">Activity</a>
+				<a href="#changes" class="inline-flex min-h-11 items-center">Issue Changes</a>
+				<a href="#artifacts" class="inline-flex min-h-11 items-center">Artifacts</a>
+			</nav>
+			@hostedWorkCollection("discussion", "Discussion", "comments")
+			if data.CanWriteProject {
+				@hostedWorkForm(data, "comment", "Add comment", false)
+			}
+			@hostedWorkCollection("runs", "Run history", "attempts")
+			@hostedWorkCollection("history", "Activity", "history")
+			@hostedWorkCollection("changes", "Issue Changes", "changes")
+			if data.CanWriteProject {
+				@hostedWorkForm(data, "change", "Open Change", true)
+			}
+			@hostedWorkCollection("artifacts", "Artifacts", "artifacts")
+		}
+	</div>
+	if data.Mode != "changes" {
+		<script src="/static/js/hosted-work.js" defer></script>
+		<script src="/static/js/artifacts.js" defer></script>
+	}
+}
+
+templ hostedWorkCollection(id, title, source string) {
+	<section id={ id } class="min-w-0 space-y-3 rounded-card border border-line bg-surface p-4" data-work-collection={ source }>
+		<h2 class="text-lg font-semibold">{ title }</h2>
+		<div data-work-items class="space-y-4 text-sm"></div>
+		<p role="status" data-work-status class="text-sm text-sec">Loading…</p>
+		<button type="button" data-work-more class="min-h-11 rounded-card border border-line px-3 text-sm text-accent">Load more</button>
+	</section>
+}
+
+templ hostedWorkForm(data HostedPageData, action, label string, title bool) {
+	<form method="post" data-work-action={ action } class="space-y-3 rounded-card border border-line bg-surface p-4">
+		@hostedCSRF(data.CSRF)
+		if title {
+			<label class="block space-y-2 text-sm font-medium"><span>Change title</span><input name="title" required maxlength="512" class="min-h-11 w-full min-w-0 rounded-card border border-line bg-page px-3"/></label>
+		}
+		<label class="block space-y-2 text-sm font-medium"><span>{ label }</span><textarea name="body" required rows="4" maxlength="65536" class="w-full min-w-0 rounded-card border border-line bg-page p-3"></textarea></label>
+		<button type="submit" class="min-h-11 rounded-card border border-line px-4 text-sm font-medium text-accent">{ label }</button>
+		<p role="status" data-work-result class="text-sm text-sec"></p>
+	</form>
+}
+
+templ hostedChange(data HostedPageData) {
+	if data.Change != nil {
+		<section class="space-y-3 rounded-card border border-line bg-surface p-4" data-change-id={ data.Change.Change.ID }>
+			<h2 class="text-lg font-semibold">{ data.Change.Change.Title }</h2>
+			<p class="text-sm text-sec">Change Request · { changeStatusLabel(data.Change.Summary.Status) }</p>
+			<div class="whitespace-pre-wrap text-sm">{ data.Change.Change.Body }</div>
+			<p class="text-sm">Review: { changeStatusLabel(data.Change.Summary.NativeReview) } · Checks: { changeStatusLabel(data.Change.Summary.Checks) }</p>
+			for _, message := range data.Change.Summary.Messages {
+				<p class="text-sm text-sec">{ message }</p>
+			}
+		</section>
+		<section class="space-y-3 rounded-card border border-line bg-surface p-4">
+			<h2 class="text-lg font-semibold">Versions</h2>
+			if len(data.Change.Versions) == 0 {
+				<p class="text-sm text-sec">No published versions yet.</p>
+			}
+			for _, version := range data.Change.Versions {
+				<article class="space-y-2 border-t border-line pt-3 text-sm">
+					<h3 class="font-semibold">Version { strconv.FormatInt(version.Number, 10) }</h3>
+					<p>Repository: { version.Repository }</p>
+					<p>Base: <span class="font-mono">{ version.BaseSHA }</span></p>
+					<p>Head: <span class="font-mono">{ version.HeadSHA }</span></p>
+					<p>Run: { version.RunID } · Attempt: { version.AttemptID }</p>
+				</article>
+			}
+		</section>
+		<section class="space-y-3 rounded-card border border-line bg-surface p-4">
+			<h2 class="text-lg font-semibold">Discussion</h2>
+			if len(data.Change.Discussion) == 0 {
+				<p class="text-sm text-sec">No comments yet.</p>
+			}
+			for _, comment := range data.Change.Discussion {
+				<article class="space-y-2 border-t border-line pt-3 text-sm">
+					<p class="text-xs text-sec">{ comment.Actor.PrincipalID } · { comment.CreatedAt.Format("2006-01-02 15:04 MST") }</p>
+					<div class="whitespace-pre-wrap">{ comment.Body }</div>
+				</article>
+			}
+		</section>
+		if data.CanWriteProject {
+			@hostedWorkForm(data, "discussion", "Add Change comment", false)
+		}
+		@hostedWorkCollection("artifacts", "Artifacts", "artifacts")
+	}
+}

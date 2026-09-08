@@ -9,8 +9,10 @@ import (
 	"net"
 	"net/http"
 	"net/http/httptest"
+	"net/http/httptrace"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -160,26 +162,201 @@ func TestHTTPUploadStorageOutage(t *testing.T) {
 	}
 }
 
+func remoteHubTestClient(t *testing.T, server *httptest.Server) *http.Client {
+	t.Helper()
+	client := server.Client()
+	client.Timeout = 10 * time.Second
+	client.CheckRedirect = func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }
+	return client
+}
+
+func remoteHubTestOperations(h *RemoteHub) []struct {
+	name string
+	run  func(context.Context) error
+} {
+	scope := Scope{OrganizationID: h.OrganizationID, ProjectID: h.ProjectID}
+	return []struct {
+		name string
+		run  func(context.Context) error
+	}{
+		{"Upload", func(ctx context.Context) error { return h.Upload(ctx, "worker", Reservation{Scope: scope}) }},
+		{"Read", func(ctx context.Context) error { return h.Read(ctx, ReadAuthorization{Token: "member"}) }},
+		{"Publish", func(ctx context.Context) error { return h.Publish(ctx, Reference{Scope: scope}) }},
+	}
+}
+
+func remoteHubTransportFailure(err error) string {
+	if err == nil {
+		return "none"
+	}
+	if errors.Is(err, context.Canceled) {
+		return "canceled"
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return "deadline"
+	}
+	if strings.Contains(err.Error(), "http: CloseIdleConnections called") {
+		return "idle_connections_closed"
+	}
+	return "transport_error"
+}
+
 func TestRemoteHubAuthorizationFailsClosed(t *testing.T) {
 	t.Parallel()
 	for _, test := range []struct {
+		name   string
 		status int
 		want   error
-	}{{204, nil}, {403, ErrDenied}, {404, ErrDenied}, {500, ErrAuthorization}, {302, ErrAuthorization}} {
-		t.Run(strconv.Itoa(test.status), func(t *testing.T) {
+	}{
+		{"204", http.StatusNoContent, nil},
+		{"401", http.StatusUnauthorized, ErrDenied},
+		{"403", http.StatusForbidden, ErrDenied},
+		{"404", http.StatusNotFound, ErrDenied},
+		{"500", http.StatusInternalServerError, ErrAuthorization},
+		{"302", http.StatusFound, ErrAuthorization},
+		{"outage", 0, ErrAuthorization},
+		{"malformed origin", 0, ErrAuthorization},
+		{"canceled", 0, ErrAuthorization},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			var redirectRequests atomic.Int64
 			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				if r.URL.Path == "/redirect" {
+					redirectRequests.Add(1)
+					w.WriteHeader(http.StatusNoContent)
+					return
+				}
 				if r.Header.Get("Authorization") == "" {
 					t.Error("missing auth")
 				}
+				if test.status == http.StatusFound {
+					w.Header().Set("Location", "/redirect")
+				}
+				if test.status == 0 {
+					t.Error("unexpected request for unavailable authorization")
+					w.WriteHeader(http.StatusNoContent)
+					return
+				}
 				w.WriteHeader(test.status)
 			}))
-			defer server.Close()
-			h := &RemoteHub{Origin: server.URL, OrganizationID: NewID("org"), ProjectID: NewID("prj"), PublisherToken: func() string { return "publisher" }}
-			r := Reservation{Scope: Scope{OrganizationID: h.OrganizationID, ProjectID: h.ProjectID}}
-			for _, err := range []error{h.Upload(t.Context(), "worker", r), h.Read(t.Context(), ReadAuthorization{Token: "member"}), h.Publish(t.Context(), Reference{Scope: r.Scope})} {
-				if !errors.Is(err, test.want) {
-					t.Fatal(err)
-				}
+			t.Cleanup(server.Close)
+			client := remoteHubTestClient(t, server)
+			h := &RemoteHub{Origin: server.URL, OrganizationID: NewID("org"), ProjectID: NewID("prj"), PublisherToken: func() string { return "publisher" }, Client: client}
+			ctx := t.Context()
+			switch test.name {
+			case "outage":
+				client.Transport = roundTripFunc(func(*http.Request) (*http.Response, error) { return nil, io.ErrUnexpectedEOF })
+			case "malformed origin":
+				h.Origin = "://invalid"
+			case "canceled":
+				var cancel context.CancelFunc
+				ctx, cancel = context.WithCancel(ctx)
+				cancel()
+			}
+			transport := client.Transport
+			for _, op := range remoteHubTestOperations(h) {
+				t.Run(op.name, func(t *testing.T) {
+					status := 0
+					var transportErr error
+					client.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+						response, err := transport.RoundTrip(req)
+						transportErr = err
+						if response != nil {
+							status = response.StatusCode
+						}
+						return response, err
+					})
+					defer func() { client.Transport = transport }()
+					if err := op.run(ctx); !errors.Is(err, test.want) {
+						t.Fatalf("authorization error = %v, want %v; response_status=%d transport_failure=%s error_type=%T", err, test.want, status, remoteHubTransportFailure(transportErr), transportErr)
+					}
+				})
+			}
+			if redirectRequests.Load() != 0 {
+				t.Fatal("authorization redirect followed")
+			}
+		})
+	}
+}
+
+func TestRemoteHubAuthorizationSurvivesServerCleanup(t *testing.T) {
+	for _, test := range []struct {
+		name   string
+		shared bool
+		want   error
+	}{
+		{"shared default reproduces failure", true, ErrAuthorization},
+		{"fixture owns transport", false, nil},
+	} {
+		t.Run(test.name, func(t *testing.T) {
+			h := &RemoteHub{OrganizationID: NewID("org"), ProjectID: NewID("prj"), PublisherToken: func() string { return "publisher" }}
+			for _, op := range remoteHubTestOperations(h) {
+				t.Run(op.name, func(t *testing.T) {
+					server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) }))
+					t.Cleanup(server.Close)
+					cleanup := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+					t.Cleanup(cleanup.Close)
+					h.Origin = server.URL
+					h.Client = remoteHubTestClient(t, server)
+					fixtureTransport := h.Client.Transport
+					transport := fixtureTransport
+					if transport == nil || transport == http.DefaultTransport || transport == cleanup.Client().Transport {
+						t.Fatal("fixture must own a dedicated transport")
+					}
+					if test.shared {
+						transport = http.DefaultTransport
+					}
+					var transportErr error
+					h.Client.Transport = roundTripFunc(func(req *http.Request) (*http.Response, error) {
+						response, err := transport.RoundTrip(req)
+						transportErr = err
+						return response, err
+					})
+					t.Cleanup(func() { h.Client.Transport = fixtureTransport })
+					ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+					defer cancel()
+					idle := make(chan error, 1)
+					release := make(chan struct{})
+					resume := sync.OnceFunc(func() { close(release) })
+					defer resume()
+					traceDone := make(chan struct{})
+					ctx = httptrace.WithClientTrace(ctx, &httptrace.ClientTrace{PutIdleConn: func(err error) {
+						defer close(traceDone)
+						idle <- err
+						select {
+						case <-release:
+						case <-ctx.Done():
+						}
+					}})
+					result := make(chan error, 1)
+					requestDone := make(chan struct{})
+					t.Cleanup(func() { <-requestDone })
+					go func() {
+						defer close(requestDone)
+						result <- op.run(ctx)
+					}()
+					select {
+					case err := <-idle:
+						if err != nil {
+							t.Fatalf("idle transition failed: %s", remoteHubTransportFailure(err))
+						}
+					case <-ctx.Done():
+						t.Fatal("response did not reach idle transition")
+					}
+					cleanup.Close()
+					if !test.shared {
+						resume()
+					}
+					err := <-result
+					resume()
+					<-traceDone
+					if !errors.Is(err, test.want) {
+						t.Fatalf("authorization error = %v, want %v; transport_failure=%s error_type=%T", err, test.want, remoteHubTransportFailure(transportErr), transportErr)
+					}
+					if test.shared && remoteHubTransportFailure(transportErr) != "idle_connections_closed" {
+						t.Fatalf("transport failure = %s, want idle_connections_closed", remoteHubTransportFailure(transportErr))
+					}
+				})
 			}
 		})
 	}

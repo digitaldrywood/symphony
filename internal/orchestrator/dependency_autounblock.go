@@ -136,6 +136,10 @@ func (o *Orchestrator) autoUnblockDependencyIssues(
 		if len(hydrated.BlockedBy) == 0 {
 			continue
 		}
+		if reason := o.trackerRecoveryParkHold(ctx, hydrated); reason != "" {
+			o.logDependencyAutoUnblockDecision(hydrated, "hold", reason, nil, "")
+			continue
+		}
 		o.logDependencyProseOnly(hydrated)
 		blockers := o.resolveDependencyBlockers(ctx, hydrated)
 		workpadBlockers := dependencyBlockersMatchingRefs(blockers, workpadRefs)

@@ -638,8 +638,8 @@ func TestHandleRunResultReconcilesDeliverableRecoveryExactHead(t *testing.T) {
 				if !strings.Contains(blocked.Reason, branch) || !strings.Contains(blocked.Reason, tt.wantReason) {
 					t.Fatalf("Blocked[%q].Reason = %q, want branch and %q", issue.ID, blocked.Reason, tt.wantReason)
 				}
-				if len(tracker.comments) != 1 || !strings.Contains(tracker.comments[0], "local commits ahead: ") ||
-					!strings.Contains(tracker.comments[0], "remote branch exists: ") || !strings.Contains(tracker.comments[0], tt.wantReason) {
+				if len(tracker.comments) != 2 || !strings.Contains(tracker.comments[1], "local commits ahead: ") ||
+					!strings.Contains(tracker.comments[1], "remote branch exists: ") || !strings.Contains(tracker.comments[1], tt.wantReason) {
 					t.Fatalf("comments = %#v, want delivery diagnostics containing %q", tracker.comments, tt.wantReason)
 				}
 				if got := tracker.transitionStates(); !slices.Equal(got, []string{blockedStatusState}) {

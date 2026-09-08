@@ -225,6 +225,7 @@ func (o *Orchestrator) updateIssueStateByIDWithMetadataMode(
 		issue.ID = issueID
 	}
 	o.recordLaneTransition(ctx, issue, targetState, at, reason, metadata)
+	o.publishTrackerRecoveryPark(ctx, issueID, targetState, metadata)
 	if normalizeState(targetState) == normalizeState(autoPromoteReworkState) && normalizeState(issue.State) != normalizeState(targetState) {
 		o.captureReworkLesson(issue, at, reason, metadata.LessonEvidence)
 	}

@@ -228,7 +228,10 @@ func TestSnapshotEnrichmentHistoryInvalidation(t *testing.T) {
 		want     int
 	}{
 		{name: "identical snapshot", want: 1},
+		{name: "earlier request clock sample", elapsed: -time.Nanosecond, want: 1},
+		{name: "earlier request with corrected history", elapsed: -time.Nanosecond, revision: 1, want: 2},
 		{name: "corrected history", revision: 1, want: 2},
+		{name: "before freshness deadline", elapsed: workflowHistoryFreshness - time.Nanosecond, want: 1},
 		{name: "bounded freshness", elapsed: workflowHistoryFreshness, want: 2},
 	} {
 		t.Run(tt.name, func(t *testing.T) {

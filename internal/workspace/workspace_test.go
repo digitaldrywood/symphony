@@ -2792,3 +2792,107 @@ func skipWindows(t *testing.T) {
 		t.Skip("requires a UNIX test environment")
 	}
 }
+
+func TestLocalGitPrepareMergeValidatesResolvedHead(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		before     string
+		gate       string
+		wantError  string
+		wantPushed bool
+	}{
+		{name: "resolved committed head", wantPushed: true},
+		{name: "already pushed head", before: "push"},
+		{name: "gate failure", gate: "git detent-invalid-gate", wantError: "gate failed"},
+		{name: "dirty resolution", before: "dirty", wantError: "not source-clean"},
+		{name: "stale target", before: "base", wantError: "does not contain"},
+		{name: "replaced remote", before: "remote", wantError: "remote branch changed before"},
+		{name: "gate changes head", gate: "git commit --allow-empty -m changed", wantError: "changed during"},
+		{name: "gate dirties source", gate: "git rm README.md", wantError: "not source-clean"},
+		{name: "gate changes branch", gate: "git checkout -b other", wantError: "owned workspace branch"},
+		{name: "gate changes target", gate: "base", wantError: "does not contain"},
+		{name: "gate replaces remote", gate: "remote", wantError: "changed during"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			source := initSourceRepo(t)
+			remote := initBareRemote(t)
+			runGit(t, source, "remote", "add", "origin", remote)
+			runGit(t, source, "push", "-u", "origin", "main")
+			backend, err := NewBackend(KindLocalGit, LocalGitOptions{
+				Root: filepath.Join(t.TempDir(), "workspaces"), SourceRoot: source, AutoBranch: true,
+			})
+			if err != nil {
+				t.Fatal(err)
+			}
+			issue := Issue{Identifier: "DD-RESOLVED"}
+			info, err := backend.Create(t.Context(), issue)
+			if err != nil {
+				t.Fatal(err)
+			}
+			runGit(t, info.Path, "push", "origin", "HEAD:"+info.Branch)
+			expectedRemote := strings.TrimSpace(runGit(t, info.Path, "rev-parse", "HEAD"))
+			runGit(t, info.Path, "commit", "--allow-empty", "-m", "resolved")
+			head := strings.TrimSpace(runGit(t, info.Path, "rev-parse", "HEAD"))
+			mutateRemote := func(branch string) {
+				runGit(t, source, "commit", "--allow-empty", "-m", "external")
+				runGit(t, source, "push", "origin", "HEAD:"+branch)
+			}
+			switch tt.before {
+			case "push":
+				runGit(t, info.Path, "push", "origin", "HEAD:"+info.Branch)
+			case "dirty":
+				runGit(t, info.Path, "rm", "README.md")
+			case "base":
+				mutateRemote("main")
+			case "remote":
+				mutateRemote(info.Branch)
+			}
+			remoteBefore := strings.TrimSpace(runGit(t, source, "ls-remote", "origin", "refs/heads/"+info.Branch))
+			command := "git config detent.validation passed"
+			switch tt.gate {
+			case "base", "remote":
+				branch := "main"
+				if tt.gate == "remote" {
+					branch = info.Branch
+				}
+				relativeSource, err := filepath.Rel(info.Path, source)
+				if err != nil {
+					t.Fatal(err)
+				}
+				relativeSource = filepath.ToSlash(relativeSource)
+				command += " && git -C " + relativeSource + " commit --allow-empty -m external && git -C " + relativeSource + " push origin HEAD:" + branch
+			default:
+				if tt.gate != "" {
+					command += " && " + tt.gate
+				}
+			}
+			result, err := backend.(MergePreparer).PrepareMerge(t.Context(), info, issue, MergePrepareOptions{
+				TargetBranch: "main", VerifyResolution: true, ValidationCommand: command, ExpectedRemoteHead: expectedRemote,
+			})
+			if tt.wantError != "" {
+				if err == nil || !strings.Contains(err.Error(), tt.wantError) {
+					t.Fatalf("PrepareMerge() = %#v, %v; want error containing %q", result, err, tt.wantError)
+				}
+				if tt.gate != "remote" {
+					if got := strings.TrimSpace(runGit(t, source, "ls-remote", "origin", "refs/heads/"+info.Branch)); got != remoteBefore {
+						t.Fatalf("remote changed on failed validation: %q, want %q", got, remoteBefore)
+					}
+				}
+				return
+			}
+			if err != nil || result.Status != MergePrepareStatusClean || result.HeadSHA != head || result.HeadChanged != tt.wantPushed {
+				t.Fatalf("PrepareMerge() = %#v, %v; want validated head %s, pushed %t", result, err, head, tt.wantPushed)
+			}
+			if got := strings.TrimSpace(runGit(t, info.Path, "config", "--get", "detent.validation")); got != "passed" {
+				t.Fatalf("local gate evidence = %q", got)
+			}
+			if got := strings.Fields(runGit(t, source, "ls-remote", "origin", "refs/heads/"+info.Branch))[0]; got != head {
+				t.Fatalf("remote head = %s, want %s", got, head)
+			}
+		})
+	}
+}

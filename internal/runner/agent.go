@@ -699,6 +699,7 @@ func mergePrecheckFromWorkspace(precheck workspace.MergePrepareResult) MergePrec
 		Message:     precheck.Message,
 		DiffStats:   diffStatsFromWorkspace(precheck.DiffStat),
 		HeadChanged: precheck.HeadChanged,
+		HeadSHA:     precheck.HeadSHA,
 	}
 }
 
@@ -714,12 +715,14 @@ func mergeFallbackResult(output string) string {
 	return RunOutputMergeFallbackRework
 }
 
+const mergeFallbackValidationTimeout = time.Hour
+
 func (r *Runner) verifyMergeFallback(
 	ctx context.Context,
 	backend workspace.Backend,
 	info workspace.Info,
 	issue workspace.Issue,
-	targetBranch string,
+	opts workspace.MergePrepareOptions,
 	result RunResult,
 ) (RunResult, error) {
 	result.MergeFallbackFindings = strings.TrimSpace(result.Output)
@@ -732,20 +735,29 @@ func (r *Runner) verifyMergeFallback(
 		result.Output = RunOutputMergeFallbackRework
 		return result, nil
 	}
-	precheck, err := preparer.PrepareMerge(ctx, info, issue, workspace.MergePrepareOptions{TargetBranch: strings.TrimSpace(targetBranch)})
+	validationCtx, cancel := context.WithTimeout(ctx, mergeFallbackValidationTimeout)
+	defer cancel()
+	precheck, err := preparer.PrepareMerge(validationCtx, info, issue, opts)
 	if err != nil {
-		if cause := context.Cause(ctx); errors.Is(cause, ErrMergeFallbackBudgetExceeded) {
-			err = errors.Join(cause, err)
+		if ctx.Err() != nil {
+			return result, fmt.Errorf("verify merge fallback: %w", errors.Join(ctx.Err(), err))
 		}
-		return result, fmt.Errorf("verify merge fallback: %w", err)
+		if !errors.Is(err, workspace.ErrMergeResolutionInvalid) && !errors.Is(validationCtx.Err(), context.DeadlineExceeded) {
+			return result, fmt.Errorf("verify merge fallback: %w", err)
+		}
+		result.Output = RunOutputMergeFallbackRework
+		result.MergeFallbackFindings += "\nDeterministic validation failed: " + err.Error()
+		return result, nil
 	}
 	converted := mergePrecheckFromWorkspace(precheck)
 	result.MergePrecheck = &converted
-	if precheck.Status != workspace.MergePrepareStatusClean {
+	if precheck.Status != workspace.MergePrepareStatusClean || strings.TrimSpace(precheck.HeadSHA) == "" {
+		result.MergeFallbackFindings += fmt.Sprintf("\nDeterministic verification returned status %q, head %q: %s", precheck.Status, precheck.HeadSHA, precheck.Message)
 		result.Output = RunOutputMergeFallbackRework
 		return result, nil
 	}
 	result.PullRequestHeadPushed = result.PullRequestHeadPushed || precheck.HeadChanged
+	result.ForgeWriteCompleted = true
 	return result, nil
 }
 
@@ -1898,7 +1910,17 @@ func (r *Runner) run(ctx context.Context, req RunRequest) (RunResult, error) {
 		if req.Issue.PullRequest != nil {
 			targetBranch = req.Issue.PullRequest.BaseRef
 		}
-		result, turnErr = r.verifyMergeFallback(sessionCtx, runWorkspace, info, workspaceIssue, targetBranch, result)
+		cancelSession()
+		expectedRemoteHead := ""
+		if req.Issue.PullRequest != nil {
+			expectedRemoteHead = req.Issue.PullRequest.HeadSHA
+		}
+		result, turnErr = r.verifyMergeFallback(ctx, runWorkspace, info, workspaceIssue, workspace.MergePrepareOptions{
+			TargetBranch:       targetBranch,
+			VerifyResolution:   true,
+			ValidationCommand:  gate.Effective(workflow.Config.Gate).Run,
+			ExpectedRemoteHead: expectedRemoteHead,
+		}, result)
 		if turnErr != nil {
 			result.FinalState = finalStateForTurnError(turnErr)
 		}

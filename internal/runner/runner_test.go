@@ -3726,6 +3726,7 @@ func TestRunnerMergeModeConflictUsesFocusedPrompt(t *testing.T) {
 		"Deterministic merge pre-check status: conflict",
 		"CONFLICT (content): Merge conflict in README.md",
 		"Do not perform general code review",
+		"do not run the local gate, push, watch CI, or wait for checks",
 		"DETENT_MERGE_FALLBACK: resolved",
 		"DETENT_MERGE_FALLBACK: rework",
 		"https://github.com/digitaldrywood/detent/pull/900",
@@ -3759,10 +3760,17 @@ func TestRunnerMergeFallbackOutcomes(t *testing.T) {
 		{
 			name:             "resolved conflict is deterministically reverified",
 			agentOutput:      "Resolved the README conflict and passed make check.\nDETENT_MERGE_FALLBACK: resolved",
-			verification:     workspace.MergePrepareResult{Status: workspace.MergePrepareStatusClean, HeadChanged: true},
+			verification:     workspace.MergePrepareResult{Status: workspace.MergePrepareStatusClean, HeadChanged: true, HeadSHA: "validated-head"},
 			wantOutput:       RunOutputMergeFallbackResolved,
 			wantPrepareCalls: 2,
 			wantHeadPushed:   true,
+		},
+		{
+			name:             "clean claim without verified head exits to rework",
+			agentOutput:      "DETENT_MERGE_FALLBACK: resolved",
+			verification:     workspace.MergePrepareResult{Status: workspace.MergePrepareStatusClean},
+			wantOutput:       RunOutputMergeFallbackRework,
+			wantPrepareCalls: 2,
 		},
 		{
 			name:             "review finding exits to rework without investigation",
@@ -3830,7 +3838,7 @@ func TestRunnerMergeFallbackOutcomes(t *testing.T) {
 			if result.Output != tt.wantOutput {
 				t.Fatalf("Run().Output = %q, want %q", result.Output, tt.wantOutput)
 			}
-			if result.MergeFallbackFindings != tt.agentOutput {
+			if !strings.HasPrefix(result.MergeFallbackFindings, tt.agentOutput) {
 				t.Fatalf("MergeFallbackFindings = %q, want agent output", result.MergeFallbackFindings)
 			}
 			if workspaceBackend.prepareCalls != tt.wantPrepareCalls {
@@ -3838,6 +3846,9 @@ func TestRunnerMergeFallbackOutcomes(t *testing.T) {
 			}
 			if result.PullRequestHeadPushed != tt.wantHeadPushed {
 				t.Fatalf("PullRequestHeadPushed = %t, want %t", result.PullRequestHeadPushed, tt.wantHeadPushed)
+			}
+			if tt.wantPrepareCalls == 2 && (!workspaceBackend.prepareOptions.VerifyResolution || workspaceBackend.prepareOptions.ValidationCommand != "make check") {
+				t.Fatalf("verification options = %#v, want trusted resolution validation", workspaceBackend.prepareOptions)
 			}
 			if workspaceBackend.prepareOptions.TargetBranch != "main" {
 				t.Fatalf("verification target branch = %q, want main", workspaceBackend.prepareOptions.TargetBranch)

@@ -30,7 +30,7 @@ func TestCommandWindowsConfiguredArguments(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			cmd := Command(t.Context(), `"`+executable+`" -test.run=TestShellArgumentProcess -- `+tt.args, "cmd")
-			cmd.Env = append(cmd.Environ(), "DETENT_SHELL_ARGUMENT_PROCESS=1", "DETENT_SHELL_VALUE=expanded")
+			cmd.Env = append(cmd.Environ(), "DETENT_SHELL_ARGUMENT_PROCESS=1", "DETENT_SHELL_VALUE=expanded", "GOCOVERDIR="+t.TempDir())
 			output, err := cmd.CombinedOutput()
 			if err != nil {
 				t.Fatalf("command failed: %v\n%s", err, output)

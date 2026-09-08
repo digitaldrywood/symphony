@@ -31,12 +31,15 @@ const (
 )
 
 type laneRevocationDeliveryReceipt struct {
-	Schema     int       `json:"schema"`
-	Kind       string    `json:"kind"`
-	RecordedAt time.Time `json:"recorded_at"`
-	Source     string    `json:"source"`
-	PRNumber   int       `json:"pr_number,omitempty"`
-	PRHeadSHA  string    `json:"pr_head_sha,omitempty"`
+	Schema        int       `json:"schema"`
+	Kind          string    `json:"kind"`
+	RecordedAt    time.Time `json:"recorded_at"`
+	Source        string    `json:"source"`
+	PRNumber      int       `json:"pr_number,omitempty"`
+	PRHeadSHA     string    `json:"pr_head_sha,omitempty"`
+	Remote        string    `json:"remote"`
+	RemoteRef     string    `json:"remote_ref"`
+	RemoteHeadSHA string    `json:"remote_head_sha"`
 }
 
 type laneRevocationOutcome struct {
@@ -72,6 +75,17 @@ type pendingLaneRevocation struct {
 	preservation     *workspace.Preservation
 	preservationRead bool
 	preservationErr  error
+}
+
+func laneRevocationTransitionError(fromState, toState string) error {
+	fromState, toState = strings.TrimSpace(fromState), strings.TrimSpace(toState)
+	if fromState == "" || toState == "" {
+		return errors.New("lane change cannot be verified: before or after lane is unknown")
+	}
+	if strings.EqualFold(fromState, toState) {
+		return fmt.Errorf("lane unchanged at %s; completion fence requires a verified transition", fromState)
+	}
+	return nil
 }
 
 func (o *Orchestrator) beginLaneRevocation(
@@ -133,6 +147,10 @@ func (o *Orchestrator) beginLaneRevocationWithMutation(
 		fromState = strings.TrimSpace(receipt.FromState)
 		attribution = provenance.AttributionFromSource(provenance.SourceDetentInstance, provenance.Actor{})
 		reason = strings.TrimSpace(receipt.Reason)
+	}
+	if err := laneRevocationTransitionError(fromState, refreshed.State); err != nil {
+		recordStateEvent(state, telemetry.ActivityEvent{At: now, Event: "lane_revocation_unverified", Message: err.Error()})
+		return
 	}
 	running.Issue = mergeIssueTrackerFields(running.Issue, refreshed)
 	reason = laneRevocationReason(reason, attribution)
@@ -279,6 +297,11 @@ func (o *Orchestrator) finishLaneRevocation(ctx context.Context, state *State, p
 	if pending == nil || pending.completion == nil || !pending.reapDone || !pending.mutationRead {
 		return
 	}
+	if err := laneRevocationTransitionError(pending.fromState, pending.toState); err != nil {
+		delete(o.pendingLaneRevocations, pending.issue.ID)
+		o.deferTrackerUnavailableCompletion(ctx, state, *pending.completion, pending.running, err)
+		return
+	}
 	event := *pending.completion
 	running := pending.running
 	running.Issue = cloneIssue(pending.issue)
@@ -305,7 +328,7 @@ func (o *Orchestrator) finishLaneRevocation(ctx context.Context, state *State, p
 	}
 	running.Tokens = tokens
 	running.WorkProductPushed = running.WorkProductPushed || event.Result.PullRequestHeadPushed || event.Result.PullRequestUpdated
-	receipt := laneRevocationReceipt(event, running, completedAt)
+	receipt := laneRevocationReceipt(event, running, pending.preservation, completedAt)
 	workProduced := laneRevocationProducedWork(event, running, tokens) || laneRevocationLocalWork(pending.preservation)
 	outcome := classifyLaneRevocation(receipt, pending.preservation, workProduced, pending.reason, pending.origin)
 	metadata := map[string]any{"lane_revocation": map[string]any{
@@ -441,7 +464,7 @@ func (o *Orchestrator) preserveLaneRevocationWorkspace(ctx context.Context, stat
 }
 
 func laneRevocationLocalWork(preservation *workspace.Preservation) bool {
-	return preservation != nil && (preservation.Files > 0 || preservation.UnpushedCommits > 0 || len(preservation.TrackedPaths) > 0 || len(preservation.UntrackedPaths) > 0)
+	return preservation != nil && preservation.LocalChangesVerified && (preservation.Files > 0 || preservation.UnpushedCommits > 0 || len(preservation.TrackedPaths) > 0 || len(preservation.UntrackedPaths) > 0)
 }
 
 func laneRevocationAttribution(state *State, issue connector.Issue) provenance.Attribution {
@@ -473,8 +496,14 @@ func laneRevocationErrorClass(reason string, origin provenance.Origin) string {
 	return string(store.WorkAttemptTerminalLaneRevoked)
 }
 
-func laneRevocationReceipt(event runpkg.Completion, running Running, completedAt time.Time) *laneRevocationDeliveryReceipt {
-	if !running.WorkProductPushed {
+func laneRevocationReceipt(event runpkg.Completion, running Running, preservation *workspace.Preservation, completedAt time.Time) *laneRevocationDeliveryReceipt {
+	if !running.WorkProductPushed || preservation == nil || preservation.Delivery == nil {
+		return nil
+	}
+	delivery := preservation.Delivery
+	if !delivery.RemoteBranchExists || delivery.CommitsAhead <= 0 || strings.TrimSpace(delivery.Remote) == "" ||
+		strings.TrimSpace(delivery.RemoteRef) == "" || strings.TrimSpace(delivery.RemoteHeadSHA) == "" ||
+		delivery.LocalHeadSHA != delivery.RemoteHeadSHA {
 		return nil
 	}
 	source := "work_attempt"
@@ -482,10 +511,13 @@ func laneRevocationReceipt(event runpkg.Completion, running Running, completedAt
 		source = "runner_result"
 	}
 	receipt := &laneRevocationDeliveryReceipt{
-		Schema:     1,
-		Kind:       laneRevocationDeliveryReceiptKind,
-		RecordedAt: completedAt,
-		Source:     source,
+		Schema:        1,
+		Kind:          laneRevocationDeliveryReceiptKind,
+		RecordedAt:    completedAt,
+		Source:        source,
+		Remote:        delivery.Remote,
+		RemoteRef:     delivery.RemoteRef,
+		RemoteHeadSHA: delivery.RemoteHeadSHA,
 	}
 	if running.Issue.PullRequest != nil {
 		receipt.PRNumber = running.Issue.PullRequest.Number
@@ -495,7 +527,8 @@ func laneRevocationReceipt(event runpkg.Completion, running Running, completedAt
 }
 
 func classifyLaneRevocation(receipt *laneRevocationDeliveryReceipt, preservation *workspace.Preservation, workProduced bool, reason string, origin provenance.Origin) laneRevocationOutcome {
-	if receipt != nil && receipt.Schema == 1 && receipt.Kind == laneRevocationDeliveryReceiptKind {
+	if receipt != nil && receipt.Schema == 1 && receipt.Kind == laneRevocationDeliveryReceiptKind &&
+		strings.TrimSpace(receipt.Remote) != "" && strings.TrimSpace(receipt.RemoteRef) != "" && strings.TrimSpace(receipt.RemoteHeadSHA) != "" {
 		return laneRevocationOutcome{
 			classification:    laneRevocationDeliveredClassification,
 			terminalState:     store.WorkAttemptTerminalDelivered,
@@ -516,12 +549,13 @@ func classifyLaneRevocation(receipt *laneRevocationDeliveryReceipt, preservation
 		statusMessage:     "worker stopped after leaving a worker-owned lane",
 		activityEvent:     "worker_lane_revoked",
 	}
-	if workProduced {
+	localWork := laneRevocationLocalWork(preservation)
+	if localWork || workProduced && (preservation == nil || !preservation.LocalChangesVerified) {
 		outcome.classification = laneRevocationUnverifiedClassification
 		outcome.activityEvent = "worker_lane_preservation_unverified"
 		outcome.statusMessage = "worker stopped; workspace preservation could not be verified"
 		outcome.comment = true
-		if preservation != nil && preservation.Preserved {
+		if localWork && preservation.Preserved {
 			outcome.classification = laneRevocationPreservedClassification
 			outcome.activityEvent = "worker_lane_workspace_preserved"
 			outcome.statusMessage = "worker stopped; local workspace retained for recovery"
@@ -590,14 +624,21 @@ func laneRevocationOutcomeComment(
 	outcome laneRevocationOutcome,
 ) string {
 	var b strings.Builder
+	b.WriteString("Detent stopped this worker after a verified ")
+	b.WriteString(string(provenance.NormalizeOrigin(pending.origin)))
+	b.WriteString(" lane change from ")
+	b.WriteString(pending.fromState)
+	b.WriteString(" to ")
+	b.WriteString(pending.toState)
+	b.WriteString(". ")
 	if outcome.terminalState == store.WorkAttemptTerminalDelivered {
-		b.WriteString("Detent stopped this worker after the tracker moved the issue out of a worker-owned lane. Your work was pushed but finalization was rejected; the pushed work remains available.")
+		b.WriteString("Your work was pushed but finalization was rejected; the pushed work remains available.")
 		b.WriteString("\n\n- reason: worker_lane_revocation_delivery_preserved")
 	} else if outcome.classification == laneRevocationPreservedClassification {
-		b.WriteString("Detent stopped this worker after the tracker moved the issue out of a worker-owned lane. The local workspace is retained for recovery, including unpushed commits and uncommitted files. Finalization was rejected; the work has not been delivered.")
+		b.WriteString("The local workspace is retained for recovery, including unpushed commits and uncommitted files. Finalization was rejected; the work has not been delivered.")
 		b.WriteString("\n\n- reason: worker_lane_revocation_workspace_preserved")
 	} else {
-		b.WriteString("Detent stopped this worker after the tracker moved the issue out of a worker-owned lane. Workspace preservation could not be verified. The session's output is not evidence that local work was discarded.")
+		b.WriteString("Workspace preservation could not be verified. The session's output is not evidence that local work was discarded.")
 		b.WriteString("\n\n- reason: worker_lane_revocation_preservation_unverified")
 	}
 	b.WriteString("\n- classification: ")
@@ -711,6 +752,9 @@ func (o *Orchestrator) refreshCompletionLane(ctx context.Context, running Runnin
 	}
 	for _, issue := range issues {
 		if strings.TrimSpace(issue.ID) == strings.TrimSpace(running.Issue.ID) {
+			if strings.TrimSpace(issue.State) == "" {
+				return connector.Issue{}, fmt.Errorf("issue %s has no lane in completion fence", issueLabel(running.Issue))
+			}
 			return mergeIssueTrackerFields(running.Issue, issue), nil
 		}
 	}

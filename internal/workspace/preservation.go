@@ -14,14 +14,17 @@ import (
 var ErrWorkspacePreserved = errors.New("workspace retained for recovery")
 
 type Preservation struct {
-	Path            string   `json:"path"`
-	Branch          string   `json:"branch,omitempty"`
-	Preserved       bool     `json:"preserved"`
-	Files           int      `json:"files,omitempty"`
-	HeadSHA         string   `json:"head_sha,omitempty"`
-	UnpushedCommits int      `json:"unpushed_commits,omitempty"`
-	TrackedPaths    []string `json:"tracked_paths,omitempty"`
-	UntrackedPaths  []string `json:"untracked_paths,omitempty"`
+	LocalChangesVerified bool              `json:"local_changes_verified"`
+	Delivery             *DeliverableState `json:"delivery,omitempty"`
+	DeliveryError        string            `json:"delivery_error,omitempty"`
+	Path                 string            `json:"path"`
+	Branch               string            `json:"branch,omitempty"`
+	Preserved            bool              `json:"preserved"`
+	Files                int               `json:"files,omitempty"`
+	HeadSHA              string            `json:"head_sha,omitempty"`
+	UnpushedCommits      int               `json:"unpushed_commits,omitempty"`
+	TrackedPaths         []string          `json:"tracked_paths,omitempty"`
+	UntrackedPaths       []string          `json:"untracked_paths,omitempty"`
 }
 
 type IssuePreserver interface {
@@ -64,6 +67,13 @@ func (l *LocalGit) PreserveIssue(ctx context.Context, issue Issue) (Preservation
 	}
 	result.TrackedPaths = recovery.TrackedPaths
 	result.UntrackedPaths = recovery.UntrackedPaths
+	result.LocalChangesVerified = true
+	delivery, err := gitDeliveryState(ctx, info.Path, info.Branch, issue.BaseRef)
+	if err != nil {
+		result.DeliveryError = err.Error()
+	} else {
+		result.Delivery = &delivery
+	}
 	return result, nil
 }
 
@@ -184,6 +194,7 @@ func (f *Filesystem) PreserveIssue(ctx context.Context, issue Issue) (Preservati
 		return result, fmt.Errorf("inspect retained filesystem workspace: %w", err)
 	}
 	result.Files = stat.Files
+	result.LocalChangesVerified = true
 	return result, nil
 }
 

@@ -118,10 +118,22 @@ func TestLaneMutationReceiptDistinguishesEchoFromLaterReentry(t *testing.T) {
 				state.Running[issue.ID] = running
 			}
 			orch.reconcileRunningIssues(t.Context(), &state, observedAt)
-			if revoked := errors.Is(context.Cause(runCtx), runpkg.ErrLaneRevoked); revoked != tt.later {
-				t.Fatalf("revoked = %v, want %v", revoked, tt.later)
+			if errors.Is(context.Cause(runCtx), runpkg.ErrLaneRevoked) {
+				t.Fatal("unchanged lane timestamp revoked worker ownership")
+			}
+			if got := hasLaneRevocationEvent(state.RecentEvents, "lane_revocation_unverified"); got != tt.later {
+				t.Fatalf("unverified reentry = %v, want %v", got, tt.later)
 			}
 			if tt.later {
+				parked.State = "Blocked"
+				tracker.stateIssues = []connector.Issue{parked}
+				if tt.project {
+					orch.connector.(*workflowMetricsConnector).stateIssues = []connector.Issue{parked}
+				}
+				orch.reconcileRunningIssues(t.Context(), &state, observedAt.Add(max(cfg.PollInterval, defaultRunningReconcileInterval)))
+				if !errors.Is(context.Cause(runCtx), runpkg.ErrLaneRevoked) {
+					t.Fatal("verified subsequent lane change did not revoke worker")
+				}
 				pending := orch.pendingLaneRevocations[issue.ID]
 				if pending == nil || pending.origin != provenance.OriginIndeterminate || pending.mutation.ID != 0 {
 					t.Fatalf("later shared-token change borrowed previous Detent attribution: %#v", pending)

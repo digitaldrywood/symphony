@@ -206,6 +206,11 @@ WITH issue_sessions AS (
   FROM codex_sessions
   WHERE started_at IS NOT NULL
     AND completed_at IS NOT NULL
+    AND NOT EXISTS (
+      SELECT 1 FROM work_attempts AS attempt
+      WHERE attempt.id = codex_sessions.work_attempt_id
+        AND (attempt.phase = 'completion_deferred' OR NOT (COALESCE(json_extract(CASE WHEN json_valid(attempt.worker_metadata_json) THEN attempt.worker_metadata_json ELSE '{}' END, '$.historical_completion_fence.excluded_from_worker_outcomes'), 0) = 0))
+    )
 ),
 successful_issues AS (
   SELECT
@@ -1500,6 +1505,7 @@ FROM work_attempts
 WHERE completed_at >= ?1
   AND completed_at < ?2
   AND lower(trim(COALESCE(terminal_state, ''))) IN ('failure', 'timed_out', 'no_progress', 'capacity')
+  AND COALESCE(json_extract(CASE WHEN json_valid(worker_metadata_json) THEN worker_metadata_json ELSE '{}' END, '$.historical_completion_fence.excluded_from_worker_outcomes'), 0) = 0
 GROUP BY COALESCE(NULLIF(trim(error_class), ''), 'unknown')
 ORDER BY failures DESC, error_class
 LIMIT 1
@@ -2351,6 +2357,8 @@ LEFT JOIN work_attempts AS attempt ON attempt.id = session.work_attempt_id
 WHERE usage_events.project_id = ?1
   AND usage_events.started_at > ?2
   AND lower(trim(COALESCE(attempt.terminal_state, ''))) != 'capacity'
+  AND COALESCE(attempt.phase, '') != 'completion_deferred'
+  AND COALESCE(json_extract(CASE WHEN json_valid(attempt.worker_metadata_json) THEN attempt.worker_metadata_json ELSE '{}' END, '$.historical_completion_fence.excluded_from_worker_outcomes'), 0) = 0
   AND (
     (?3 != '' AND COALESCE(usage_events.issue_id, '') = ?3)
     OR (?4 != '' AND COALESCE(usage_events.identifier, '') = ?4)
@@ -3978,6 +3986,7 @@ SELECT id, project_id, issue_id, identifier, issue_url, pr_number, repo, worker_
 FROM work_attempts
 WHERE completed_at IS NOT NULL
   AND status = 'terminal'
+  AND COALESCE(json_extract(CASE WHEN json_valid(worker_metadata_json) THEN worker_metadata_json ELSE '{}' END, '$.historical_completion_fence.excluded_from_worker_outcomes'), 0) = 0
   AND (?1 = '' OR project_id = ?1)
   AND (?2 = '' OR worker_type = ?2)
   AND (

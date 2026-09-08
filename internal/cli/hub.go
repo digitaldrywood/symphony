@@ -63,6 +63,7 @@ func newHubCommandWithRun(version string, lookupEnv func(string) string, run hub
 
 func newHubServeCommand(version string, lookupEnv func(string) string, run hubRunFunc) *cobra.Command {
 	var hostedConfigPath string
+	var credentialMaintenance bool
 	var githubDisabled bool
 	var databasePath string
 	var listenAddress string
@@ -112,6 +113,7 @@ func newHubServeCommand(version string, lookupEnv func(string) string, run hubRu
 			}
 			return run(cmd.Context(), hubserver.Config{
 				Hosted:                     hosted,
+				CredentialMaintenance:      credentialMaintenance,
 				GitHubDisabled:             githubDisabled || hosted != nil,
 				DatabasePath:               databasePath,
 				ListenAddress:              listenAddress,
@@ -131,6 +133,7 @@ func newHubServeCommand(version string, lookupEnv func(string) string, run hubRu
 			})
 		},
 	}
+	cmd.Flags().BoolVar(&credentialMaintenance, "credential-maintenance", false, "serve only authenticated credential administration for the bound hosted tenant on private loopback")
 	cmd.Flags().StringVar(&databasePath, "database", "", "local filesystem path to the Hub SQLite database")
 	cmd.Flags().StringVar(&hostedConfigPath, "hosted-config", "", "hosted organization and WorkOS configuration file")
 	cmd.Flags().BoolVar(&githubDisabled, "github-disabled", false, "serve native collaboration without GitHub credentials or transport")

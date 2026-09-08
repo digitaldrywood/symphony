@@ -106,12 +106,35 @@ Enrolled runners retain their existing `collaborate` operation for expected
 `customer` checks. They cannot satisfy an `independent` check or change the
 source pinned by the immutable version.
 
-Provision through the existing instance-administrator token APIs before enabling
-hosted serving, or during an explicitly authorized private maintenance window.
-For maintenance, the hosted process must be stopped and the sole database-owning
-Hub process must expose its non-hosted administration API only on private
-loopback. Never run a second process against the live database. Hosted serving
-intentionally does not expose these generic administration APIs.
+Provision and maintain credentials for an already initialized hosted tenant during
+an explicitly authorized private maintenance window. Stop the hosted process,
+then start the sole database owner with the **same hosted configuration**, database
+path, organization/provider/bootstrap identity and public URL. Set
+`workos_organization_id` explicitly to the allocated provider organization
+if the original bootstrap configuration omitted it:
+
+```sh
+detent hub serve --database /var/lib/detent/hub.db \
+  --hosted-config /etc/detent/hosted.yaml \
+  --credential-maintenance --listen 127.0.0.1:7778
+```
+
+Keep this listener private, outside all reverse-proxy routes and port forwarding.
+Maintenance rejects non-loopback listeners and `--trusted-proxy`. Each request
+below goes to `http://127.0.0.1:7778` with
+`Authorization: Bearer <existing-instance-administrator-secret>`. Loopback
+alone provides no authority. Use the existing unscoped instance administrator
+credential retained at initial setup; the default `DETENT_HUB_ADMIN_TOKEN`
+environment variable is still required by the serve command, but maintenance
+never creates or resets a bootstrap credential. Browser cookies, staff sessions,
+scoped administrators, CI reporters and runners cannot authorize maintenance.
+
+Only the four token creation, rotation, revocation and project-grant routes are
+served. Requests record the administrator principal in hosted audit history.
+The normal database ownership lock prevents a second writer. Tenant binding
+checks remain enabled; ordinary non-hosted reopen still fails. Shut down
+maintenance before restoring the original hosted command. Public hosted serving
+continues to deny instance token administration.
 
 1. Create a dedicated token with `POST /api/v1/tokens`, using
    `{"name":"project-independent-ci","scope":"operator"}`. Deliver the returned

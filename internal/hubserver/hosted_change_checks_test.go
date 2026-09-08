@@ -40,14 +40,17 @@ func TestHostedIndependentChangeChecks(t *testing.T) {
 			}
 			descriptor = descriptor.WithID()
 			requireNativeStatus(t, f.setupRequest(t, "owner", http.MethodPut, base+"/onboarding/policy", policy.Change{Policy: descriptor}), http.StatusOK)
-			principal, token := "ci-"+test.project, "credential-"+test.project
-			seedHubAPIToken(t, f.service, principal, token, apiScopeOperator)
-			if _, err := f.service.database.db.ExecContext(t.Context(), "INSERT INTO token_grants VALUES (?, 'org_browser_preview', ?)", principal, test.project); err != nil {
-				t.Fatal(err)
-			}
+			reopenCredentialFixture(t, f, true)
+			response := performHubAPIRequest(t, f.service, http.MethodPost, "/api/v1/tokens", testHubAdminToken, tokenRequest{Name: "ci-" + test.project, Scope: apiScopeOperator})
+			requireNativeStatus(t, response, http.StatusCreated)
+			var created tokenResponse
+			decodeHubResponse(t, response, &created)
+			principal, token := created.ID, created.Token
+			requireNativeStatus(t, performHubAPIRequest(t, f.service, http.MethodPost, "/api/v2/tokens/"+principal+"/grants", testHubAdminToken, map[string]string{"organization_id": "org_browser_preview", "project_id": test.project}), http.StatusNoContent)
+			reopenCredentialFixture(t, f, false)
 			rules := tracker.ChangeReviewPolicy{PolicyID: descriptor.ID, RequireReview: test.review, RequiredChecks: []tracker.ChangeCheckSpec{{Name: "test", PrincipalID: principal, WorkflowID: "ci.yml", WorkflowSHA256: policy.Digest([]byte("trusted CI")), Source: "independent", MaxAgeSeconds: 3600}}}
 			requireNativeStatus(t, f.setupRequest(t, "owner", http.MethodPut, base+"/change-review-policy", tracker.ApproveChangeReviewPolicy{Mutation: tracker.Mutation{IdempotencyKey: "rules"}, Policy: rules}), http.StatusOK)
-			response := f.setupRequest(t, "owner", http.MethodPost, base+"/work-items", tracker.CreateIssue{Mutation: tracker.Mutation{IdempotencyKey: "work"}, Title: "Independent CI", State: "Todo"})
+			response = f.setupRequest(t, "owner", http.MethodPost, base+"/work-items", tracker.CreateIssue{Mutation: tracker.Mutation{IdempotencyKey: "work"}, Title: "Independent CI", State: "Todo"})
 			requireNativeStatus(t, response, http.StatusOK)
 			var issue tracker.NativeIssue
 			decodeHubResponse(t, response, &issue)
@@ -129,6 +132,7 @@ func TestHostedIndependentChangeChecks(t *testing.T) {
 				t.Fatalf("freshness bypassed: %+v", summary)
 			}
 			f.service.config.now = now
+			testMaintenanceCheckLifecycle(t, f, checkPath, created, version)
 		})
 	}
 }

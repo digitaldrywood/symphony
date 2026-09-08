@@ -40,6 +40,7 @@ var (
 )
 
 type Config struct {
+	CredentialMaintenance      bool
 	Hosted                     *HostedConfig
 	GitHubRequestCounts        func() []GitHubRequestCount
 	GitHubDisabled             bool
@@ -77,6 +78,9 @@ type Config struct {
 }
 
 func (c Config) normalized() Config {
+	if c.CredentialMaintenance {
+		c.GitHubDisabled = true
+	}
 	if c.GitHubDisabled {
 		c.ImportBackend, c.OutboxBackend, c.ReconcileBackend = nil, nil, nil
 		c.GitHubWebhookSecret, c.GitHubRequestCounts = nil, nil

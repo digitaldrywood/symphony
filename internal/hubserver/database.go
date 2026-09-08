@@ -71,8 +71,17 @@ func openDatabase(ctx context.Context, cfg Config) (*database, error) {
 		return nil, errors.Join(err, store.Close())
 	}
 	store.schemaVersion = version
+	if cfg.CredentialMaintenance {
+		var bound int
+		if err := db.QueryRowContext(ctx, "SELECT count(*) FROM hosted_tenant").Scan(&bound); err != nil || bound != 1 {
+			return nil, errors.Join(ErrHostedDatabaseBinding, store.Close())
+		}
+	}
 	if err := store.bindHostedDatabase(ctx, cfg.Hosted); err != nil {
 		return nil, errors.Join(err, store.Close())
+	}
+	if cfg.CredentialMaintenance {
+		return store, nil
 	}
 	if err := store.configureHostedPlans(ctx, cfg.Hosted); err != nil {
 		return nil, errors.Join(err, store.Close())

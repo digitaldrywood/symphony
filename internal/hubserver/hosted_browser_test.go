@@ -192,7 +192,7 @@ func newBrowserHostedFixture(t *testing.T, allocated bool) *browserHostedFixture
 		base: base, organization: auth.Organization{ID: "org_browser_provider", ExternalID: "org_browser_preview", Name: "Browser organization"},
 		members: make(map[string]auth.Membership), sessions: make(map[string]auth.HostedIdentity), invitations: make(map[string]auth.Invitation), inviteRoles: make(map[string]string), authorizations: make(map[string]string), codes: make(map[string]auth.Identity),
 	}
-	cfg := Config{DatabasePath: filepath.Join(t.TempDir(), "hosted-browser.db"), GitHubDisabled: true, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), Hosted: &HostedConfig{
+	cfg := Config{InitialAdminToken: []byte(testHubAdminToken), DatabasePath: filepath.Join(t.TempDir(), "hosted-browser.db"), GitHubDisabled: true, Logger: slog.New(slog.NewTextHandler(io.Discard, nil)), Hosted: &HostedConfig{
 		OrganizationID: "org_browser_preview", BootstrapSubject: "user_browser_owner", PublicURL: base, Provider: provider,
 		StaffEmails: []string{"staff@example.test", "support@example.test"}, SupportActors: []string{"support@example.test"},
 		Directory: []HostedDestination{{OrganizationID: "org_browser_preview", WorkOSOrganizationID: "org_browser_provider", PublicURL: base}},
@@ -208,7 +208,7 @@ func newBrowserHostedFixture(t *testing.T, allocated bool) *browserHostedFixture
 	fixture := &browserHostedFixture{service: service, server: server, provider: provider, cookies: make(map[string]*http.Cookie), stop: make(chan struct{})}
 	t.Cleanup(func() {
 		server.Close()
-		if err := service.Close(); err != nil {
+		if err := fixture.service.Close(); err != nil {
 			t.Error(err)
 		}
 	})

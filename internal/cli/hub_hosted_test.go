@@ -105,14 +105,16 @@ func TestReadHostedEntitlementConfig(t *testing.T) {
 func TestHubServeIdentityModes(t *testing.T) {
 	t.Parallel()
 	for _, test := range []struct {
-		name     string
-		hosted   bool
-		native   bool
-		wantMode bool
+		maintenance bool
+		name        string
+		hosted      bool
+		native      bool
+		wantMode    bool
 	}{
 		{name: "local compatibility"},
 		{name: "local native", native: true, wantMode: true},
 		{name: "hosted without GitHub flag", hosted: true, wantMode: true},
+		{name: "hosted credential maintenance", hosted: true, maintenance: true, wantMode: true},
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
@@ -129,6 +131,9 @@ func TestHubServeIdentityModes(t *testing.T) {
 			if test.native {
 				args = append(args, "--github-disabled")
 			}
+			if test.maintenance {
+				args = append(args, "--credential-maintenance")
+			}
 			called := false
 			cmd := newHubCommandWithRun("test", func(name string) string {
 				switch name {
@@ -144,7 +149,7 @@ func TestHubServeIdentityModes(t *testing.T) {
 				}
 			}, func(_ context.Context, cfg hubserver.Config) error {
 				called = true
-				if cfg.GitHubDisabled != test.wantMode || (cfg.Hosted != nil) != test.hosted {
+				if cfg.CredentialMaintenance != test.maintenance || cfg.GitHubDisabled != test.wantMode || (cfg.Hosted != nil) != test.hosted {
 					t.Errorf("mode = native %t, hosted %t", cfg.GitHubDisabled, cfg.Hosted != nil)
 				}
 				return nil

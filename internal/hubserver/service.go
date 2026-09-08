@@ -56,6 +56,9 @@ func Open(ctx context.Context, cfg Config) (*Service, error) {
 		ctx = context.Background()
 	}
 	cfg = cfg.normalized()
+	if err := validateCredentialMaintenance(cfg); err != nil {
+		return nil, err
+	}
 	if err := cfg.Hosted.validate(); err != nil {
 		return nil, err
 	}
@@ -66,8 +69,10 @@ func Open(ctx context.Context, cfg Config) (*Service, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := database.ensureInitialAdminToken(ctx, cfg.InitialAdminToken); err != nil {
-		return nil, errors.Join(err, database.Close())
+	if !cfg.CredentialMaintenance {
+		if err := database.ensureInitialAdminToken(ctx, cfg.InitialAdminToken); err != nil {
+			return nil, errors.Join(err, database.Close())
+		}
 	}
 	cfg.InitialAdminToken = nil
 	workTracker, err := tracker.NewStore(database)
@@ -104,6 +109,14 @@ func Open(ctx context.Context, cfg Config) (*Service, error) {
 		}
 	}
 	service.registerRoutes(e)
+	if cfg.CredentialMaintenance {
+		workerCancel()
+		reconcileCancel()
+		close(service.workerDone)
+		close(service.reconcileDone)
+		service.ready.Store(true)
+		return service, nil
+	}
 	service.maintainGitHubWebhooks(ctx)
 	go service.runGitHubWebhookMaintenance(workerContext)
 	go service.runGitHubReconciliation(reconcileContext)
@@ -194,6 +207,9 @@ func (s *Service) Handler() http.Handler {
 }
 
 func (s *Service) Serve(listener net.Listener) error {
+	if s.config.CredentialMaintenance && listener != nil && !listenerAddressLoopback(listener.Addr().String()) {
+		return ErrInsecureListener
+	}
 	if listener == nil {
 		return errors.New("hub listener is required")
 	}
@@ -208,6 +224,9 @@ func (s *Service) Serve(listener net.Listener) error {
 }
 
 func (s *Service) ServeTLS(listener net.Listener, certificateFile string, keyFile string) error {
+	if s.config.CredentialMaintenance && listener != nil && !listenerAddressLoopback(listener.Addr().String()) {
+		return ErrInsecureListener
+	}
 	if listener == nil {
 		return errors.New("hub listener is required")
 	}

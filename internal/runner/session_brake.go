@@ -49,6 +49,7 @@ type SessionBrakeError struct {
 	FilesChanged      int
 	UnpushedCommits   int
 	Resumable         bool
+	Checkpoint        *workspace.CheckpointRecord
 	cause             error
 }
 

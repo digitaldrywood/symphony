@@ -547,6 +547,21 @@ fallback when `agents.backends` is empty. A Codex backend inherits omitted
 values from it. Claude Code backend options are interpreted only when the
 backend `kind` is `claude_code`.
 
+Implementation workers on automatically owned Git branches request a bounded
+recovery checkpoint when a duration, turn, or no-progress limit stops them.
+`agent.checkpoint_interval_ms` also enables periodic checkpoints; `0` disables
+the periodic trigger. Each checkpoint allows up to two minutes for a read-only
+worker to select reviewed issue files and for Detent to commit and publish them
+with lease and remote checks. Periodic checkpoints retain the session deadline
+and accumulated budget usage. Identical work does not create new commits.
+
+Checkpoint publication may associate a draft PR and never satisfies completion,
+review, or CI gates. If delivery is unavailable, the owned workspace remains
+recoverable. Its Git metadata contains `detent-checkpoint.json`, written before
+worker execution, so an interrupted or killed worker does not imply that a
+checkpoint epilogue ran. Human branches and backends without the handshake
+continue to rely on local workspace recovery.
+
 `agent.auto_promote` and `gate` work together. Auto-promotion decides when an
 item may leave its source state; the gate decides whether CI, automated review,
 human approval, a validator, or an artifact status is sufficient. `plan`
@@ -835,6 +850,7 @@ only to resettable budget pacing and never clears a per-issue hard hold.
 | `agent.budget.per_issue_max_usd` | `number` | `5` | No | must be greater than 0 |
 | `agent.budget.pricing_path` | `string` | `"priv/pricing/models.yaml"` | No | is required |
 | `agent.budget.refusal_cooldown_seconds` | `integer` | `3600` | No | must be greater than or equal to 0 |
+| `agent.checkpoint_interval_ms` | `integer` | `0` | No | must be greater than or equal to 0 |
 | `agent.dispatch_priority_by_label` | `list<string>` | `[]` | No | labels must not be blank |
 | `agent.dispatch_priority_by_state` | `list<string>` | `[]` | No | state names must be unique<br>state names must not be blank |
 | `agent.effort` | `object` | `see child fields` | No | None |

@@ -242,6 +242,7 @@ func sessionBrakeMetadata(brake *runpkg.SessionBrakeError, targetState string, r
 			"last_progress_at":    brake.LastProgressAt.UTC().Format(time.RFC3339Nano),
 			"target_state":        strings.TrimSpace(targetState),
 			"resumable":           resumable,
+			"checkpoint":          brake.Checkpoint,
 		},
 	}
 }
@@ -269,5 +270,13 @@ func sessionBrakeComment(brake *runpkg.SessionBrakeError, targetState string, re
 	body.WriteString(strconv.FormatBool(resumable))
 	body.WriteString("\n- parked_state: ")
 	body.WriteString(strings.TrimSpace(targetState))
+	if brake.Checkpoint != nil {
+		body.WriteString("\n\nCheckpoint: ")
+		body.WriteString(brake.Checkpoint.Detail)
+		body.WriteString("\n- workspace: ")
+		body.WriteString(brake.Checkpoint.WorkspacePath)
+		body.WriteString("\n- checkpoint_head: ")
+		body.WriteString(brake.Checkpoint.HeadSHA)
+	}
 	return body.String()
 }

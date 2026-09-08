@@ -83,6 +83,9 @@ func (r *Runner) afterExecution(ctx context.Context, req RunRequest, backend wor
 		}
 	}
 	if req.Execution == nil {
+		if req.retainCheckpoint {
+			return nil
+		}
 		afterCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), r.afterRunTimeout)
 		defer cancel()
 		backend.AfterRun(afterCtx, info, issue)
@@ -107,7 +110,7 @@ func (r *Runner) afterExecution(ctx context.Context, req RunRequest, backend wor
 	if err := req.Execution.Checkpoint(ctx, checkpoint); err != nil {
 		return err
 	}
-	if checkpoint.WorktreeState != "clean" {
+	if checkpoint.WorktreeState != "clean" || req.retainCheckpoint {
 		return nil
 	}
 	afterCtx, stop := context.WithTimeout(ctx, r.afterRunTimeout)

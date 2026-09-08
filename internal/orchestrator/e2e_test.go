@@ -140,10 +140,19 @@ func TestMemoryConnectorRunnerE2EGateCreatesBranchDiffStatAndSQLiteTokens(t *tes
 	if err != nil {
 		t.Fatalf("ReadDir() error = %v", err)
 	}
-	if len(entries) != 1 {
-		t.Fatalf("workspace entries = %d, want 1", len(entries))
+	var workspaceKeys []string
+	for _, entry := range entries {
+		if entry.Name() != ".detent" {
+			workspaceKeys = append(workspaceKeys, entry.Name())
+		}
 	}
-	workspaceKey := entries[0].Name()
+	if len(workspaceKeys) != 1 {
+		t.Fatalf("workspace entries = %v, want one issue workspace", workspaceKeys)
+	}
+	if records, err := os.ReadDir(filepath.Join(workspacesRoot, ".detent", "cleanup-ownership")); err != nil || len(records) != 1 {
+		t.Fatalf("recovery ownership records = %v, error = %v", records, err)
+	}
+	workspaceKey := workspaceKeys[0]
 	workspacePath := filepath.Join(workspacesRoot, workspaceKey)
 	wantBranch := "detent/" + strings.ToLower(workspaceKey)
 	if got := strings.TrimSpace(e2eRunGit(t, workspacePath, "branch", "--show-current")); got != wantBranch {

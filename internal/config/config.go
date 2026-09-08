@@ -342,6 +342,7 @@ type Agent struct {
 	MaxTurnDurationMS            int                          `yaml:"max_turn_duration_ms"`
 	MaxSessionDurationMS         int                          `yaml:"max_session_duration_ms"`
 	NoProgressTimeoutMS          int                          `yaml:"no_progress_timeout_ms"`
+	CheckpointIntervalMS         int                          `yaml:"checkpoint_interval_ms"`
 	MergeWorkerStartupTimeoutMS  int                          `yaml:"merge_worker_startup_timeout_ms"`
 	MergeWorkerMaxDurationMS     int                          `yaml:"merge_worker_max_duration_ms"`
 	MergeFallbackMaxDurationMS   int                          `yaml:"merge_fallback_max_duration_ms"`
@@ -2271,6 +2272,9 @@ func (a *Agent) validate(prefix string, problems *[]string) {
 	}
 	if a.NoProgressTimeoutMS < 0 {
 		*problems = append(*problems, prefix+".no_progress_timeout_ms must be greater than or equal to 0")
+	}
+	if a.CheckpointIntervalMS < 0 {
+		*problems = append(*problems, prefix+".checkpoint_interval_ms must be greater than or equal to 0")
 	}
 	validatePositive(prefix+".merge_worker_startup_timeout_ms", a.MergeWorkerStartupTimeoutMS, problems)
 	validatePositive(prefix+".merge_worker_max_duration_ms", a.MergeWorkerMaxDurationMS, problems)

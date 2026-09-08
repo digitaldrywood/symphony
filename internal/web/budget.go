@@ -121,7 +121,7 @@ func (c *snapshotEnrichmentCache) enrichVersion(ctx context.Context, snapshot te
 			snapshot = c.pending
 		}
 
-		if c.cached && c.revision == revision && workflowHistoryFresh(c.loadedAt, now) && (sameSnapshotForEnrichment(c.raw, snapshot) || newerEnrichmentSnapshot(c.raw, snapshot)) {
+		if c.cached && c.revision == revision && now.Before(c.loadedAt.Add(workflowHistoryFreshness)) && (sameSnapshotForEnrichment(c.raw, snapshot) || newerEnrichmentSnapshot(c.raw, snapshot)) {
 			enriched := c.enriched
 			c.mu.Unlock()
 			return enriched
